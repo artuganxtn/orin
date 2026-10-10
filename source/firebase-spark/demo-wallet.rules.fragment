@@ -1,0 +1,50 @@
+  // Demo-only storage. No rule below grants access to a real wallet or real ledger.
+  function demoOwner(uid,id) {
+   return own(uid) && validTradingId(id) &&
+    get(/databases/$(database)/documents/sparkTradingAccounts/$(uid)/accounts/$(id)).data.type=='demo';
+  }
+  function demoUnreserved(uid,id) {
+   return get(/databases/$(database)/documents/sparkTradingAccounts/$(uid)/accounts/$(id)).data.reservedCents==0 &&
+    (id!='primary' || !exists(/databases/$(database)/documents/orinAccounts/$(uid)) ||
+    get(/databases/$(database)/documents/orinAccounts/$(uid)).data.reservedCents==0);
+  }
+  function demoWalletShape(d,uid,id) {
+   return d.keys().hasOnly(['ownerId','accountId','currency','futuresCents','perpetualCents','version','lastOperationId','updatedAt']) && d.size()==8 &&
+    d.ownerId==uid && d.accountId==id && d.currency=='USD' && d.updatedAt==request.time &&
+    d.futuresCents is int && d.perpetualCents is int && d.futuresCents>=0 && d.perpetualCents>=0 &&
+    d.futuresCents+d.perpetualCents<=100000000 && d.version is int && d.version>=1 &&
+    validTradingId(d.lastOperationId) && d.lastOperationId!='primary';
+  }
+  function demoOperationValid(uid,id,opId,o,before,after) {
+   return o.keys().hasOnly(['ownerId','accountId','currency','kind','from','to','amountCents','beforeFuturesCents','beforePerpetualCents','afterFuturesCents','afterPerpetualCents','version','createdAt']) && o.size()==13 &&
+    o.ownerId==uid && o.accountId==id && o.currency=='USD' && o.createdAt==request.time && o.version==after.version &&
+    after.lastOperationId==opId && o.beforeFuturesCents==before.futuresCents && o.beforePerpetualCents==before.perpetualCents &&
+    o.afterFuturesCents==after.futuresCents && o.afterPerpetualCents==after.perpetualCents &&
+    o.amountCents is int && o.amountCents>=0 && o.amountCents<=100000000 &&
+    ((o.kind=='reset' && o.from=='reset' && o.to=='futures' && after.futuresCents==o.amountCents && after.perpetualCents==0) ||
+     (o.kind=='transfer' && o.amountCents>0 && after.futuresCents+after.perpetualCents==before.futuresCents+before.perpetualCents &&
+      ((o.from=='futures' && o.to=='perpetual' && after.futuresCents==before.futuresCents-o.amountCents) ||
+       (o.from=='perpetual' && o.to=='futures' && after.perpetualCents==before.perpetualCents-o.amountCents))));
+  }
+  function demoBefore(uid,id) {
+   return exists(/databases/$(database)/documents/orinDemoWallets/$(uid)/accounts/$(id))?
+    get(/databases/$(database)/documents/orinDemoWallets/$(uid)/accounts/$(id)).data:
+    {'futuresCents':0,'perpetualCents':0,'version':0};
+  }
+  match /orinDemoWallets/{uid}/accounts/{id} {
+   allow get: if demoOwner(uid,id);
+   allow create,update: if demoOwner(uid,id) && demoUnreserved(uid,id) && demoWalletShape(request.resource.data,uid,id) &&
+    request.resource.data.version==demoBefore(uid,id).version+1 &&
+    !exists(/databases/$(database)/documents/orinDemoWallets/$(uid)/accounts/$(id)/operations/$(request.resource.data.lastOperationId)) &&
+    demoOperationValid(uid,id,request.resource.data.lastOperationId,
+     getAfter(/databases/$(database)/documents/orinDemoWallets/$(uid)/accounts/$(id)/operations/$(request.resource.data.lastOperationId)).data,demoBefore(uid,id),request.resource.data);
+   allow list,delete: if false;
+   match /operations/{opId} {
+    allow get: if demoOwner(uid,id);
+    allow list: if demoOwner(uid,id) && limited();
+    allow create: if demoOwner(uid,id) && demoUnreserved(uid,id) && validTradingId(opId) && opId!='primary' &&
+     getAfter(/databases/$(database)/documents/orinDemoWallets/$(uid)/accounts/$(id)).data.version==demoBefore(uid,id).version+1 &&
+     demoOperationValid(uid,id,opId,request.resource.data,demoBefore(uid,id),getAfter(/databases/$(database)/documents/orinDemoWallets/$(uid)/accounts/$(id)).data);
+    allow update,delete: if false;
+   }
+  }

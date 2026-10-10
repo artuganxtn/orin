@@ -1,0 +1,20 @@
+✔ historical data consumers work without Array.at and method remains nonenumerable (3.285383ms)
+✔ provider race returns first success even if an earlier provider rejects (1.200302ms)
+✔ all rejected sources retain input order and empty sources reject without hanging (1.421843ms)
+✔ thenables and broken iterators have normal promise semantics (0.911344ms)
+✔ native built-ins remain intact in current WebViews (0.717251ms)
+✔ online status requires both confirmed connection and ready backend capability (1.91713ms)
+✔ UTF-8 split server stream delivers real status and text without truncating Arabic (7.847323ms)
+✔ interrupted stream is never reported as a completed answer (1.248742ms)
+✔ oversized output is rejected and JSON compatibility accepts only known states (8.218001ms)
+✔ aborted stream releases reader rather than leaving permanent typing (0.743427ms)
+✔ escalation requires a returned real ticket; boolean-only flag cannot claim success (1.196546ms)
+✔ balance renders one account capsule with masked number and currency; demo-only adjustment remains (38.491772ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 538.567718

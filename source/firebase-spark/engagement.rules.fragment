@@ -1,0 +1,54 @@
+  // ORIN 1.5: customer chat and public referral identities. No financial grants.
+  function chatStaff() {
+   return activeUser() && request.auth.token.email_verified == true && (
+    (!exists(/databases/$(database)/documents/system/control-center) && admin()) ||
+    (exists(/databases/$(database)/documents/system/control-center) &&
+     get(/databases/$(database)/documents/orinStaff/$(request.auth.uid)).data.status == 'active' &&
+     get(/databases/$(database)/documents/orinStaff/$(request.auth.uid)).data.email == request.auth.token.email &&
+     get(/databases/$(database)/documents/orinStaff/$(request.auth.uid)).data.roles.hasAny(['super_admin','operations','support']) &&
+     (!('validAfter' in get(/databases/$(database)/documents/orinStaff/$(request.auth.uid)).data) || request.auth.token.auth_time * 1000 > get(/databases/$(database)/documents/orinStaff/$(request.auth.uid)).data.validAfter))
+   );
+  }
+  function chatEnvelope(d,uid) {
+   return d.keys().hasOnly(['ownerId','createdAt','updatedAt','lastCustomerAt','lastMessageId','handoffRequested']) && d.size()==6 &&
+    d.ownerId==uid && d.createdAt is timestamp && d.updatedAt==request.time && d.lastCustomerAt is timestamp && d.handoffRequested is bool && d.lastMessageId is string && d.lastMessageId.size()==36;
+  }
+  match /orinSupportConversations/{uid} {
+   allow get: if own(uid) || chatStaff();
+   allow list: if chatStaff() && limited();
+   allow create: if own(uid) && chatEnvelope(request.resource.data,uid) && request.resource.data.createdAt==request.time && request.resource.data.lastCustomerAt==request.time && request.resource.data.handoffRequested==false &&
+    getAfter(/databases/$(database)/documents/orinSupportConversations/$(uid)/messages/$(request.resource.data.lastMessageId)).data.senderId==uid;
+   allow update: if (own(uid)||chatStaff()) && chatEnvelope(request.resource.data,uid) && request.resource.data.createdAt==resource.data.createdAt &&
+    (request.resource.data.handoffRequested==resource.data.handoffRequested || own(uid) && request.resource.data.handoffRequested==true) &&
+    (request.resource.data.lastMessageId==resource.data.lastMessageId && request.resource.data.lastCustomerAt==resource.data.lastCustomerAt && request.resource.data.handoffRequested==true ||
+     getAfter(/databases/$(database)/documents/orinSupportConversations/$(uid)/messages/$(request.resource.data.lastMessageId)).data.createdAt==request.time &&
+     getAfter(/databases/$(database)/documents/orinSupportConversations/$(uid)/messages/$(request.resource.data.lastMessageId)).data.senderId==request.auth.uid &&
+     (own(uid) && request.resource.data.lastCustomerAt==request.time || chatStaff() && request.resource.data.lastCustomerAt==resource.data.lastCustomerAt));
+   allow delete: if false;
+   match /messages/{id} {
+    allow get: if own(uid)||chatStaff();
+    allow list: if (own(uid)||chatStaff()) && limited();
+    allow create: if (own(uid)||chatStaff()) && id.matches('[a-f0-9-]{36}') && request.resource.data.keys().hasOnly(['id','text','kind','senderId','createdAt']) && request.resource.data.size()==5 &&
+     request.resource.data.id==id && request.resource.data.text is string && request.resource.data.text.size()>0 && request.resource.data.text.size()<=2000 && request.resource.data.createdAt==request.time && request.resource.data.senderId==request.auth.uid &&
+     (own(uid) && request.resource.data.kind=='customer' || chatStaff() && request.resource.data.kind=='staff') &&
+     getAfter(/databases/$(database)/documents/orinSupportConversations/$(uid)).data.lastMessageId==id &&
+     (!exists(/databases/$(database)/documents/orinSupportConversations/$(uid)) || chatStaff() || request.time > get(/databases/$(database)/documents/orinSupportConversations/$(uid)).data.lastCustomerAt + duration.value(1,'s'));
+    allow update,delete: if false;
+   }
+  }
+  match /orinReferralIdentities/{uid} {
+   allow get: if own(uid);
+   allow create: if own(uid) && request.resource.data.keys().hasOnly(['code','createdAt']) && request.resource.data.size()==2 && request.resource.data.code.matches('ORIN-[A-F0-9]{12}') && request.resource.data.createdAt==request.time && getAfter(/databases/$(database)/documents/orinReferralCodes/$(request.resource.data.code)).data.uid==uid;
+   allow list,update,delete: if false;
+  }
+  match /orinReferralCodes/{code} {
+   allow get: if activeUser() && (resource==null || resource.data.uid==request.auth.uid);
+   allow create: if activeUser() && code.matches('ORIN-[A-F0-9]{12}') && request.resource.data.keys().hasOnly(['uid']) && request.resource.data.size()==1 && request.resource.data.uid==request.auth.uid && getAfter(/databases/$(database)/documents/orinReferralIdentities/$(request.auth.uid)).data.code==code;
+   allow list,update,delete: if false;
+  }
+  match /orinReferralAttributions/{uid} {
+   allow get: if own(uid);
+   allow create: if own(uid) && request.resource.data.keys().hasOnly(['code','status','createdAt']) && request.resource.data.size()==3 && request.resource.data.code.matches('ORIN-[A-F0-9]{12}') && request.resource.data.status=='pending' && request.resource.data.createdAt==request.time && exists(/databases/$(database)/documents/orinReferralCodes/$(request.resource.data.code)) && get(/databases/$(database)/documents/orinReferralCodes/$(request.resource.data.code)).data.uid!=uid;
+   allow list,update,delete: if false;
+  }
+  match /orinReferralViews/{uid} { allow get: if own(uid); allow list,write: if false; }

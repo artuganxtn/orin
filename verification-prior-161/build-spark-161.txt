@@ -1,0 +1,35 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> site-creator-vinext-starter@0.1.0 build:firebase-spark
+> VITE_FIREBASE_SPARK=true vite build --config firebase-app/vite.config.mts --outDir ../firebase-spark-dist
+
+vite v8.0.13 building client environment for production...
+[2Ktransforming...✓ 2328 modules transformed.
+rendering chunks...
+computing gzip size...
+firebase-spark-dist/index.html                                   2.86 kB │ gzip:   1.44 kB
+firebase-spark-dist/.vite/manifest.json                          3.68 kB │ gzip:   0.73 kB
+firebase-spark-dist/assets/trading-workspace-CQfkr4DO.css       14.93 kB │ gzip:   3.55 kB
+firebase-spark-dist/assets/control-center-hUzeOYPD.css          21.29 kB │ gzip:   5.24 kB
+firebase-spark-dist/assets/index-Cb6B2c8Z.css                  394.23 kB │ gzip:  70.07 kB
+firebase-spark-dist/assets/typeof-Dtizcwqq.js                    0.27 kB │ gzip:   0.16 kB
+firebase-spark-dist/assets/star-iIGCW776.js                      0.46 kB │ gzip:   0.28 kB
+firebase-spark-dist/assets/chart-boundary-1SOy7a7k.js            1.21 kB │ gzip:   0.71 kB
+firebase-spark-dist/assets/sliders-horizontal-G-DIawJ5.js        3.25 kB │ gzip:   1.27 kB
+firebase-spark-dist/assets/tradingview-widget-DvAeW6JX.js        4.53 kB │ gzip:   2.14 kB
+firebase-spark-dist/assets/account-transactions-D-nBfxnz.js      5.00 kB │ gzip:   2.20 kB
+firebase-spark-dist/assets/purify.es-C_EYEgqH.js                28.10 kB │ gzip:  11.10 kB
+firebase-spark-dist/assets/program-pages-BQksdmg6.js            45.90 kB │ gzip:  15.71 kB
+firebase-spark-dist/assets/control-center-D7lLYSwE.js           80.76 kB │ gzip:  23.68 kB
+firebase-spark-dist/assets/index.es-C_gEpj5p.js                151.60 kB │ gzip:  48.96 kB
+firebase-spark-dist/assets/html2canvas-SSojmGPE.js             199.59 kB │ gzip:  46.79 kB
+firebase-spark-dist/assets/statement-pdf-Dv7h12YO.js           406.06 kB │ gzip: 132.65 kB
+firebase-spark-dist/assets/trading-workspace-Bib30PL_.js       462.13 kB │ gzip: 141.63 kB
+firebase-spark-dist/assets/index-BqrhuqDq.js                 1,002.39 kB │ gzip: 310.14 kB
+
+✓ built in 1.69s
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.

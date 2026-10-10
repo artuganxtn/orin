@@ -1,0 +1,195 @@
+rules_version = '2';
+service cloud.firestore {
+   // ORIN 1.5.9 isolated demo wallet rules
+match /databases/{database}/documents {
+  // Demo-only storage. No rule below grants access to a real wallet or real ledger.
+  function demoOwner(uid,id) {
+   return own(uid) && validTradingId(id) &&
+    get(/databases/$(database)/documents/sparkTradingAccounts/$(uid)/accounts/$(id)).data.type=='demo';
+  }
+  function demoUnreserved(uid,id) {
+   return get(/databases/$(database)/documents/sparkTradingAccounts/$(uid)/accounts/$(id)).data.reservedCents==0 &&
+    (id!='primary' || !exists(/databases/$(database)/documents/orinAccounts/$(uid)) ||
+    get(/databases/$(database)/documents/orinAccounts/$(uid)).data.reservedCents==0);
+  }
+  function demoWalletShape(d,uid,id) {
+   return d.keys().hasOnly(['ownerId','accountId','currency','futuresCents','perpetualCents','version','lastOperationId','updatedAt']) && d.size()==8 &&
+    d.ownerId==uid && d.accountId==id && d.currency=='USD' && d.updatedAt==request.time &&
+    d.futuresCents is int && d.perpetualCents is int && d.futuresCents>=0 && d.perpetualCents>=0 &&
+    d.futuresCents+d.perpetualCents<=100000000 && d.version is int && d.version>=1 &&
+    validTradingId(d.lastOperationId) && d.lastOperationId!='primary';
+  }
+  function demoOperationValid(uid,id,opId,o,before,after) {
+   return o.keys().hasOnly(['ownerId','accountId','currency','kind','from','to','amountCents','beforeFuturesCents','beforePerpetualCents','afterFuturesCents','afterPerpetualCents','version','createdAt']) && o.size()==13 &&
+    o.ownerId==uid && o.accountId==id && o.currency=='USD' && o.createdAt==request.time && o.version==after.version &&
+    after.lastOperationId==opId && o.beforeFuturesCents==before.futuresCents && o.beforePerpetualCents==before.perpetualCents &&
+    o.afterFuturesCents==after.futuresCents && o.afterPerpetualCents==after.perpetualCents &&
+    o.amountCents is int && o.amountCents>=0 && o.amountCents<=100000000 &&
+    ((o.kind=='reset' && o.from=='reset' && o.to=='futures' && after.futuresCents==o.amountCents && after.perpetualCents==0) ||
+     (o.kind=='transfer' && o.amountCents>0 && after.futuresCents+after.perpetualCents==before.futuresCents+before.perpetualCents &&
+      ((o.from=='futures' && o.to=='perpetual' && after.futuresCents==before.futuresCents-o.amountCents) ||
+       (o.from=='perpetual' && o.to=='futures' && after.perpetualCents==before.perpetualCents-o.amountCents))));
+  }
+  function demoBefore(uid,id) {
+   return exists(/databases/$(database)/documents/orinDemoWallets/$(uid)/accounts/$(id))?
+    get(/databases/$(database)/documents/orinDemoWallets/$(uid)/accounts/$(id)).data:
+    {'futuresCents':0,'perpetualCents':0,'version':0};
+  }
+  match /orinDemoWallets/{uid}/accounts/{id} {
+   allow get: if demoOwner(uid,id);
+   allow create,update: if demoOwner(uid,id) && demoUnreserved(uid,id) && demoWalletShape(request.resource.data,uid,id) &&
+    request.resource.data.version==demoBefore(uid,id).version+1 &&
+    !exists(/databases/$(database)/documents/orinDemoWallets/$(uid)/accounts/$(id)/operations/$(request.resource.data.lastOperationId)) &&
+    demoOperationValid(uid,id,request.resource.data.lastOperationId,
+     getAfter(/databases/$(database)/documents/orinDemoWallets/$(uid)/accounts/$(id)/operations/$(request.resource.data.lastOperationId)).data,demoBefore(uid,id),request.resource.data);
+   allow list,delete: if false;
+   match /operations/{opId} {
+    allow get: if demoOwner(uid,id);
+    allow list: if demoOwner(uid,id) && limited();
+    allow create: if demoOwner(uid,id) && demoUnreserved(uid,id) && validTradingId(opId) && opId!='primary' &&
+     getAfter(/databases/$(database)/documents/orinDemoWallets/$(uid)/accounts/$(id)).data.version==demoBefore(uid,id).version+1 &&
+     demoOperationValid(uid,id,opId,request.resource.data,demoBefore(uid,id),getAfter(/databases/$(database)/documents/orinDemoWallets/$(uid)/accounts/$(id)).data);
+    allow update,delete: if false;
+   }
+  }
+
+  function signedIn() { return request.auth != null; }
+  function owner() { return signedIn() && request.auth.token.email_verified == true && request.auth.token.email == 'khtaub7341@gmail.com'; }
+  function admin() {
+   return signedIn() && request.auth.token.email_verified == true &&
+    (owner() || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.disabled == false));
+  }
+  function validUser(data) {
+   return data.keys().hasOnly(['uid','email','displayName','role','disabled','createdAt','updatedAt']) &&
+    data.uid is string && data.email is string && data.email.size() <= 320 &&
+    data.displayName is string && data.displayName.size() > 0 && data.displayName.size() <= 100 &&
+    data.role in ['user','admin'] && data.disabled is bool &&
+    data.createdAt is timestamp && data.updatedAt is timestamp;
+  }
+  match /system/owner-bootstrap { allow get: if owner(); allow write: if false; }
+  match /users/{uid} {
+   allow get: if signedIn() && (request.auth.uid == uid || admin());
+   allow list: if admin() && request.query.limit != null && request.query.limit <= 100;
+   allow create: if signedIn() && request.auth.uid == uid && validUser(request.resource.data) &&
+    request.resource.data.uid == uid && request.resource.data.email == request.auth.token.email &&
+    request.resource.data.role == 'user' && request.resource.data.disabled == false &&
+    request.resource.data.createdAt == request.time && request.resource.data.updatedAt == request.time;
+   allow update: if signedIn() && validUser(request.resource.data) &&
+    request.resource.data.uid == resource.data.uid && request.resource.data.email == resource.data.email &&
+    request.resource.data.createdAt == resource.data.createdAt && request.resource.data.updatedAt == request.time &&
+    (
+     (request.auth.uid == uid && resource.data.disabled == false && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName','updatedAt'])) ||
+     (owner() && request.auth.uid == uid && request.resource.data.disabled == false && request.resource.data.role == 'admin') ||
+     (admin() && request.auth.uid != uid && resource.data.email != 'khtaub7341@gmail.com' && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName','role','disabled','updatedAt']))
+    );
+   allow delete: if false;
+  }
+  function activeUser() { return signedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.disabled == false; }
+  function own(uid) { return activeUser() && request.auth.uid == uid; }
+  function limited() { return request.query.limit != null && request.query.limit <= 100; }
+  function symbols() { return ['BTC-USD','ETH-USD','XRP-USD','SOL-USD','BNB-USDT','DOGE-USD','TON-USDT','ADA-USD','EUR-USD','GBP-USD','XAU-USD','XAG-USD','SPX-USD','NDX-USD']; }
+  function preferences(p) {
+   return p is map && p.keys().hasOnly(['hideBalance','notifications','reduceMotion','notificationSounds','opportunitySound','securitySound','vibration','marketingNotifications','chartLocale','theme','fontSize','numberFormat','referenceCurrency','timezone','chartPair','chartInterval','chartStyle','grid','crosshair','priceLine','saveDrawings','indicators','favorites','notificationEvents','notificationChannels']) && p.size()==25 &&
+    p.hideBalance is bool && p.notifications is bool && p.reduceMotion is bool && p.notificationSounds is bool && p.opportunitySound is bool && p.securitySound is bool && p.vibration is bool && p.marketingNotifications is bool &&
+    p.chartLocale in ['ar','en'] && p.theme in ['light','dark','system'] && p.fontSize in ['small','normal','large'] && p.numberFormat in ['latin','arabic'] && p.referenceCurrency in ['USD','EUR','GBP'] && p.timezone is string && p.timezone.size()>0 && p.timezone.size()<=80 &&
+    p.chartPair in symbols() && p.chartInterval in ['1','5','15','60','240','D'] && p.chartStyle in ['1','2','3'] && p.grid is bool && p.crosshair == true && p.priceLine == true && p.saveDrawings == false &&
+    p.indicators is list && p.indicators.size()<=5 && p.indicators.hasOnly(['MA','EMA','RSI','MACD','BB']) && p.favorites is list && p.favorites.size()<=14 && p.favorites.hasOnly(symbols()) &&
+    p.notificationChannels == {'push':false,'email':false,'sms':false} &&
+    p.notificationEvents is map && p.notificationEvents.size()==12 && p.notificationEvents.keys().hasOnly(['opportunity','contract_started','contract_ended','settlement','deposit','withdrawal','referral','agent','support','security','announcement','reminder']) &&
+    p.notificationEvents.security == true && p.notificationEvents.opportunity is bool && p.notificationEvents.contract_started is bool && p.notificationEvents.contract_ended is bool && p.notificationEvents.settlement is bool && p.notificationEvents.deposit is bool && p.notificationEvents.withdrawal is bool && p.notificationEvents.referral is bool && p.notificationEvents.agent is bool && p.notificationEvents.support is bool && p.notificationEvents.announcement is bool && p.notificationEvents.reminder is bool;
+  }
+  function validProfile(p) { return p is map && p.keys().hasOnly(['displayName','phone','country','closureStatus']) && p.size()==4 && p.displayName is string && p.displayName.size()>0 && p.displayName.size()<=100 && p.phone is string && (p.phone == '' || p.phone.matches('\\+?[0-9 ()-]{6,24}')) && p.country is string && (p.country == '' || p.country.matches('[A-Z]{2}')) && p.closureStatus in ['open','requested']; }
+  function sparkProfile(d,uid) { return d.keys().hasOnly(['uid','profile','preferences','tier','acceptedAt','revision','createdAt','updatedAt']) && d.size()==8 && d.uid==uid && validProfile(d.profile) && preferences(d.preferences) && d.tier in ['standard','advanced'] && (d.acceptedAt == null || d.acceptedAt is timestamp) && d.revision is int && d.revision>=0 && d.createdAt is timestamp && d.updatedAt==request.time; }
+  function closureAllowed(uid,d) { return d.profile.closureStatus != 'requested' || !exists(/databases/$(database)/documents/orinAccounts/$(uid)) || get(/databases/$(database)/documents/orinAccounts/$(uid)).data.reservedCents==0; }
+  match /sparkProfiles/{uid} {
+   allow get: if own(uid) || (activeUser() && admin());
+   allow list: if activeUser() && admin() && limited();
+   allow create: if own(uid) && sparkProfile(request.resource.data,uid) && request.resource.data.tier=='standard' && request.resource.data.acceptedAt==null && request.resource.data.revision==0 && request.resource.data.createdAt==request.time && request.resource.data.profile.closureStatus=='open';
+   allow update: if own(uid) && sparkProfile(request.resource.data,uid) && request.resource.data.createdAt==resource.data.createdAt && request.resource.data.revision==resource.data.revision+1 && (request.resource.data.tier==resource.data.tier || admin()) &&
+    (request.resource.data.acceptedAt==resource.data.acceptedAt || resource.data.acceptedAt==null && request.resource.data.acceptedAt==request.time) &&
+    (resource.data.profile.closureStatus!='requested' || request.resource.data.profile.closureStatus=='requested') && closureAllowed(uid,request.resource.data);
+   allow delete: if false;
+   match /inbox/{cid} {
+    allow read: if own(uid);
+    allow create: if activeUser() && admin() && request.resource.data.keys().hasOnly(['campaignId','createdAt','readAt']) && request.resource.data.campaignId==cid && request.resource.data.createdAt==request.time && request.resource.data.readAt==null &&
+     getAfter(/databases/$(database)/documents/sparkCampaigns/$(cid)).data.status=='sent' && getAfter(/databases/$(database)/documents/sparkCampaigns/$(cid)).data.sentAt==request.time && uid in getAfter(/databases/$(database)/documents/sparkCampaigns/$(cid)).data.recipientIds;
+    allow update: if own(uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt']) && request.resource.data.readAt==request.time;
+    allow delete: if false;
+   }
+  }
+  function marketConfig(c) { return c is map && c.keys().hasOnly(['defaultSymbol','enabledSymbols','defaultTimeframe','enabledTimeframes','defaultChartType','enabledChartTypes','allowedIndicators','allowedDrawingTools','volume','gridDefault','crosshairDefault','fullscreen','alerts','favorites']) && c.size()==14 &&
+   c.enabledSymbols is list && c.enabledSymbols.size()>0 && c.enabledSymbols.size()<=14 && c.enabledSymbols.hasOnly(symbols()) && c.defaultSymbol in c.enabledSymbols &&
+   c.enabledTimeframes is list && c.enabledTimeframes.size()>0 && c.enabledTimeframes.size()<=6 && c.enabledTimeframes.hasOnly(['1','5','15','60','240','D']) && c.defaultTimeframe in c.enabledTimeframes &&
+   c.enabledChartTypes is list && c.enabledChartTypes.size()>0 && c.enabledChartTypes.size()<=3 && c.enabledChartTypes.hasOnly(['1','2','3']) && c.defaultChartType in c.enabledChartTypes &&
+   c.allowedIndicators is list && c.allowedIndicators.size()<=5 && c.allowedIndicators.hasOnly(['MA','EMA','RSI','MACD','BB']) && c.allowedDrawingTools==[] && c.volume is bool && c.gridDefault is bool && c.crosshairDefault==true && c.fullscreen is bool && c.alerts==false && c.favorites is bool; }
+  match /sparkConfiguration/markets {
+   allow get: if activeUser();
+   allow create,update: if activeUser() && admin() && request.resource.data.keys().hasOnly(['configuration','revision','updatedAt']) && marketConfig(request.resource.data.configuration) && request.resource.data.updatedAt==request.time && request.resource.data.revision is int && request.resource.data.revision==(resource==null?1:resource.data.revision+1);
+   allow delete: if false;
+  }
+  function validCampaign(d,cid) { return d.keys().hasOnly(['id','title','message','image','audience','language','deep_link','starts_at','expires_at','status','revision','createdAt','sentAt','recipient_count','recipientIds']) && d.size()==15 && d.id==cid && cid.matches('[A-Za-z0-9_-]{1,160}') &&
+   d.title is string && d.title.size()>0 && d.title.size()<=80 && d.message is string && d.message.size()>0 && d.message.size()<=500 && d.image is string && (d.image=='' || d.image.matches('/brand/[A-Za-z0-9/_.-]+\\.(png|jpg|webp|svg)')) && !d.image.matches('.*\\.\\..*') &&
+   d.audience is string && d.audience.size()<=12000 && d.language in ['ar','en','all'] && d.deep_link in ['/notifications','/settings/security','/invitations','/referral','/support'] && d.starts_at is int && d.expires_at is int && d.expires_at>d.starts_at && d.expires_at>request.time.toMillis() && d.expires_at<=request.time.toMillis()+7776000000 &&
+   d.status in ['draft','sent','cancelled'] && d.revision is int && d.revision>=0 && d.createdAt is timestamp && (d.sentAt==null || d.sentAt is timestamp) && d.recipientIds is list && d.recipientIds.size()<=200 && d.recipientIds.size()==d.recipientIds.toSet().size() && d.recipient_count==d.recipientIds.size(); }
+  match /sparkCampaigns/{cid} {
+   allow get: if activeUser() && admin();
+   allow list: if activeUser() && admin() && limited();
+   allow create: if activeUser() && admin() && validCampaign(request.resource.data,cid) && request.resource.data.status=='draft' && request.resource.data.revision==0 && request.resource.data.createdAt==request.time && request.resource.data.sentAt==null && request.resource.data.recipientIds==[];
+   allow update: if activeUser() && admin() && validCampaign(request.resource.data,cid) && resource.data.status=='draft' && request.resource.data.revision==resource.data.revision+1 && request.resource.data.createdAt==resource.data.createdAt && (
+    (request.resource.data.status in ['draft','cancelled'] && request.resource.data.sentAt==null && request.resource.data.recipientIds==[]) ||
+    (request.resource.data.status=='sent' && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','revision','sentAt','recipient_count','recipientIds']) && request.resource.data.sentAt==request.time && request.resource.data.starts_at<=request.time.toMillis() && request.resource.data.recipient_count>0)
+   );
+   allow delete: if false;
+  }
+  match /sparkAnnouncements/{cid} {
+   allow get: if activeUser() && (admin() || exists(/databases/$(database)/documents/sparkProfiles/$(request.auth.uid)/inbox/$(cid)));
+   allow create: if activeUser() && admin() && request.resource.data.keys().hasOnly(['id','title','message','image','deep_link','expires_at','createdAt']) && request.resource.data.id==cid && request.resource.data.createdAt==request.time &&
+    getAfter(/databases/$(database)/documents/sparkCampaigns/$(cid)).data.status=='sent' && getAfter(/databases/$(database)/documents/sparkCampaigns/$(cid)).data.sentAt==request.time &&
+    request.resource.data.title==getAfter(/databases/$(database)/documents/sparkCampaigns/$(cid)).data.title && request.resource.data.message==getAfter(/databases/$(database)/documents/sparkCampaigns/$(cid)).data.message && request.resource.data.image==getAfter(/databases/$(database)/documents/sparkCampaigns/$(cid)).data.image && request.resource.data.deep_link==getAfter(/databases/$(database)/documents/sparkCampaigns/$(cid)).data.deep_link && request.resource.data.expires_at==getAfter(/databases/$(database)/documents/sparkCampaigns/$(cid)).data.expires_at;
+   allow update,delete,list: if false;
+  }
+  // Account identities are immutable. Client creation can only establish a zero balance.
+  function validTradingId(id) { return id == 'primary' || id.matches('[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}'); }
+  function validTradingAccount(d,uid,id) {
+   return d.keys().hasOnly(['ownerId','accountNumber','type','currency','balanceCents','reservedCents','realizedCents','createdAt']) && d.size()==8 &&
+    d.ownerId==uid && d.accountNumber is string && d.accountNumber.matches('[1-9][0-9]{11}') && d.accountNumber!=uid &&
+    d.type in ['real','demo'] && (id!='primary' || d.type=='demo') && d.currency=='USD' &&
+    d.balanceCents==0 && d.reservedCents==0 && d.realizedCents==0 && d.createdAt==request.time;
+  }
+  match /sparkTradingAccounts/{uid}/accounts/{id} {
+   allow get: if own(uid);
+   allow list: if own(uid) && limited();
+   allow create: if own(uid) && validTradingId(id) && validTradingAccount(request.resource.data,uid,id) &&
+    !exists(/databases/$(database)/documents/sparkAccountNumbers/$(request.resource.data.accountNumber)) &&
+    getAfter(/databases/$(database)/documents/sparkAccountNumbers/$(request.resource.data.accountNumber)).data.ownerId==uid &&
+    getAfter(/databases/$(database)/documents/sparkAccountNumbers/$(request.resource.data.accountNumber)).data.accountId==id;
+   allow update,delete: if false;
+  }
+  match /sparkAccountNumbers/{number} {
+   // Missing claims and the owner's claims can be checked; another user's identity is never disclosed.
+   allow get: if activeUser() && (resource==null || resource.data.ownerId==request.auth.uid);
+   allow list: if false;
+   allow create: if activeUser() && number.matches('[1-9][0-9]{11}') && request.resource.data.keys().hasOnly(['ownerId','accountId']) && request.resource.data.size()==2 &&
+    request.resource.data.ownerId==request.auth.uid && validTradingId(request.resource.data.accountId) &&
+    !exists(/databases/$(database)/documents/sparkTradingAccounts/$(request.auth.uid)/accounts/$(request.resource.data.accountId)) &&
+    getAfter(/databases/$(database)/documents/sparkTradingAccounts/$(request.auth.uid)/accounts/$(request.resource.data.accountId)).data.accountNumber==number;
+   allow update,delete: if false;
+  }
+  match /sparkAccountSelections/{uid} {
+   allow get: if own(uid);
+   allow create,update: if own(uid) && request.resource.data.keys().hasOnly(['accountId','updatedAt']) && request.resource.data.size()==2 &&
+    validTradingId(request.resource.data.accountId) && request.resource.data.updatedAt==request.time &&
+    exists(/databases/$(database)/documents/sparkTradingAccounts/$(uid)/accounts/$(request.resource.data.accountId));
+   allow list,delete: if false;
+  }
+  // Preserve any existing server-owned financial records as read-only. Never grant writes, even to admins.
+  match /orinAccounts/{uid} { allow get: if own(uid); allow write,list: if false; }
+  match /orinContracts/{id} { allow read: if activeUser() && (admin() || resource.data.eligibility=='all' || resource.data.eligibility==(exists(/databases/$(database)/documents/orinAccounts/$(request.auth.uid))?get(/databases/$(database)/documents/orinAccounts/$(request.auth.uid)).data.tier:get(/databases/$(database)/documents/sparkProfiles/$(request.auth.uid)).data.tier)); allow write: if false; }
+  match /orinPositions/{id} { allow read: if activeUser() && resource.data.user_id==request.auth.uid; allow write: if false; }
+  match /orinReceipts/{id} { allow read: if activeUser() && resource.data.user_id==request.auth.uid; allow write: if false; }
+  match /orinJournals/{id} { allow read: if activeUser() && resource.data.user_id==request.auth.uid; allow write: if false; }
+  match /orinAudit/{id} { allow read: if activeUser() && admin() && limited(); allow write: if false; }
+
+  match /{document=**} { allow read, write: if false; }
+ }
+}

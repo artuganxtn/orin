@@ -1,0 +1,57 @@
+/* Only the new account strip and its portal. Existing page/chart/theme rules are untouched. */
+.orin-account-strip{position:relative;z-index:2;display:flex;align-items:center;gap:6px;max-width:100%;min-height:36px;margin:-5px 0 5px;padding:0;border:0;background:transparent;color:inherit;font:inherit;font-size:12px;cursor:pointer;flex-wrap:wrap;text-align:start}
+.orin-account-strip bdi{font-size:12px;white-space:nowrap}
+.orin-account-strip svg{flex-shrink:0}
+.orin-account-strip:focus-visible{outline:2px solid var(--primary,#078bfa);outline-offset:3px;border-radius:4px}
+.orin-accounts-menu{z-index:100;width:min(370px,calc(100vw - 24px));max-height:min(620px,var(--radix-popover-content-available-height));overflow:auto;padding:14px;border:1px solid var(--orin-line,#e1eafa);border-radius:16px;background:var(--orin-surface,#fff);color:var(--orin-ink,#142451);box-shadow:0 12px 35px #16315c26;font-family:inherit;font-size:13px;outline:none}
+.orin-accounts-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px}
+.orin-accounts-close{display:grid;place-items:center;min-width:36px;min-height:36px;border:0;border-radius:8px;background:transparent;color:inherit}
+.orin-accounts-list{max-height:280px;overflow:auto;overscroll-behavior:contain}
+.orin-account-option{width:100%;display:flex;align-items:center;gap:8px;padding:12px 5px;border:0;border-bottom:1px solid var(--orin-line,#e1eafa);background:transparent;color:inherit;text-align:start;font:inherit;cursor:pointer}
+.orin-account-option[aria-pressed=true]{background:var(--orin-surface-soft,#f0f7ff);border-radius:8px}
+.orin-account-check{width:18px;flex-shrink:0;color:var(--primary,#078bfa)}
+.orin-account-identity{display:grid;gap:5px;min-width:0}
+.orin-account-identity b{font-weight:600}
+.orin-account-identity bdi{font-size:11px;white-space:nowrap;opacity:.78}
+.orin-account-amount{margin-inline-start:auto;text-align:end;font-size:12px;overflow-wrap:anywhere;max-width:42%}
+.orin-account-add{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;min-height:44px;margin-top:8px;border:0;background:transparent;color:var(--primary,#078bfa);font:inherit;cursor:pointer}
+.orin-account-create{margin-top:12px;padding-top:12px;border-top:1px solid var(--orin-line,#e1eafa)}
+.orin-account-create fieldset{border:0;padding:0;margin:0;display:flex;gap:16px;flex-wrap:wrap}
+.orin-account-create legend{margin-bottom:8px;font-weight:600}
+.orin-account-create label{display:flex;align-items:center;gap:6px;min-height:40px;cursor:pointer}
+.orin-account-create input{accent-color:var(--primary,#078bfa)}
+.orin-account-create p{margin:8px 0}
+.orin-account-create small{display:block;line-height:1.7;opacity:.8}
+.orin-account-create-actions{display:flex;gap:8px;margin-top:12px}
+.orin-account-create-actions button,.orin-account-error button{min-height:40px;padding:8px 12px;border:1px solid var(--orin-line,#e1eafa);border-radius:8px;background:transparent;color:inherit;font:inherit}
+.orin-account-create-actions button[type=submit]{background:var(--primary,#078bfa);color:#fff;border-color:transparent}
+.orin-accounts-menu button:disabled{opacity:.55;cursor:wait}
+.orin-accounts-menu button:focus-visible,.orin-account-create input:focus-visible{outline:2px solid var(--primary,#078bfa);outline-offset:-2px}
+.orin-account-error,.orin-account-status{font-size:12px;line-height:1.7;margin:8px 0}
+.orin-account-error p{margin:0 0 8px}
+html[data-theme=dark] .orin-accounts-menu{background:var(--orin-surface,#111e34);color:var(--orin-ink,#e6efff);border-color:var(--orin-line,#2a3b57)}
+html[data-theme=dark] .orin-account-option[aria-pressed=true]{background:var(--orin-surface-soft,#1a2d49)}
+@media(max-width:355px){.orin-account-strip{gap:4px;font-size:11px}.orin-account-strip bdi{font-size:11px}.orin-accounts-menu{padding:10px}.orin-account-option{gap:6px}}
+.account-mode-badge{display:inline-flex;align-items:center;justify-content:center;padding:3px 10px;border:1px solid transparent;border-radius:999px;font-size:11px;font-weight:700;line-height:1.5;white-space:nowrap;vertical-align:middle}
+.account-mode-badge.real{background:#dff6ea;color:#19845c;border-color:#bee9d4}
+.account-mode-badge.demo{background:#fff0df;color:#b86813;border-color:#f5d4ae}
+.account-strip-copy> b{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.demo-adjust-button{display:flex;align-items:center;justify-content:center;gap:5px;border:1px solid #e5a151;background:#fff4e6;color:#ac5e0c;border-radius:12px;padding:8px;min-height:40px;font:inherit;font-size:11px;font-weight:600;cursor:pointer;margin-inline-start:auto;flex-shrink:0}
+.demo-balance-available{gap:7px;flex-wrap:wrap}
+.demo-balance-available>svg{display:none}
+.quick-actions>button:disabled{opacity:.46;cursor:not-allowed}
+.demo-sheet-overlay{position:fixed;inset:0;background:#101d386b;backdrop-filter:blur(3px);z-index:180}
+.demo-balance-sheet{position:fixed;z-index:181;bottom:0;left:50%;transform:translateX(-50%);width:min(540px,100%);max-height:90dvh;overflow-y:auto;background:var(--orin-surface,#fff);color:var(--orin-ink,#13213f);border:1px solid var(--orin-line,#dce7f2);border-radius:26px 26px 0 0;padding:22px 22px max(24px,env(safe-area-inset-bottom));box-shadow:0 -10px 60px #16284325;outline:none}
+.demo-sheet-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.demo-sheet-title button{border:0;background:transparent;color:inherit;min-width:40px;min-height:40px;display:grid;place-items:center}
+.demo-balance-sheet h2{font-size:22px;margin:0 0 8px;font-weight:700}
+.demo-balance-sheet p{font-size:13px;line-height:1.8;color:var(--orin-muted,#6b7e96)}
+.demo-amount-row{display:flex;gap:10px;margin:22px 0 12px}
+.demo-amount-row label{display:grid;gap:8px;font-size:12px;border:1px solid var(--orin-line,#dde6f0);border-radius:16px;padding:12px;min-width:0}
+.demo-amount-row label:first-child{flex:1}
+.demo-amount-row input,.demo-amount-row select{width:100%;background:transparent;border:0;color:inherit;outline-color:#1487fa;font:inherit;font-weight:700;font-size:24px;min-height:42px}
+.demo-amount-row select{font-size:15px;opacity:1}
+.demo-separation-note{display:flex;gap:7px;align-items:center;margin-bottom:20px}
+.demo-balance-sheet .btn-primary{min-height:50px;border-radius:14px}
+@media(min-width:640px){.demo-balance-sheet{bottom:50%;transform:translate(-50%,50%);border-radius:26px}}
+@media(max-width:390px){.account-mode-badge{font-size:10px;padding:2px 7px}.demo-adjust-button{font-size:10px;padding:6px}.demo-balance-available{min-width:0}.demo-adjust-button{flex:1}}

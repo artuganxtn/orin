@@ -1,0 +1,13 @@
+✔ historical data consumers work without Array.at and method remains nonenumerable (3.249452ms)
+✔ provider race returns first success even if an earlier provider rejects (1.297512ms)
+✔ all rejected sources retain input order and empty sources reject without hanging (1.464118ms)
+✔ thenables and broken iterators have normal promise semantics (1.107931ms)
+✔ native built-ins remain intact in current WebViews (2.685894ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 226.242663

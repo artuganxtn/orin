@@ -1,0 +1,198 @@
+[
+  {
+    "name": "onboarding",
+    "until": "!!document.querySelector('.orin-onboarding-v2')",
+    "screenshot": true,
+    "timeout": 120000
+  },
+  {
+    "name": "introduction",
+    "tap": ".intro-primary",
+    "until": "document.body.innerText.includes('كل حساب')",
+    "screenshot": true
+  },
+  {
+    "name": "connection_intro",
+    "tap": ".intro-primary",
+    "until": "document.body.innerText.includes('ابدأ رحلتك')",
+    "screenshot": true
+  },
+  {
+    "name": "create_account",
+    "tap": ".intro-primary",
+    "until": "!!document.querySelector('input[autocomplete=name]')",
+    "screenshot": true
+  },
+  {
+    "name": "name",
+    "evaluate": "(()=>{const e=document.querySelector(\"input[autocomplete=name]\");const set=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;set.call(e,\"ORIN QA\");e.dispatchEvent(new Event('input',{bubbles:true}));return e.value})()"
+  },
+  {
+    "name": "email",
+    "evaluate": "(()=>{const e=document.querySelector(\"input[type=email]\");const set=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;set.call(e,\"orin150qa@test.invalid\");e.dispatchEvent(new Event('input',{bubbles:true}));return e.value})()"
+  },
+  {
+    "name": "password",
+    "evaluate": "(()=>{const e=document.querySelector(\"input[autocomplete=new-password]\");const set=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;set.call(e,\"OnlyLocalQA2026!\");e.dispatchEvent(new Event('input',{bubbles:true}));return e.value})()"
+  },
+  {
+    "name": "register",
+    "tap": "form button.primary",
+    "until": "!!document.querySelector('.reference-home')",
+    "timeout": 150000,
+    "screenshot": true
+  },
+  {
+    "name": "remember_document",
+    "evaluate": "(window.orinQaDocument=performance.timeOrigin,location.pathname)",
+    "contains": "/"
+  },
+  {
+    "name": "btc_chart_timeout_bound",
+    "until": "!document.querySelector('.reference-home .native-feed-state img') && !document.querySelector('.reference-home .tv-loading')",
+    "timeout": 60000,
+    "screenshot": true
+  },
+  {
+    "name": "btc_symbol",
+    "evaluate": "[...document.querySelectorAll('.reference-home iframe')].some(f=>decodeURIComponent(f.src).includes('BITSTAMP:BTCUSD')) || !!document.querySelector('.reference-home .native-chart svg')",
+    "contains": "true",
+    "required": false
+  },
+  {
+    "name": "markets",
+    "tap": "[data-slot=tabs-trigger]:nth-child(2)",
+    "until": "location.pathname==='/markets' && !!document.querySelector('.orin-market-row')",
+    "screenshot": true
+  },
+  {
+    "name": "filter_eth",
+    "evaluate": "(()=>{const e=document.querySelector(\".market-search input\");const set=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;set.call(e,\"ETH\");e.dispatchEvent(new Event('input',{bubbles:true}));return e.value})()"
+  },
+  {
+    "name": "open_eth",
+    "tap": ".orin-market-row[data-pair=\"ETH-USD\"]",
+    "until": "location.pathname==='/markets/ETH-USD' && document.querySelector('.trade-pair-picker')?.innerText.includes('ETH/USD')",
+    "screenshot": true
+  },
+  {
+    "name": "document_preserved",
+    "evaluate": "performance.timeOrigin===window.orinQaDocument",
+    "contains": "true"
+  },
+  {
+    "name": "bounded_chart",
+    "until": "!document.querySelector('.native-feed-state img') && !document.querySelector('.tv-loading')",
+    "timeout": 60000,
+    "screenshot": true
+  },
+  {
+    "name": "back_to_list",
+    "back": true,
+    "until": "location.pathname==='/markets' && document.querySelector('.market-search input').value==='ETH'",
+    "screenshot": true
+  },
+  {
+    "name": "clear_search",
+    "evaluate": "(()=>{const e=document.querySelector(\".market-search input\");const set=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;set.call(e,\"\");e.dispatchEvent(new Event('input',{bubbles:true}));return e.value})()"
+  },
+  {
+    "name": "metals_category",
+    "evaluate": "(()=>{[...document.querySelectorAll('.market-categories button')].find(b=>b.textContent==='معادن').click();return true})()"
+  },
+  {
+    "name": "open_gold",
+    "tap": ".orin-market-row[data-pair=\"XAU-USD\"]",
+    "until": "location.pathname==='/markets/XAU-USD' && document.querySelector('.trade-pair-picker')?.innerText.includes('XAU/USD')"
+  },
+  {
+    "name": "gold_widget_symbol",
+    "until": "[...document.querySelectorAll('iframe')].some(f=>decodeURIComponent(f.src).includes('OANDA:XAUUSD'))",
+    "timeout": 60000,
+    "screenshot": true,
+    "required": false
+  },
+  {
+    "name": "support",
+    "tap": ".orin-support-fab",
+    "until": "document.querySelector('.support-connection')?.classList.contains('connected')",
+    "timeout": 60000,
+    "screenshot": true
+  },
+  {
+    "name": "type_support",
+    "evaluate": "(()=>{const e=document.querySelector('.support-composer textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(e,'QA 1.5.1 chart support');e.dispatchEvent(new Event('input',{bubbles:true}));return true})()"
+  },
+  {
+    "name": "send_support",
+    "tap": ".support-composer button",
+    "until": "[...document.querySelectorAll('.support-bubble.customer:not(.pending)')].some(e=>e.innerText.includes('QA 1.5.1 chart support'))",
+    "timeout": 60000,
+    "screenshot": true
+  },
+  {
+    "name": "receive_support",
+    "until": "document.querySelector('.support-bubble.staff')?.innerText.includes('QA verified reply')",
+    "timeout": 60000,
+    "screenshot": true
+  },
+  {
+    "name": "handoff",
+    "tap": ".support-handoff",
+    "until": "document.querySelector('.support-handoff')?.innerText.includes('مُرسل')",
+    "screenshot": true
+  },
+  {
+    "name": "close_chat",
+    "tap": ".orin-page-nav button",
+    "until": "!document.querySelector('.support-page')"
+  },
+  {
+    "name": "home",
+    "tap": ".reference-topbar .brand",
+    "until": "location.pathname==='/'"
+  },
+  {
+    "name": "referral",
+    "tap": ".quick-actions button:nth-child(4)",
+    "until": "!!document.querySelector('.referral-code-card input')",
+    "timeout": 60000,
+    "screenshot": true
+  },
+  {
+    "name": "stable_referral",
+    "evaluate": "(window.orinQaReferral=document.querySelector('.referral-code-card input').value,/^ORIN-[A-F0-9]{12}$/.test(window.orinQaReferral))",
+    "contains": "true"
+  },
+  {
+    "name": "copy_referral",
+    "tap": ".referral-code-card>button",
+    "until": "document.body.innerText.includes('تم النسخ')",
+    "screenshot": true
+  },
+  {
+    "name": "share_referral",
+    "tap": ".referral-code-card .btn-primary",
+    "screenshot": true
+  },
+  {
+    "name": "close_share",
+    "back": true
+  },
+  {
+    "name": "exit_referral",
+    "tap": ".orin-page-nav button",
+    "until": "!document.querySelector('.referral-page')"
+  },
+  {
+    "name": "open_referral_again",
+    "tap": ".quick-actions button:nth-child(4)",
+    "until": "document.querySelector('.referral-code-card input')?.value===window.orinQaReferral"
+  },
+  {
+    "name": "no_reload_after_all_routes",
+    "evaluate": "performance.timeOrigin===window.orinQaDocument",
+    "contains": "true",
+    "screenshot": true
+  }
+]

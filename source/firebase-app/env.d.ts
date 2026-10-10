@@ -1,0 +1,1 @@
+interface ImportMetaEnv {readonly VITE_ORIN_SECURITY_API_URL?:string;readonly VITE_ORIN_IDENTITY_API_URL?:string;readonly VITE_ORIN_PAYMENTS_API_URL?:string;readonly VITE_ORIN_PROGRAM_API_URL?:string;readonly VITE_FIREBASE_EMULATORS?:string;readonly VITE_FIREBASE_SPARK?:string;}

@@ -1,0 +1,15 @@
+import test,{after} from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {initializeTestEnvironment} from '@firebase/rules-unit-testing';
+import {doc,setDoc,serverTimestamp,getDoc} from 'firebase/firestore';
+import {referralTransport} from './referral-service-bundle.mjs';
+if(!process.env.FIRESTORE_EMULATOR_HOST)throw new Error('Local Firebase emulator required');
+const original=readFileSync(new URL('../firebase-control/firestore.rules',import.meta.url),'utf8');
+const rules=original.replace('match /orinReferralViews/{uid} { allow get: if own(uid);','match /orinReferralViews/{uid} { allow get: if false;');assert.notEqual(rules,original);
+const env=await initializeTestEnvironment({projectId:'demo-orin-auth',firestore:{rules}});after(()=>env.cleanup());
+for(const uid of ['readiness-owner','readiness-other','readiness-disabled'])await env.withSecurityRulesDisabled(async c=>setDoc(doc(c.firestore(),'users',uid),{uid,email:uid+'@test.invalid',displayName:uid,role:'user',disabled:uid.endsWith('disabled'),createdAt:serverTimestamp(),updatedAt:serverTimestamp()}));
+const client=uid=>env.authenticatedContext(uid,{email:uid+'@test.invalid',email_verified:true,auth_time:Math.floor(Date.now()/1000)}).firestore();
+test('summary permission failure preserves a genuinely persisted referral code and marks statistics unavailable',async()=>{const db=client('readiness-owner'),service=referralTransport(db);const first=await service.load('readiness-owner');assert.match(first.code,/^ORIN-[A-F0-9]{12}$/);assert.equal(first.summaryState,'unavailable');assert.equal(first.invited,null);assert.equal(first.totalRewardCents,null);assert.equal(first.rewardsActive,false);assert.equal((await getDoc(doc(db,'orinReferralIdentities/readiness-owner'))).data().code,first.code);assert.equal((await service.load('readiness-owner')).code,first.code)});
+test('identity access failure remains a real error and never creates a fabricated local referral',async()=>{const service=referralTransport(client('readiness-other'));await assert.rejects(service.load('readiness-owner'),error=>error.code==='permission-denied'&&error.phase==='identity')});
+test('disabled account cannot use the statistics fallback to obtain an identity',async()=>{await assert.rejects(referralTransport(client('readiness-disabled')).load('readiness-disabled'),error=>error.code==='permission-denied'&&error.phase==='identity')});

@@ -1,0 +1,5 @@
+{
+  "functions": [{"source":"firebase-functions","codebase":"orin","runtime":"nodejs22"}],
+  "firestore": {"rules":"firebase-control/firestore.rules","indexes":"firebase-control/firestore.indexes.json"},
+  "emulators": {"auth":{"port":9099},"firestore":{"port":8080},"ui":{"enabled":false},"singleProjectMode":true}
+}

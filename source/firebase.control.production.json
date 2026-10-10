@@ -1,0 +1,56 @@
+{
+  "hosting": {
+    "site": "orin-99951",
+    "public": "firebase-control-dist",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ],
+    "headers": [
+      {
+        "source": "**",
+        "headers": [
+          {
+            "key": "X-Content-Type-Options",
+            "value": "nosniff"
+          },
+          {
+            "key": "Referrer-Policy",
+            "value": "strict-origin-when-cross-origin"
+          },
+          {
+            "key": "X-Frame-Options",
+            "value": "DENY"
+          }
+        ]
+      },
+      {
+        "source": "/index.html",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          }
+        ]
+      }
+    ]
+  },
+  "firestore": {
+    "rules": "firebase-control/firestore.rules",
+    "indexes": "firebase-control/firestore.production.indexes.json"
+  },
+  "functions": [
+    {
+      "source": "firebase-functions",
+      "codebase": "orin",
+      "runtime": "nodejs22"
+    }
+  ]
+}

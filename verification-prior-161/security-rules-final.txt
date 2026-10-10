@@ -1,0 +1,51 @@
+i  emulators: Starting emulators: firestore
+i  emulators: Detected demo project ID "demo-orin-security-rules", emulated services will use a demo configuration and attempts to access non-emulated services for this project will fail.
+i  firestore: Firestore Emulator logging to firestore-debug.log
+✔  firestore: Firestore Emulator was started in standard edition.
+✔  firestore: Firestore Emulator UI websocket is running on 9150.
+i  Running script: node --test tests/security-rules.test.mjs
+✔ prepare server-owned profile and independent active sessions (1100.84523ms)
+✔ password-only Firebase token cannot read profile or money, even project owner claim (94.386494ms)
+✔ missing, malformed, expired and foreign session grants are rejected (231.361104ms)
+✔ revoking one session denies its same Firebase token; other session keeps access (161.180151ms)
+✔ epoch change invalidates every old session and old token, new epoch succeeds (238.419785ms)
+[2026-10-06T01:09:32.300Z]  @firebase/firestore: Firestore (12.19.0): GrpcConnection RPC 'Write' stream 0x79d6123c error. Code: 7 Message: 7 PERMISSION_DENIED: 
+false for 'create' @ L293, false for 'update' @ L293
+[2026-10-06T01:09:32.311Z]  @firebase/firestore: Firestore (12.19.0): GrpcConnection RPC 'Write' stream 0x79d6123d error. Code: 7 Message: 7 PERMISSION_DENIED: 
+false for 'delete' @ L293
+[2026-10-06T01:09:32.326Z]  @firebase/firestore: Firestore (12.19.0): GrpcConnection RPC 'Write' stream 0x79d6123e error. Code: 7 Message: 7 PERMISSION_DENIED: 
+false for 'create' @ L293, false for 'update' @ L293
+[2026-10-06T01:09:32.333Z]  @firebase/firestore: Firestore (12.19.0): GrpcConnection RPC 'Write' stream 0x79d6123f error. Code: 7 Message: 7 PERMISSION_DENIED: 
+false for 'delete' @ L293
+[2026-10-06T01:09:32.345Z]  @firebase/firestore: Firestore (12.19.0): GrpcConnection RPC 'Write' stream 0x79d61240 error. Code: 7 Message: 7 PERMISSION_DENIED: 
+false for 'create' @ L293, false for 'update' @ L293
+[2026-10-06T01:09:32.354Z]  @firebase/firestore: Firestore (12.19.0): GrpcConnection RPC 'Write' stream 0x79d61241 error. Code: 7 Message: 7 PERMISSION_DENIED: 
+false for 'delete' @ L293
+[2026-10-06T01:09:32.368Z]  @firebase/firestore: Firestore (12.19.0): GrpcConnection RPC 'Write' stream 0x79d61242 error. Code: 7 Message: 7 PERMISSION_DENIED: 
+false for 'create' @ L293, false for 'update' @ L293
+[2026-10-06T01:09:32.377Z]  @firebase/firestore: Firestore (12.19.0): GrpcConnection RPC 'Write' stream 0x79d61243 error. Code: 7 Message: 7 PERMISSION_DENIED: 
+false for 'delete' @ L293
+[2026-10-06T01:09:32.391Z]  @firebase/firestore: Firestore (12.19.0): GrpcConnection RPC 'Write' stream 0x79d61244 error. Code: 7 Message: 7 PERMISSION_DENIED: 
+false for 'create' @ L293, false for 'update' @ L293
+[2026-10-06T01:09:32.400Z]  @firebase/firestore: Firestore (12.19.0): GrpcConnection RPC 'Write' stream 0x79d61245 error. Code: 7 Message: 7 PERMISSION_DENIED: 
+false for 'delete' @ L293
+✔ clients cannot forge, read secrets, reactivate or erase security state (139.044147ms)
+[2026-10-06T01:09:32.449Z]  @firebase/firestore: Firestore (12.19.0): GrpcConnection RPC 'Write' stream 0x79d61247 error. Code: 7 Message: 7 PERMISSION_DENIED: 
+false for 'update' @ L230, false for 'update' @ L293
+[2026-10-06T01:09:32.461Z]  @firebase/firestore: Firestore (12.19.0): GrpcConnection RPC 'Write' stream 0x79d61248 error. Code: 7 Message: 7 PERMISSION_DENIED: 
+false for 'create' @ L234, false for 'create' @ L293, false for 'update' @ L234, false for 'update' @ L293
+✔ active session does not weaken cross-owner or real ledger write protection (60.363562ms)
+✔ disabled profile cannot regain financial access with active session (58.603287ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6442.724248
+✔  Script exited successfully (code 0)
+i  emulators: Shutting down emulators.
+i  firestore: Stopping Firestore Emulator
+i  hub: Stopping emulator hub
+i  logging: Stopping Logging Emulator

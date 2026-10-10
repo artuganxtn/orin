@@ -1,0 +1,12 @@
+{
+  "pass": true,
+  "unchanged": {
+    "app/tradingview-widget.tsx": "58424ee82ab50344208439bfa42c3fb1fdb771f255fbf87ff2f38f77df43174d",
+    "app/live-market.tsx": "6a244320343e21bb74b67daf06d7f37a61a0b94f347e9eefb0de8517d738405d",
+    "lib/preferences.ts": "9713c536defe0f81d789920886f9c401cd45f8faed982f8ea1b78af5f81a314f",
+    "lib/market-symbols.ts": "642c5cffc4d2f9d782e0f1200cbea9b3ab3d961f78ad2694daf17d5536d05ba3",
+    "lib/mini-history.ts": "610ff05fe2e0ef093e64c873e984080e52a1e11ca0263a0f8f2429dd36d1b9d7",
+    "lib/quote-stream.ts": "2ceb7b07ee53bfed49d3c615cb3a86f7197011f700d223caa215b82a7bf52ab9"
+  },
+  "note": "Main chart, market symbols, preferences and market history/quote data logic are byte-identical to 1.6.1."
+}

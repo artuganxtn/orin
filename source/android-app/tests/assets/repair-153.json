@@ -1,0 +1,67 @@
+[
+  {
+    "name": "home_balance",
+    "until": "!!document.querySelector('.balance-hero-v3') && document.querySelector('.balance-total').innerText.includes('0.00')",
+    "timeout": 60000,
+    "screenshot": true
+  },
+  {
+    "name": "no_overflow",
+    "evaluate": "document.documentElement.scrollWidth<=innerWidth",
+    "contains": "true"
+  },
+  {
+    "name": "chart_preserved",
+    "evaluate": "!!document.querySelector('.candle-chart svg')",
+    "contains": "true"
+  },
+  {
+    "name": "remember_document",
+    "evaluate": "sessionStorage.setItem('qa-time-origin',String(performance.timeOrigin)) || true",
+    "contains": "true"
+  },
+  {
+    "name": "open_support",
+    "tap": ".orin-support-fab",
+    "until": "!!document.querySelector('.support-page-v3')",
+    "screenshot": true
+  },
+  {
+    "name": "no_reload",
+    "evaluate": "sessionStorage.getItem('qa-time-origin')===String(performance.timeOrigin)",
+    "contains": "true"
+  },
+  {
+    "name": "support_layout",
+    "evaluate": "document.querySelector('.support-composer').getBoundingClientRect().bottom<=innerHeight+1 && document.documentElement.scrollWidth<=innerWidth",
+    "contains": "true"
+  },
+  {
+    "name": "topic",
+    "tap": ".support-topics button",
+    "until": "document.querySelector('.support-composer textarea').value.length>0",
+    "screenshot": true
+  },
+  {
+    "name": "send_local_message",
+    "tap": ".support-composer button",
+    "until": "document.querySelectorAll('.support-bubble.customer').length===1 && document.querySelectorAll('.support-bubble.staff').length===1",
+    "screenshot": true
+  },
+  {
+    "name": "keyboard_back",
+    "back": true,
+    "required": false
+  },
+  {
+    "name": "return_home",
+    "tap": ".orin-support-screen .orin-page-nav>button",
+    "until": "!document.querySelector('.support-page-v3') && !!document.querySelector('.balance-hero-v3')",
+    "screenshot": true
+  },
+  {
+    "name": "navigation_keeps_document",
+    "evaluate": "sessionStorage.getItem('qa-time-origin')===String(performance.timeOrigin)",
+    "contains": "true"
+  }
+]

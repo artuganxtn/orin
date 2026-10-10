@@ -1,0 +1,1 @@
+{"emulators":{"auth":{"port":9290},"firestore":{"port":8290},"ui":{"enabled":false},"singleProjectMode":true},"firestore":{"rules":"firebase-security-160.rules"}}

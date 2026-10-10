@@ -1,0 +1,142 @@
+{
+  "../app/program-pages.tsx": {
+    "file": "assets/program-pages-CjZtldl-.js",
+    "name": "program-pages",
+    "src": "../app/program-pages.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "index.html",
+      "_star-CFiefuxo.js"
+    ]
+  },
+  "../app/trading-workspace.tsx": {
+    "file": "assets/trading-workspace-D2NZkspe.js",
+    "name": "trading-workspace",
+    "src": "../app/trading-workspace.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "index.html",
+      "_chart-boundary-BNCC0nPo.js",
+      "_account-transactions-BcHdxsMl.js",
+      "_sliders-horizontal-DnNS2TPn.js",
+      "_star-CFiefuxo.js"
+    ],
+    "dynamicImports": [
+      "../lib/statement-pdf.ts",
+      "../app/program-pages.tsx",
+      "../app/tradingview-widget.tsx"
+    ],
+    "css": [
+      "assets/trading-workspace-CQfkr4DO.css"
+    ]
+  },
+  "../app/tradingview-widget.tsx": {
+    "file": "assets/tradingview-widget-BiSDhrtJ.js",
+    "name": "tradingview-widget",
+    "src": "../app/tradingview-widget.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "index.html",
+      "_chart-boundary-BNCC0nPo.js"
+    ]
+  },
+  "../lib/statement-pdf.ts": {
+    "file": "assets/statement-pdf-FyMCprHT.js",
+    "name": "statement-pdf",
+    "src": "../lib/statement-pdf.ts",
+    "isDynamicEntry": true,
+    "imports": [
+      "index.html",
+      "_account-transactions-BcHdxsMl.js",
+      "_typeof-Dtizcwqq.js"
+    ],
+    "dynamicImports": [
+      "../node_modules/html2canvas/dist/html2canvas.js",
+      "../node_modules/dompurify/dist/purify.es.mjs",
+      "../node_modules/canvg/lib/index.es.js"
+    ]
+  },
+  "../node_modules/canvg/lib/index.es.js": {
+    "file": "assets/index.es-Ckm316Zl.js",
+    "name": "index.es",
+    "src": "../node_modules/canvg/lib/index.es.js",
+    "isDynamicEntry": true,
+    "imports": [
+      "index.html",
+      "_typeof-Dtizcwqq.js"
+    ]
+  },
+  "../node_modules/dompurify/dist/purify.es.mjs": {
+    "file": "assets/purify.es-C_EYEgqH.js",
+    "name": "purify.es",
+    "src": "../node_modules/dompurify/dist/purify.es.mjs",
+    "isDynamicEntry": true
+  },
+  "../node_modules/html2canvas/dist/html2canvas.js": {
+    "file": "assets/html2canvas-BmfWP6V6.js",
+    "name": "html2canvas",
+    "src": "../node_modules/html2canvas/dist/html2canvas.js",
+    "isDynamicEntry": true,
+    "imports": [
+      "index.html"
+    ]
+  },
+  "_account-transactions-BcHdxsMl.js": {
+    "file": "assets/account-transactions-BcHdxsMl.js",
+    "name": "account-transactions",
+    "imports": [
+      "index.html"
+    ]
+  },
+  "_chart-boundary-BNCC0nPo.js": {
+    "file": "assets/chart-boundary-BNCC0nPo.js",
+    "name": "chart-boundary",
+    "imports": [
+      "index.html"
+    ]
+  },
+  "_sliders-horizontal-DnNS2TPn.js": {
+    "file": "assets/sliders-horizontal-DnNS2TPn.js",
+    "name": "sliders-horizontal",
+    "imports": [
+      "index.html"
+    ]
+  },
+  "_star-CFiefuxo.js": {
+    "file": "assets/star-CFiefuxo.js",
+    "name": "star",
+    "imports": [
+      "index.html"
+    ]
+  },
+  "_typeof-Dtizcwqq.js": {
+    "file": "assets/typeof-Dtizcwqq.js",
+    "name": "typeof"
+  },
+  "control-center.tsx": {
+    "file": "assets/control-center-Bpx5_DUz.js",
+    "name": "control-center",
+    "src": "control-center.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "index.html",
+      "_sliders-horizontal-DnNS2TPn.js"
+    ],
+    "css": [
+      "assets/control-center-hUzeOYPD.css"
+    ]
+  },
+  "index.html": {
+    "file": "assets/index-DpKb7CsU.js",
+    "name": "index",
+    "src": "index.html",
+    "isEntry": true,
+    "dynamicImports": [
+      "../app/trading-workspace.tsx",
+      "control-center.tsx"
+    ],
+    "css": [
+      "assets/index-DEaMFspC.css"
+    ]
+  }
+}

@@ -1,0 +1,12 @@
+[
+  {
+    "service": "security",
+    "status": 404,
+    "contentType": "text/html; charset=UTF-8"
+  },
+  {
+    "service": "api",
+    "status": 404,
+    "contentType": "text/html; charset=UTF-8"
+  }
+]

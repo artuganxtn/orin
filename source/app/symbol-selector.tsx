@@ -1,0 +1,13 @@
+'use client';
+import {useState,type ReactNode} from 'react';
+import {Star} from 'lucide-react';
+import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription} from '@/components/ui/dialog';
+import {Command,CommandInput,CommandList,CommandEmpty,CommandGroup,CommandItem} from '@/components/ui/command';
+import {MARKET_SYMBOLS} from '@/lib/market-symbols';
+import {useOrin} from './orin-settings';
+import {CoinIcon} from './asset-icons';
+export function SymbolSelector({children,onSelect,disabled=false}:{children:ReactNode;onSelect:(pair:string)=>void;disabled?:boolean}){
+ const {prefs,configuration,change,t,status,marketReady}=useOrin(),[open,setOpen]=useState(false),[onlyFavorites,setOnlyFavorites]=useState(false);
+ const symbols=MARKET_SYMBOLS.filter(s=>configuration.enabledSymbols.includes(s.pair)&&(!onlyFavorites||prefs.favorites.includes(s.pair)));
+ return <><button className="trade-pair-picker orin-symbol-trigger" disabled={disabled||!marketReady} onClick={()=>setOpen(true)} aria-label={t('اختيار الأصل','Select symbol')}>{children}</button><Dialog open={open} onOpenChange={setOpen}><DialogContent className="popup symbol-dialog" dir={prefs.chartLocale==='ar'?'rtl':'ltr'}><DialogHeader><DialogTitle>{t('اختر الأصل','Select symbol')}</DialogTitle><DialogDescription>{t('الأسواق المفعّلة في ORIN','Markets enabled in ORIN')}</DialogDescription></DialogHeader>{configuration.favorites&&<div className="option-chips"><button aria-pressed={!onlyFavorites} className={!onlyFavorites?'selected':''} onClick={()=>setOnlyFavorites(false)}>{t('الكل','All')}</button><button aria-pressed={onlyFavorites} className={onlyFavorites?'selected':''} onClick={()=>setOnlyFavorites(true)}><Star size={14}/>{t('المفضلة','Favorites')}</button></div>}<Command><CommandInput placeholder={t('ابحث عن رمز أو أصل…','Search symbol or asset…')}/><CommandList><CommandEmpty>{t('لا توجد نتائج مطابقة.','No matching symbols.')}</CommandEmpty><CommandGroup>{symbols.map(s=><CommandItem key={s.pair} value={`${s.pair} ${s.label} ${s.name}`} onSelect={()=>{onSelect(s.pair);setOpen(false);}}><CoinIcon symbol={s.pair.split('-')[0]} size={28}/><span className="symbol-item"><b>{s.label}</b><small>{s.name}</small></span>{configuration.favorites&&<button className="symbol-favorite" aria-label={`${t('المفضلة','Favorite')} ${s.label}`} aria-pressed={prefs.favorites.includes(s.pair)} disabled={status==='saving'} onClick={event=>{event.stopPropagation();void change({favorites:prefs.favorites.includes(s.pair)?prefs.favorites.filter(x=>x!==s.pair):[...prefs.favorites,s.pair]});}}><Star size={17} fill={prefs.favorites.includes(s.pair)?'currentColor':'none'}/></button>}</CommandItem>)}</CommandGroup></CommandList></Command></DialogContent></Dialog></>;
+}

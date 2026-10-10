@@ -1,0 +1,166 @@
+{
+  "permissions": {
+    "dashboard.read": "لوحة المعلومات",
+    "users.read": "عرض المستخدمين والبحث",
+    "users.manage": "تقييد وإعادة تفعيل المستخدمين",
+    "kyc.read": "عرض طلبات الهوية",
+    "kyc.documents": "عرض وثائق الهوية الخاصة",
+    "kyc.review": "مراجعة الهوية",
+    "accounts.read": "عرض الحسابات",
+    "accounts.manage": "إنشاء وتعليق الحسابات",
+    "wallet.read": "عرض الأرصدة المفصّلة",
+    "finance.read": "عرض العمليات المالية",
+    "finance.propose": "اقتراح تسوية مالية",
+    "finance.approve": "الموافقة المالية الثانية",
+    "trading.read": "عرض نشاط التداول",
+    "markets.manage": "إعدادات الأسواق والتداول",
+    "programs.read": "عرض البرامج والمكافآت",
+    "programs.configure": "إصدار شروط البرامج",
+    "referrals.review": "مراجعة الإحالات",
+    "agencies.manage": "اعتماد وإيقاف الوكلاء",
+    "badges.grant": "منح الشارات الموثق",
+    "notifications.manage": "تحرير وجدولة الإشعارات",
+    "content.manage": "تحرير ومعاينة المحتوى",
+    "content.publish": "نشر المحتوى",
+    "configuration.manage": "إعدادات التشغيل والصيانة",
+    "security.read": "قراءة الأحداث الأمنية",
+    "security.revoke": "إبطال جلسات المستخدم",
+    "staff.manage": "إدارة الموظفين والأدوار",
+    "audit.read": "قراءة سجل التدقيق",
+    "reports.export": "تصدير البيانات المسموح بها",
+    "tickets.read": "عرض تذاكر الدعم",
+    "tickets.manage": "إنشاء ومتابعة التذاكر والملاحظات",
+    "tickets.assign": "إسناد التذاكر إلى الموظفين"
+  },
+  "roles": {
+    "super_admin": {
+      "name": "Super Admin",
+      "permissions": [
+        "dashboard.read",
+        "users.read",
+        "users.manage",
+        "kyc.read",
+        "kyc.documents",
+        "kyc.review",
+        "accounts.read",
+        "accounts.manage",
+        "wallet.read",
+        "finance.read",
+        "finance.propose",
+        "finance.approve",
+        "trading.read",
+        "markets.manage",
+        "programs.read",
+        "programs.configure",
+        "referrals.review",
+        "agencies.manage",
+        "badges.grant",
+        "notifications.manage",
+        "content.manage",
+        "content.publish",
+        "configuration.manage",
+        "security.read",
+        "security.revoke",
+        "staff.manage",
+        "audit.read",
+        "reports.export",
+        "tickets.read",
+        "tickets.manage",
+        "tickets.assign"
+      ]
+    },
+    "finance": {
+      "name": "Finance",
+      "permissions": [
+        "dashboard.read",
+        "users.read",
+        "accounts.read",
+        "wallet.read",
+        "finance.read",
+        "finance.propose",
+        "programs.read",
+        "reports.export"
+      ]
+    },
+    "finance_approver": {
+      "name": "Finance Approver",
+      "permissions": [
+        "dashboard.read",
+        "users.read",
+        "accounts.read",
+        "wallet.read",
+        "finance.read",
+        "finance.approve",
+        "programs.read",
+        "audit.read",
+        "reports.export"
+      ]
+    },
+    "kyc_reviewer": {
+      "name": "KYC Reviewer",
+      "permissions": [
+        "dashboard.read",
+        "users.read",
+        "kyc.read",
+        "kyc.documents",
+        "kyc.review"
+      ]
+    },
+    "support": {
+      "name": "Support",
+      "permissions": [
+        "dashboard.read",
+        "users.read",
+        "accounts.read",
+        "tickets.read",
+        "tickets.manage"
+      ]
+    },
+    "operations": {
+      "name": "Operations",
+      "permissions": [
+        "tickets.read",
+        "tickets.manage",
+        "tickets.assign",
+        "dashboard.read",
+        "users.read",
+        "users.manage",
+        "accounts.read",
+        "accounts.manage",
+        "trading.read",
+        "markets.manage",
+        "programs.read",
+        "referrals.review",
+        "agencies.manage",
+        "badges.grant",
+        "notifications.manage",
+        "reports.export"
+      ]
+    },
+    "content_manager": {
+      "name": "Content Manager",
+      "permissions": [
+        "dashboard.read",
+        "content.manage",
+        "content.publish",
+        "notifications.manage"
+      ]
+    },
+    "auditor": {
+      "name": "Auditor",
+      "permissions": [
+        "tickets.read",
+        "dashboard.read",
+        "users.read",
+        "accounts.read",
+        "wallet.read",
+        "finance.read",
+        "trading.read",
+        "programs.read",
+        "audit.read",
+        "security.read",
+        "reports.export"
+      ]
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "appVersion": "1.6.2",
+  "androidVersionCode": 20,
+  "firebaseProject": "orin-99951",
+  "region": "europe-west1",
+  "firebaseActivatedByThisHandoff": false,
+  "billingAccountLinked": false,
+  "productionDatabaseExportIncluded": false,
+  "privateSigning": "ORIN-Original-Signing-Private.zip, AES-256, supplied separately",
+  "unlockFile": "ORIN-Signing-Unlock.txt, supplied separately",
+  "sourceFileCount": 644,
+  "androidPhysicalDeviceTest": "NOT RUN",
+  "checksAlreadyPerformed": {
+    "typescript": "PASS",
+    "webBuilds": "PASS",
+    "apkSigningAndAssets": "PASS",
+    "clientRegression": "12 PASS",
+    "nativeJvmPolicy": "29 assertions PASS"
+  }
+}

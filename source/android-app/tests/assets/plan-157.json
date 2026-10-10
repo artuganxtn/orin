@@ -1,0 +1,8 @@
+[
+ {"name":"release-onboarding","until":"!!document.querySelector('.intro-skip')","timeout":45000,"screenshot":true},
+ {"name":"skip-onboarding","tap":".intro-skip","until":"!!document.querySelector('.orin-header-menu')","timeout":20000},
+ {"name":"open-language-menu","tap":".orin-header-menu summary","until":"document.querySelector('.orin-header-menu').open===true","timeout":10000,"screenshot":true},
+ {"name":"choose-turkish","evaluate":"(function(){var s=document.querySelector('.orin-header-panel select');s.value='tr';s.dispatchEvent(new Event('change',{bubbles:true}));return true})()","until":"document.documentElement.lang==='tr'&&document.body.innerText.includes('Giriş yap')","timeout":15000,"screenshot":true},
+ {"name":"choose-german","evaluate":"(function(){var s=document.querySelector('.orin-header-panel select');s.value='de';s.dispatchEvent(new Event('change',{bubbles:true}));return true})()","until":"document.documentElement.lang==='de'&&document.body.innerText.includes('Anmelden')&&document.documentElement.dir==='ltr'","timeout":15000,"screenshot":true},
+ {"name":"restore-arabic","evaluate":"(function(){var s=document.querySelector('.orin-header-panel select');s.value='ar';s.dispatchEvent(new Event('change',{bubbles:true}));return true})()","until":"document.documentElement.lang==='ar'&&document.documentElement.dir==='rtl'","timeout":15000,"screenshot":true}
+]

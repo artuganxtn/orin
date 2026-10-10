@@ -1,0 +1,19 @@
+{
+  "status": "PASS",
+  "model": "gemini-3.5-flash-lite",
+  "ms": 11156,
+  "providerChunks": 6,
+  "answer": {
+    "text": "أهلاً بك! أنا آدم، مساعد الدعم الآلي في أورين (ORIN). الحساب الحقيقي يتميز بشارة خضراء حقيقي ويستخدم أموالاً حقيقية، بينما الحساب التجريبي يتميز بشارة برتقالية تجريبي ويحتوي على أموال محاكاة منفصلة تماماً لا يمكن سحبها.",
+    "handoff": false,
+    "scope": "application",
+    "citationIds": [
+      "accounts"
+    ],
+    "usage": {
+      "inputTokens": 1365,
+      "outputTokens": 95,
+      "totalTokens": 1460
+    }
+  }
+}

@@ -1,0 +1,52 @@
+/* Notification presentation and the quote-card mini chart only. */
+.home-account-actions .notification-trigger{position:relative;border-radius:50%;background:linear-gradient(145deg,#fff 15%,#edf5ff);box-shadow:0 4px 16px #2969a80b;color:#111b45}
+.home-account-actions .notification-trigger svg{stroke-width:1.65}
+.home-account-actions .notification-trigger:focus-visible{outline:2px solid #0788ff;outline-offset:3px}
+.orin-notification-screen{background:#f6faff}
+.orin-notification-screen .orin-page-inner{max-width:620px;background:radial-gradient(ellipse at 0 0,#eaf5ff70,transparent 60%),#f8fbff;padding-inline:20px}
+.orin-notification-screen .orin-page-nav{direction:ltr;flex-direction:row-reverse;justify-content:space-between;min-height:90px;border:0;background:#f8fbfff5;gap:20px}
+.orin-notification-screen .orin-page-nav>button{width:42px;height:42px;flex:none;border:1px solid #eaf0f8;border-radius:15px;background:#edf3fc;color:#121c48}
+.orin-notification-screen .orin-page-nav>button svg{width:22px;height:22px}
+.orin-notification-screen .orin-page-nav .notification-brand{display:flex;align-items:center;gap:11px;margin:0;letter-spacing:0;font-size:26px;line-height:1;color:#0d1543}
+.notification-brand img{width:41px;height:41px;object-fit:contain}.notification-brand b{font-weight:700}
+.orin-notification-screen .orin-page-content{display:block;padding-top:12px;padding-bottom:20px}
+.orin-notification-screen .orin-page-heading{margin-bottom:23px}
+.orin-notification-screen .orin-page-heading h1{margin:0;font-size:calc(24px * var(--ui-font-scale));font-weight:600;color:#121a45}
+.orin-notification-screen .orin-page-heading p{margin:6px 0 0;font-size:13px;color:#8592a9;line-height:1.8}
+.notice-category-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:24px}
+.notice-category-tabs button{min-height:40px;border:1px solid transparent;border-radius:18px;background:#eaf1fa;color:#394965;padding:7px 4px;font-size:13px;line-height:1.7}
+.notice-category-tabs button[aria-pressed=true]{background:linear-gradient(115deg,#0875ff,#0651ec);color:#fff;box-shadow:0 3px 10px #076aff13}
+.notice-groups{display:grid;gap:22px}.notice-date-group h2{font-size:12px;font-weight:400;color:#8997ad;margin:0 3px 14px;text-align:end}
+.notice-card-list{display:grid;gap:9px}
+.notice-card{display:flex;align-items:center;gap:12px;width:100%;min-width:0;padding:16px 12px;border:1px solid #e9eff7;border-radius:18px;background:#ffffffd9;color:#162442;box-shadow:0 3px 14px #3b648a03;text-align:start;transition:border-color .16s,background .16s}
+.notice-card:active{background:#eef6ff;border-color:#cbdff5}
+.notice-card-icon{position:relative;flex:none;display:grid;place-items:center;width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,#e8f1ff,#f0f5fc);color:#427bbb}
+.notice-card-icon.deposit{background:#e9f8f3;color:#179e8d}.notice-card-icon.withdrawal{background:#fff5e8;color:#d79a37}
+.notice-read-marker{position:absolute;inset-block-start:1px;inset-inline-end:0;width:7px;height:7px;border:2px solid #fff;border-radius:50%;background:#0988fa;box-sizing:content-box}
+.notice-card-content{display:flex;flex-direction:column;gap:5px;flex:1;min-width:0}
+.notice-card-heading{display:flex;align-items:baseline;flex-wrap:wrap;justify-content:space-between;column-gap:9px;row-gap:2px}
+.notice-card-heading strong{font-weight:500;font-size:14px;line-height:1.7;overflow-wrap:anywhere}
+.notice-card.is-unread .notice-card-heading strong{font-weight:600}
+.notice-card-heading time{font-size:10px;line-height:1.8;color:#8b99ad;white-space:nowrap}
+.notice-card-message{font-size:12px;line-height:1.9;color:#51617d;overflow-wrap:anywhere}
+.notice-card-chevron{color:#7b8da6;flex:none;width:14px;margin-inline-start:1px}
+.notice-empty{display:grid;justify-items:center;text-align:center;padding:38px 15px;color:#8495ac;gap:10px}
+.notice-empty>span{display:grid;place-items:center;width:65px;height:65px;border-radius:50%;background:#eaf3ff;color:#428ac5;margin-bottom:7px}
+.notice-empty h2{font-size:16px;font-weight:500;color:#3b5674;margin:0}.notice-empty p{font-size:12px;line-height:1.9;max-width:290px;margin:0}
+.notice-more{display:block;margin:20px auto 0;min-height:42px;padding:9px 23px;border:1px solid #dfebf9;border-radius:15px;background:#edf5ff;color:#2178c9;font-size:12px}.notice-more:disabled{opacity:.6}
+.quote-sparkline{gap:9px;max-width:67%}.quote-sparkline-plot{width:clamp(85px,26vw,140px);height:65px;min-width:0;flex-shrink:1}
+.quote-sparkline-plot svg{display:block;height:49px;filter:drop-shadow(0 2px 3px #17aa8910)}
+.quote-sparkline-plot>small{font-size:8px;line-height:14px;color:#809ba7;white-space:nowrap}
+.sparkline-wait{height:49px}.sparkline-change{flex:none;padding:8px 9px;border-radius:13px;font-size:13px;line-height:1.3;font-weight:600;border-color:#16b9940d;background:linear-gradient(135deg,#19bd9a24,#19bd9a12)}
+.sparkline-change small{font-size:8px;letter-spacing:.4px}.asset-quote-heading .asset-quote-identity{flex:1}
+html[data-theme=dark] .home-account-actions .notification-trigger{background:linear-gradient(145deg,#1c3956,#142b43);color:#d7eaff}
+html[data-theme=dark] .orin-notification-screen,html[data-theme=dark] .orin-notification-screen .orin-page-inner{background:#101e31}
+html[data-theme=dark] .orin-notification-screen .orin-page-nav{background:#101e31f5}
+html[data-theme=dark] .orin-notification-screen .orin-page-nav>button{background:#1a314b;border-color:#2b415b;color:#dceaff}
+html[data-theme=dark] .orin-notification-screen .notification-brand,html[data-theme=dark] .orin-notification-screen .orin-page-heading h1{color:#e1edff}
+html[data-theme=dark] .notice-category-tabs button{background:#1b304a;color:#a9c0dc}html[data-theme=dark] .notice-category-tabs button[aria-pressed=true]{background:#0760da;color:#fff}
+html[data-theme=dark] .notice-card{background:#162940;border-color:#243a54;color:#dceaff}html[data-theme=dark] .notice-card:active{background:#1c3550;border-color:#35597b}
+html[data-theme=dark] .notice-card-message{color:#adc0d8}html[data-theme=dark] .notice-card-icon{background:#213d5e;color:#89b5ef}html[data-theme=dark] .notice-card-icon.deposit{background:#143e3b;color:#5dcdb2}html[data-theme=dark] .notice-card-icon.withdrawal{background:#403629;color:#e4b76f}html[data-theme=dark] .notice-read-marker{border-color:#162940}
+html[data-theme=dark] .notice-empty h2{color:#c2d8ed}html[data-theme=dark] .notice-empty>span,html[data-theme=dark] .notice-more{background:#1b3654;border-color:#2a4c6e;color:#9bcaf1}
+@media(max-width:360px){.orin-notification-screen .orin-page-inner{padding-inline:14px}.notice-card{padding:13px 10px;gap:8px}.notice-card-icon{width:36px;height:36px}.notice-card-icon svg{width:21px;height:21px}.notice-category-tabs{gap:6px}.notice-category-tabs button{font-size:12px}.notice-card-heading strong{font-size:13px}.quote-sparkline{gap:6px}.quote-sparkline-plot{width:82px}.sparkline-change{font-size:11px;padding:7px 6px}}
+@media(prefers-reduced-motion:reduce){.notice-card{transition:none}}html[data-reduce-motion=true] .notice-card{transition:none}

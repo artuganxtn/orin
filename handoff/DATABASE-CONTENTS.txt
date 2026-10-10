@@ -1,0 +1,31 @@
+ORIN database materials — definitions, NOT production customer data
+
+Firestore/Auth are external services. No production Firestore document export or Firebase Auth export is included. SQL files are a separate/legacy storage path and do not import into Firestore.
+
+Included schema/rules/index/migration files:
+source/db/index.ts
+source/db/schema.ts
+source/drizzle/0000_panoramic_hulk.sql
+source/drizzle/0001_invariants.sql
+source/drizzle/0002_orin_settings.sql
+source/drizzle/0003_orin_notification_identity.sql
+source/drizzle/meta/0000_snapshot.json
+source/drizzle/meta/0001_snapshot.json
+source/drizzle/meta/0002_snapshot.json
+source/drizzle/meta/0003_snapshot.json
+source/drizzle/meta/_journal.json
+source/firebase-app/firestore.indexes.json
+source/firebase-control/exported-production.rules
+source/firebase-control/firestore.indexes.json
+source/firebase-control/firestore.production-candidate.rules
+source/firebase-control/firestore.production.indexes.json
+source/firebase-control/firestore.rules
+source/firebase-control/storage.rules
+source/firebase-release-159.rules
+source/firebase-security-160.rules
+source/firebase-security-161.indexes.json
+source/firebase-spark/firestore.rules
+source/firebase-web/firestore.indexes.json
+source/firebase-web/firestore.rules
+
+Current security migration candidate: source/firebase-security-160.rules + source/firebase-security-161.indexes.json, selected by source/firebase.security-161.json. Review deployment sequencing and provider-level MFA gaps first. Preserve rulesVersion:160.

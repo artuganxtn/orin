@@ -1,0 +1,25 @@
+ORIN_DIAGNOSTIC {"at":"2026-10-06T01:27:56.902Z","area":"market","event":"mini_history_failed","detail":{"pair":"BTC-USD","provider":"Kraken","error":"HTTP 403"}}
+ORIN_DIAGNOSTIC {"at":"2026-10-06T01:27:56.904Z","area":"market","event":"mini_history_failed","detail":{"pair":"BTC-USD","provider":"Gemini","error":"HTTP 403"}}
+ORIN_DIAGNOSTIC {"at":"2026-10-06T01:27:56.904Z","area":"market","event":"mini_history_failed","detail":{"pair":"BTC-USD","provider":"Coinbase Exchange","error":"HTTP 403"}}
+ORIN_DIAGNOSTIC {"at":"2026-10-06T01:27:56.911Z","area":"market","event":"mini_history_failed","detail":{"pair":"BTC-USD","provider":"Kraken","error":"HTTP 403"}}
+ORIN_DIAGNOSTIC {"at":"2026-10-06T01:27:56.912Z","area":"market","event":"mini_history_failed","detail":{"pair":"BTC-USD","provider":"Coinbase Exchange","error":"HTTP 403"}}
+ORIN_DIAGNOSTIC {"at":"2026-10-06T01:27:56.914Z","area":"market","event":"mini_history_failed","detail":{"pair":"BTC-USD","provider":"Bitstamp","error":"Insufficient full-day history"}}
+ORIN_DIAGNOSTIC {"at":"2026-10-06T01:27:56.918Z","area":"market","event":"mini_history_failed","detail":{"pair":"BTC-USD","provider":"Bitstamp","error":"transport unavailable"}}
+ORIN_DIAGNOSTIC {"at":"2026-10-06T01:27:56.926Z","area":"market","event":"mini_history_failed","detail":{"pair":"BTC-USD","provider":"Bitstamp","error":"History request timed out"}}
+ORIN_DIAGNOSTIC {"at":"2026-10-06T01:27:56.934Z","area":"market","event":"mini_history_failed","detail":{"pair":"BTC-USD","provider":"Kraken","error":"offline"}}
+ORIN_DIAGNOSTIC {"at":"2026-10-06T01:27:56.934Z","area":"market","event":"mini_history_failed","detail":{"pair":"BTC-USD","provider":"Gemini","error":"offline"}}
+ORIN_DIAGNOSTIC {"at":"2026-10-06T01:27:56.935Z","area":"market","event":"mini_history_failed","detail":{"pair":"BTC-USD","provider":"Coinbase Exchange","error":"offline"}}
+✔ captured live CORS-enabled sources each decode96 actualUSD closedcandles into a long historicalcurve (17.272905ms)
+✔ mini provider race and gap splitting work without Promise.any or Array.at (olderAndroidWebView) (14.574939ms)
+✔ two-point earlysuccess cannot hide full24hour history and Gemini fallback never substitutes USDT (8.83961ms)
+✔ synchronous transport rejection clearspending so later networkrecovery succeeds (5.144027ms)
+✔ hardtimeout also rejects atransport/body ignoringAbortSignal and releasesinflight (10.406337ms)
+✔ historicalpath stays unchanged for15minutes despite quote ticks and missing intervalsgap stays empty (3.509273ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 352.580888

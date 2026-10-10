@@ -1,0 +1,1058 @@
+[
+  {
+    "ar": "سياسة الخصوصية",
+    "en": "Privacy policy"
+  },
+  {
+    "ar": "نوع الشارت",
+    "en": "Chart type"
+  },
+  {
+    "ar": "شموع",
+    "en": "Candles"
+  },
+  {
+    "ar": "خطي",
+    "en": "Line"
+  },
+  {
+    "ar": "مساحة",
+    "en": "Area"
+  },
+  {
+    "ar": "الأصل الافتراضي",
+    "en": "Default symbol"
+  },
+  {
+    "ar": "الفاصل الافتراضي",
+    "en": "Default timeframe"
+  },
+  {
+    "ar": "مظهر الشارت",
+    "en": "Chart theme"
+  },
+  {
+    "ar": "يتبع مظهر ORIN",
+    "en": "Follows ORIN appearance"
+  },
+  {
+    "ar": "حسب الجهاز",
+    "en": "System"
+  },
+  {
+    "ar": "داكن",
+    "en": "Dark"
+  },
+  {
+    "ar": "فاتح",
+    "en": "Light"
+  },
+  {
+    "ar": "خطوط الشبكة",
+    "en": "Grid"
+  },
+  {
+    "ar": "متاح داخل الشارت؛ التحكم به من المزود",
+    "en": "Available in chart; managed by provider"
+  },
+  {
+    "ar": "خط السعر الحالي",
+    "en": "Current price line"
+  },
+  {
+    "ar": "حفظ الرسومات",
+    "en": "Save drawings"
+  },
+  {
+    "ar": "يتطلب تكاملًا يدعم Drawing API",
+    "en": "Requires an integration with a drawing API"
+  },
+  {
+    "ar": "المؤشرات المسموحة",
+    "en": "Allowed indicators"
+  },
+  {
+    "ar": "لا توجد مؤشرات مفعلة من الإدارة.",
+    "en": "No indicators enabled by the administrator."
+  },
+  {
+    "ar": "إعادة تعيين الشارت",
+    "en": "Reset chart"
+  },
+  {
+    "ar": "تُطبّق الخيارات التي يسمح بها تكامل TradingView. يظل شعار المصدر ظاهرًا.",
+    "en": "Only supported TradingView options are applied. Provider attribution remains visible."
+  },
+  {
+    "ar": "الملف الشخصي",
+    "en": "Your profile"
+  },
+  {
+    "ar": "المظهر واللغة",
+    "en": "Appearance & language"
+  },
+  {
+    "ar": "مركز الأمان",
+    "en": "Security center"
+  },
+  {
+    "ar": "تفضيلات الإشعارات",
+    "en": "Notification preferences"
+  },
+  {
+    "ar": "إعدادات الشارت",
+    "en": "Chart settings"
+  },
+  {
+    "ar": "حول ORIN",
+    "en": "About ORIN"
+  },
+  {
+    "ar": "إدارة إعدادات الشارت",
+    "en": "Admin chart settings"
+  },
+  {
+    "ar": "اللغة",
+    "en": "Language"
+  },
+  {
+    "ar": "الأجهزة",
+    "en": "Devices"
+  },
+  {
+    "ar": "الخصوصية",
+    "en": "Privacy"
+  },
+  {
+    "ar": "المستندات",
+    "en": "Documents"
+  },
+  {
+    "ar": "الدعم",
+    "en": "Support"
+  },
+  {
+    "ar": "مركز الإحالات",
+    "en": "Referral center"
+  },
+  {
+    "ar": "مركز الوكلاء",
+    "en": "Agent center"
+  },
+  {
+    "ar": "المصادقة الثنائية",
+    "en": "Two-factor authentication"
+  },
+  {
+    "ar": "البيانات والخصوصية",
+    "en": "Data & privacy"
+  },
+  {
+    "ar": "تطبيق المصادقة",
+    "en": "Authenticator setup"
+  },
+  {
+    "ar": "متقدم",
+    "en": "Advanced"
+  },
+  {
+    "ar": "قياسي",
+    "en": "Standard"
+  },
+  {
+    "ar": "جار الحفظ…",
+    "en": "Saving…"
+  },
+  {
+    "ar": "جار المزامنة…",
+    "en": "Syncing…"
+  },
+  {
+    "ar": "متزامن مع حسابك",
+    "en": "Synced to your account"
+  },
+  {
+    "ar": "تفضيلات هذا الجهاز · سجّل الدخول للمزامنة",
+    "en": "This device only · Sign in to sync"
+  },
+  {
+    "ar": "تعذرت المزامنة",
+    "en": "Sync unavailable"
+  },
+  {
+    "ar": "الحساب والإعدادات",
+    "en": "Account & settings"
+  },
+  {
+    "ar": "تجربة مصممة على طريقتك.",
+    "en": "Make ORIN feel like you."
+  },
+  {
+    "ar": "مرحبًا بك في ORIN",
+    "en": "Welcome to ORIN"
+  },
+  {
+    "ar": "حسابك الشخصي",
+    "en": "Your personal account"
+  },
+  {
+    "ar": "حساب حقيقي",
+    "en": "Real account"
+  },
+  {
+    "ar": "حساب تجريبي",
+    "en": "Demo account"
+  },
+  {
+    "ar": "إعادة المزامنة",
+    "en": "Retry sync"
+  },
+  {
+    "ar": "الحساب والملف الشخصي",
+    "en": "Account & profile"
+  },
+  {
+    "ar": "الأمان",
+    "en": "Security"
+  },
+  {
+    "ar": "الحسابات",
+    "en": "Accounts"
+  },
+  {
+    "ar": "اختيار الحساب أو إنشاؤه من بطاقة الرصيد",
+    "en": "Select or create an account from the balance card"
+  },
+  {
+    "ar": "الإشعارات",
+    "en": "Notifications"
+  },
+  {
+    "ar": "المظهر",
+    "en": "Appearance"
+  },
+  {
+    "ar": "الخصوصية والبيانات",
+    "en": "Privacy & data"
+  },
+  {
+    "ar": "المساعدة والدعم",
+    "en": "Help & support"
+  },
+  {
+    "ar": "الشروط والسياسات",
+    "en": "Terms & policies"
+  },
+  {
+    "ar": "دعوة صديق",
+    "en": "Referral program"
+  },
+  {
+    "ar": "شجرة الإحالات",
+    "en": "Referral tree"
+  },
+  {
+    "ar": "الشارات والإنجازات",
+    "en": "Badges & achievements"
+  },
+  {
+    "ar": "بونص الترحيب $100",
+    "en": "Welcome bonus $100"
+  },
+  {
+    "ar": "برنامج الوكالة",
+    "en": "Agency program"
+  },
+  {
+    "ar": "الشارت والأسواق",
+    "en": "Chart & markets"
+  },
+  {
+    "ar": "المعاملات الأخيرة",
+    "en": "Recent transactions"
+  },
+  {
+    "ar": "كشف الحساب",
+    "en": "Account statement"
+  },
+  {
+    "ar": "إخفاء الأرصدة",
+    "en": "Hide balances"
+  },
+  {
+    "ar": "مركز إدارة ORIN",
+    "en": "ORIN Control Center"
+  },
+  {
+    "ar": "إدارة العملاء والصلاحيات والعمليات",
+    "en": "Customers, permissions and operations"
+  },
+  {
+    "ar": "الإدارة",
+    "en": "Administration"
+  },
+  {
+    "ar": "إدارة المستخدمين",
+    "en": "User management"
+  },
+  {
+    "ar": "المكافآت والبونص والوكالة",
+    "en": "Rewards, bonus & agency"
+  },
+  {
+    "ar": "العقود والدعوات",
+    "en": "Contracts & invitations"
+  },
+  {
+    "ar": "إعدادات الأسواق",
+    "en": "Market settings"
+  },
+  {
+    "ar": "إدارة الإشعارات",
+    "en": "Notification administration"
+  },
+  {
+    "ar": "تسجيل الخروج",
+    "en": "Sign out"
+  },
+  {
+    "ar": "إعدادات عامة تتحقق منها المنصة على الخادم.",
+    "en": "Server-enforced settings shared across devices."
+  },
+  {
+    "ar": "بياناتك وإعدادات حسابك في مكان واحد.",
+    "en": "Your details and account settings, together."
+  },
+  {
+    "ar": "اختر المظهر",
+    "en": "Choose appearance"
+  },
+  {
+    "ar": "لغة التطبيق",
+    "en": "App language"
+  },
+  {
+    "ar": "حجم الخط",
+    "en": "Font size"
+  },
+  {
+    "ar": "صغير",
+    "en": "Small"
+  },
+  {
+    "ar": "متوسط",
+    "en": "Default"
+  },
+  {
+    "ar": "كبير",
+    "en": "Large"
+  },
+  {
+    "ar": "تنسيق الأرقام",
+    "en": "Number format"
+  },
+  {
+    "ar": "أرقام إنجليزية في جميع اللغات",
+    "en": "Latin digits in all languages"
+  },
+  {
+    "ar": "العملة المرجعية",
+    "en": "Reference currency"
+  },
+  {
+    "ar": "تفضيل محفوظ؛ الأرصدة والتسوية تبقى USD حتى توصيل تحويل العملات.",
+    "en": "Saved preference; balances and settlement remain USD until FX conversion is connected."
+  },
+  {
+    "ar": "المنطقة الزمنية",
+    "en": "Time zone"
+  },
+  {
+    "ar": "تقليل الحركة",
+    "en": "Reduce motion"
+  },
+  {
+    "ar": "تنبيهات داخل التطبيق",
+    "en": "In-app notifications"
+  },
+  {
+    "ar": "مركز الإشعارات",
+    "en": "Notification center"
+  },
+  {
+    "ar": "قنوات الإرسال",
+    "en": "Delivery channels"
+  },
+  {
+    "ar": "خدمة الإرسال غير متصلة",
+    "en": "Delivery service not connected"
+  },
+  {
+    "ar": "الأحداث",
+    "en": "Events"
+  },
+  {
+    "ar": "تفضيل محفوظ للخدمة عند تفعيلها",
+    "en": "Preference saved for when this service is connected"
+  },
+  {
+    "ar": "كلمة المرور والتحقق من البريد",
+    "en": "Password and email verification"
+  },
+  {
+    "ar": "أمان حساب ORIN",
+    "en": "ORIN account security"
+  },
+  {
+    "ar": "تسجيل دخول عبر ChatGPT",
+    "en": "Sign in with ChatGPT"
+  },
+  {
+    "ar": "ORIN لا يخزن كلمة مرور. تُدار وسائل مصادقة حساب الدخول لدى مزود الهوية.",
+    "en": "ORIN does not store a password. Authentication methods are managed by your identity provider."
+  },
+  {
+    "ar": "تغيير كلمة المرور",
+    "en": "Change Password"
+  },
+  {
+    "ar": "المصادقة الثنائية",
+    "en": "Two-Factor Authentication"
+  },
+  {
+    "ar": "الدخول بالقياسات الحيوية",
+    "en": "Biometric Login"
+  },
+  {
+    "ar": "الجلسات النشطة",
+    "en": "Active Sessions"
+  },
+  {
+    "ar": "الأجهزة الموثوقة",
+    "en": "Trusted Devices"
+  },
+  {
+    "ar": "سجل تسجيل الدخول",
+    "en": "Login history"
+  },
+  {
+    "ar": "الخروج من جميع الأجهزة",
+    "en": "Sign Out All Devices"
+  },
+  {
+    "ar": "غير متاح لإدارته من ORIN في التكامل الحالي",
+    "en": "Not manageable from ORIN with the current identity integration"
+  },
+  {
+    "ar": "غير متصل",
+    "en": "Not connected"
+  },
+  {
+    "ar": "تنبيهات الأمان",
+    "en": "Security Alerts"
+  },
+  {
+    "ar": "تسجيل الخروج من هذه الجلسة",
+    "en": "Sign out of this session"
+  },
+  {
+    "ar": "المصادقة لدى مزود تسجيل الدخول",
+    "en": "Authentication is managed by the identity provider"
+  },
+  {
+    "ar": "المصادقة الثنائية غير متصلة في هذه النسخة. لم تُصدر رموز استرداد.",
+    "en": "Two-factor authentication is not connected in this release. No recovery codes have been issued."
+  },
+  {
+    "ar": "لا يوجد إعداد مصادقة مستقل لـORIN في هذا الإصدار. استخدم إعدادات الأمان لدى مزود تسجيل الدخول.",
+    "en": "ORIN does not have a separate authenticator enrollment in this release. Use your sign-in provider’s security settings."
+  },
+  {
+    "ar": "يُدير مزود تسجيل الدخول الجلسات والأجهزة. بيانات الجلسات غير متاحة لـORIN حاليًا.",
+    "en": "Your identity provider manages devices and sessions. Session records are not currently available to ORIN."
+  },
+  {
+    "ar": "الشارت يستخدم Coinbase Exchange لشموع BTC/USD وTradingView للأصول الأخرى. قد تختلف درجة التأخير بحسب المصدر والسوق.",
+    "en": "BTC/USD candles use Coinbase Exchange; other assets use TradingView. Delays vary by source and market."
+  },
+  {
+    "ar": "العقود الداخلية مستقلة عن السوق. تظهر نسبة التسوية المقفلة قبل المشاركة، ولا تمثل تنفيذًا لأمر في بورصة.",
+    "en": "Internal contracts are independent of the market. Locked settlement terms are shown before participation and do not represent an exchange execution."
+  },
+  {
+    "ar": "تكامل Widget الحالي لا يتيح وقت آخر سعر لـ ORIN، أو حفظ الرسومات، أو تنبيهات أسعار خلفية. تغيير الرمز أو الفاصل يعيد تهيئة الشارت.",
+    "en": "The current widget does not expose the last quote time, drawing storage or background price alerts to ORIN. Changing symbol or interval reinitializes the chart."
+  },
+  {
+    "ar": "إنشاء حساب",
+    "en": "Create account"
+  },
+  {
+    "ar": "إعادة المحاولة",
+    "en": "Retry"
+  },
+  {
+    "ar": "لغتك، تجربتك في ORIN",
+    "en": "Your language, your ORIN"
+  },
+  {
+    "ar": "تُطبق التغييرات مباشرة وتُزامن مع حسابك.",
+    "en": "Changes apply immediately and sync to your account."
+  },
+  {
+    "ar": "ابحث عن لغة",
+    "en": "Search languages"
+  },
+  {
+    "ar": "لا توجد لغة مطابقة",
+    "en": "No matching language"
+  },
+  {
+    "ar": "تم حفظ اللغة",
+    "en": "Language saved"
+  },
+  {
+    "ar": "التفضيلات الإقليمية",
+    "en": "Regional preferences"
+  },
+  {
+    "ar": "الأرصدة والتسوية بالدولار الأمريكي.",
+    "en": "Balances and settlement are in USD."
+  },
+  {
+    "ar": "مفتوح",
+    "en": "Open"
+  },
+  {
+    "ar": "تعذر تحديث الإشعارات",
+    "en": "Notifications unavailable"
+  },
+  {
+    "ar": "أنت مطّلع على آخر الإشعارات",
+    "en": "You’re all caught up"
+  },
+  {
+    "ar": "افتح مركز الإشعارات لمتابعة تحديثات حسابك.",
+    "en": "Open your notification center for account updates."
+  },
+  {
+    "ar": "كل الإشعارات",
+    "en": "All notifications"
+  },
+  {
+    "ar": "تحديثات حسابك في مكان واحد.",
+    "en": "Your account updates, together."
+  },
+  {
+    "ar": "جار تحميل الإشعارات",
+    "en": "Loading notifications"
+  },
+  {
+    "ar": "سجّل الدخول لعرض إشعاراتك",
+    "en": "Sign in to see your notifications"
+  },
+  {
+    "ar": "تسجيل الدخول",
+    "en": "Sign in"
+  },
+  {
+    "ar": "تعذر الاتصال",
+    "en": "Unable to connect"
+  },
+  {
+    "ar": "الإشعار غير متاح",
+    "en": "Notification unavailable"
+  },
+  {
+    "ar": "قد يكون انتهت صلاحيته أو غير متاح لهذا الحساب.",
+    "en": "It may have expired or be unavailable to this account."
+  },
+  {
+    "ar": "حسابك في ORIN",
+    "en": "Your ORIN account"
+  },
+  {
+    "ar": "مسؤول",
+    "en": "Admin"
+  },
+  {
+    "ar": "حساب شخصي",
+    "en": "Personal account"
+  },
+  {
+    "ar": "حساب ORIN",
+    "en": "ORIN account"
+  },
+  {
+    "ar": "اختر حساب التداول من الرئيسية",
+    "en": "Select a trading account on Home"
+  },
+  {
+    "ar": "طلب إغلاق",
+    "en": "Closure requested"
+  },
+  {
+    "ar": "البيانات الشخصية",
+    "en": "Personal details"
+  },
+  {
+    "ar": "احتفظ ببيانات حسابك صحيحة.",
+    "en": "Keep your account details accurate."
+  },
+  {
+    "ar": "الاسم الكامل",
+    "en": "Full name"
+  },
+  {
+    "ar": "البريد الإلكتروني",
+    "en": "Email address"
+  },
+  {
+    "ar": "البريد المستخدم لتسجيل الدخول.",
+    "en": "The email you use to sign in."
+  },
+  {
+    "ar": "رقم الهاتف",
+    "en": "Phone number"
+  },
+  {
+    "ar": "رقم للتواصل؛ لم يتم التحقق منه.",
+    "en": "Contact number; not verified."
+  },
+  {
+    "ar": "الدولة",
+    "en": "Country"
+  },
+  {
+    "ar": "اختر الدولة",
+    "en": "Choose country"
+  },
+  {
+    "ar": "حُفظت بياناتك",
+    "en": "Your details are saved"
+  },
+  {
+    "ar": "لديك تغييرات غير محفوظة",
+    "en": "You have unsaved changes"
+  },
+  {
+    "ar": "بياناتك الحالية",
+    "en": "Your current details"
+  },
+  {
+    "ar": "حفظ التغييرات",
+    "en": "Save changes"
+  },
+  {
+    "ar": "الأمان والخصوصية",
+    "en": "Security & privacy"
+  },
+  {
+    "ar": "أمان الحساب",
+    "en": "Account security"
+  },
+  {
+    "ar": "بياناتي وخصوصيتي",
+    "en": "My data & privacy"
+  },
+  {
+    "ar": "تنزيل بياناتك وإدارة طلبات الخصوصية",
+    "en": "Download your data and manage privacy requests"
+  },
+  {
+    "ar": "التحقق من الهوية: غير متاح حاليًا.",
+    "en": "Identity verification is not currently available."
+  },
+  {
+    "ar": "إدارة الحساب",
+    "en": "Account management"
+  },
+  {
+    "ar": "طلب الإغلاق قيد المراجعة",
+    "en": "Closure request under review"
+  },
+  {
+    "ar": "طلب إغلاق الحساب",
+    "en": "Request account closure"
+  },
+  {
+    "ar": "يُسجّل الطلب للمراجعة وتُحفظ السجلات المالية. لا يؤدي إلى حذف البيانات فورًا. أكمل العقود النشطة أولًا.",
+    "en": "This records a request for review and retains financial records. It does not immediately delete data. Settle active contracts first."
+  },
+  {
+    "ar": "تأكيد طلب الإغلاق",
+    "en": "Confirm closure request"
+  },
+  {
+    "ar": "تعذر حفظ المسودة على الجهاز.",
+    "en": "Could not save the draft on this device."
+  },
+  {
+    "ar": "لم تصل الرسالة إلى الخدمة. مسودتك محفوظة.",
+    "en": "The message did not reach the service. Your draft is saved."
+  },
+  {
+    "ar": "متصل بالخدمة",
+    "en": "Connected to service"
+  },
+  {
+    "ar": "غير متصل · تُحفظ رسائلك على جهازك",
+    "en": "Offline · messages saved on your device"
+  },
+  {
+    "ar": "جار الاتصال بالخدمة…",
+    "en": "Connecting to service…"
+  },
+  {
+    "ar": "الخدمة غير متاحة حاليًا · مسوداتك محفوظة",
+    "en": "Service unavailable · drafts saved"
+  },
+  {
+    "ar": "دعم ORIN",
+    "en": "ORIN Support"
+  },
+  {
+    "ar": "نحن هنا لمساعدتك",
+    "en": "We are here to help"
+  },
+  {
+    "ar": "خيارات المحادثة",
+    "en": "Conversation options"
+  },
+  {
+    "ar": "لا تُرسل كلمات مرور أو رموز تحقق.",
+    "en": "Do not share passwords or verification codes."
+  },
+  {
+    "ar": "تعذر إرسال طلب المتابعة.",
+    "en": "Could not request follow-up."
+  },
+  {
+    "ar": "طلب المتابعة مُرسل",
+    "en": "Follow-up requested"
+  },
+  {
+    "ar": "طلب متابعة من موظف",
+    "en": "Request a support agent"
+  },
+  {
+    "ar": "فريق دعم ORIN",
+    "en": "ORIN support team"
+  },
+  {
+    "ar": "سجل المحادثة",
+    "en": "Conversation history"
+  },
+  {
+    "ar": "الرسائل السابقة غير متاحة حاليًا.",
+    "en": "Older messages are currently unavailable."
+  },
+  {
+    "ar": "الرسائل السابقة",
+    "en": "Earlier messages"
+  },
+  {
+    "ar": "كيف يمكننا مساعدتك اليوم؟",
+    "en": "How can we help today?"
+  },
+  {
+    "ar": "اختر موضوعًا أو اكتب رسالتك لفريق ORIN.",
+    "en": "Choose a topic or write to the ORIN team."
+  },
+  {
+    "ar": "أريد المساعدة في: ",
+    "en": "I need help with: "
+  },
+  {
+    "ar": "فريق ORIN",
+    "en": "ORIN team"
+  },
+  {
+    "ar": "تم الإرسال",
+    "en": "Sent"
+  },
+  {
+    "ar": "لم تُرسل",
+    "en": "Not sent"
+  },
+  {
+    "ar": "جار الإرسال…",
+    "en": "Sending…"
+  },
+  {
+    "ar": "في الانتظار",
+    "en": "Queued"
+  },
+  {
+    "ar": "إرسال مجددًا",
+    "en": "Send again"
+  },
+  {
+    "ar": "حذف المسودة",
+    "en": "Discard draft"
+  },
+  {
+    "ar": "رسالتك",
+    "en": "Your message"
+  },
+  {
+    "ar": "اكتب رسالتك هنا…",
+    "en": "Write a message…"
+  },
+  {
+    "ar": "إرسال الرسالة",
+    "en": "Send message"
+  },
+  {
+    "ar": "طلبات كثيرة. انتظر قليلًا قبل إرسال رمز جديد.",
+    "en": "Too many requests. Please wait before requesting another code."
+  },
+  {
+    "ar": "الرمز غير صحيح أو انتهت صلاحيته. اطلب رمزًا جديدًا عند الحاجة.",
+    "en": "The code is incorrect or expired. Request another code if needed."
+  },
+  {
+    "ar": "هذا البريد مسجّل بالفعل. سجّل الدخول أو استعد كلمة المرور.",
+    "en": "This email is already registered. Sign in or reset your password."
+  },
+  {
+    "ar": "لم يكتمل الدخول. جرّب تسجيل الدخول بالبريد وكلمة المرور؛ إن لم يُنشأ الحساب فاطلب رمزًا جديدًا.",
+    "en": "Sign-in did not complete. Try your email and password; if the account was not created, request a new code."
+  },
+  {
+    "ar": "إرسال رموز البريد غير متاح حاليًا. حاول لاحقًا.",
+    "en": "Email verification codes are currently unavailable. Please try later."
+  },
+  {
+    "ar": "أدخل بريدًا صحيحًا أولًا.",
+    "en": "Enter a valid email first."
+  },
+  {
+    "ar": "أرسلنا رمزًا من 6 أرقام إلى بريدك. صلاحيته 10 دقائق؛ تحقق من مجلد الرسائل غير المرغوبة أيضًا.",
+    "en": "A 6-digit code was sent to your email. It expires in 10 minutes. Check your spam folder too."
+  },
+  {
+    "ar": "اتصل بالإنترنت أولًا.",
+    "en": "Connect to the internet first."
+  },
+  {
+    "ar": "أدخل بريدًا صحيحًا.",
+    "en": "Enter a valid email."
+  },
+  {
+    "ar": "أدخل اسمًا من حرفين وكلمة مرور من 8 أحرف على الأقل.",
+    "en": "Enter a name of at least 2 characters and a password of at least 8."
+  },
+  {
+    "ar": "تأكيد كلمة المرور غير مطابق.",
+    "en": "The passwords do not match."
+  },
+  {
+    "ar": "تحقق من كود الدعوة؛ يتكون من ORIN- ثم 12 حرفًا أو رقمًا.",
+    "en": "Check your invitation code: ORIN- followed by 12 hexadecimal characters."
+  },
+  {
+    "ar": "أرسل رمزًا إلى بريدك وأدخله قبل إنشاء الحساب.",
+    "en": "Send and enter a valid email code before creating your account."
+  },
+  {
+    "ar": "قصيرة جدًا",
+    "en": "Too short"
+  },
+  {
+    "ar": "ضعيفة",
+    "en": "Weak"
+  },
+  {
+    "ar": "مقبولة",
+    "en": "Fair"
+  },
+  {
+    "ar": "جيدة",
+    "en": "Good"
+  },
+  {
+    "ar": "قوية",
+    "en": "Strong"
+  },
+  {
+    "ar": "إنشاء حساب جديد",
+    "en": "Create your account"
+  },
+  {
+    "ar": "استعادة كلمة المرور",
+    "en": "Reset password"
+  },
+  {
+    "ar": "تسجيل الدخول",
+    "en": "Welcome back"
+  },
+  {
+    "ar": "ابدأ رحلتك مع ORIN.",
+    "en": "Start your journey with ORIN."
+  },
+  {
+    "ar": "سنرسل رابطًا آمنًا إلى بريدك.",
+    "en": "We will send a secure link to your email."
+  },
+  {
+    "ar": "مرحبًا بعودتك إلى ORIN.",
+    "en": "Sign in to your ORIN account."
+  },
+  {
+    "ar": "إذا كان البريد مسجّلًا، فستصلك رسالة الاستعادة. تحقق من الرسائل غير المرغوبة أيضًا.",
+    "en": "If this email is registered, a reset email will arrive. Check your spam folder too."
+  },
+  {
+    "ar": "الاسم",
+    "en": "Name"
+  },
+  {
+    "ar": "اسمك",
+    "en": "Your name"
+  },
+  {
+    "ar": "البريد الإلكتروني",
+    "en": "Email"
+  },
+  {
+    "ar": "رمز التحقق",
+    "en": "Verification code"
+  },
+  {
+    "ar": "أدخل رمز التحقق",
+    "en": "Enter verification code"
+  },
+  {
+    "ar": "إرسال",
+    "en": "Send"
+  },
+  {
+    "ar": "التحقق بالرمز غير متاح حاليًا. سنرسل رابط تأكيد إلى بريدك بعد إنشاء الحساب.",
+    "en": "Code verification is currently unavailable. A verification link will be sent after account creation."
+  },
+  {
+    "ar": "كلمة المرور",
+    "en": "Password"
+  },
+  {
+    "ar": "إخفاء كلمة المرور",
+    "en": "Hide password"
+  },
+  {
+    "ar": "إظهار كلمة المرور",
+    "en": "Show password"
+  },
+  {
+    "ar": "قوة كلمة المرور",
+    "en": "Password strength"
+  },
+  {
+    "ar": "8 أحرف على الأقل.",
+    "en": "At least 8 characters."
+  },
+  {
+    "ar": "تأكيد كلمة المرور",
+    "en": "Confirm password"
+  },
+  {
+    "ar": "أعد إدخال كلمة المرور",
+    "en": "Re-enter password"
+  },
+  {
+    "ar": "إخفاء تأكيد كلمة المرور",
+    "en": "Hide confirmation"
+  },
+  {
+    "ar": "إظهار تأكيد كلمة المرور",
+    "en": "Show confirmation"
+  },
+  {
+    "ar": "كود الدعوة (اختياري)",
+    "en": "Invitation code (optional)"
+  },
+  {
+    "ar": "جار التنفيذ…",
+    "en": "Please wait…"
+  },
+  {
+    "ar": "إرسال رابط الاستعادة",
+    "en": "Send reset link"
+  },
+  {
+    "ar": "نسيت كلمة المرور؟",
+    "en": "Forgot password?"
+  },
+  {
+    "ar": "ليس لديك حساب؟ إنشاء حساب",
+    "en": "New to ORIN? Create account"
+  },
+  {
+    "ar": "لديك حساب؟ تسجيل الدخول",
+    "en": "Already have an account? Sign in"
+  },
+  {
+    "ar": "الأسواق،\nبمنظورك أنت.",
+    "en": "Markets.\nYour perspective."
+  },
+  {
+    "ar": "من العملات إلى الذهب. اختر الأصل الذي يهمك، وشاهد الصورة بوضوح.",
+    "en": "From crypto to gold. Choose what matters to you and see the bigger picture."
+  },
+  {
+    "ar": "تابع الأسواق",
+    "en": "Explore markets"
+  },
+  {
+    "ar": "كل حساب،\nفي مكانه.",
+    "en": "Every account.\nIn its place."
+  },
+  {
+    "ar": "مساحة تجمع حساباتك وسجل نشاطك، مع فصل واضح بين الحساب الحقيقي والتجريبي.",
+    "en": "Your accounts and activity together, with a clear separation between real and demo accounts."
+  },
+  {
+    "ar": "مساحتك الخاصة",
+    "en": "Your workspace"
+  },
+  {
+    "ar": "ابدأ رحلتك.\nابقَ على تواصل.",
+    "en": "Start your journey.\nStay connected."
+  },
+  {
+    "ar": "إعداداتك تحت يدك، وطريق مباشر للتواصل مع فريق ORIN من داخل التطبيق.",
+    "en": "Your settings within reach and a direct way to contact the ORIN team inside the app."
+  },
+  {
+    "ar": "أنت في ORIN",
+    "en": "You’re with ORIN"
+  },
+  {
+    "ar": "تخطي",
+    "en": "Skip"
+  },
+  {
+    "ar": "خطوات المقدمة",
+    "en": "Introduction steps"
+  },
+  {
+    "ar": "الخطوة ",
+    "en": "Step "
+  },
+  {
+    "ar": "المحادثة، داخل مساحتك",
+    "en": "Conversation in your space"
+  },
+  {
+    "ar": "حسابك. إعداداتك.",
+    "en": "Your account. Your settings."
+  },
+  {
+    "ar": "متابعة",
+    "en": "Continue"
+  },
+  {
+    "ar": "لديك حساب؟",
+    "en": "Already a member?"
+  }
+]

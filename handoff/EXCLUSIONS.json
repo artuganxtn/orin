@@ -1,0 +1,49 @@
+{
+  "note": "All project source included. Only private signing (delivered in a separate encrypted archive), reproducible dependency/tool directories, build caches and logs excluded. Credentials not present locally cannot be invented. No production customer database export exists in this handoff.",
+  "excluded": [
+    {
+      "path": ".android-build/",
+      "reason": "reinstallable dependency, generated build/cache or workspace tool state"
+    },
+    {
+      "path": "firebase-spark-dist/",
+      "reason": "reinstallable dependency, generated build/cache or workspace tool state"
+    },
+    {
+      "path": "node_modules/",
+      "reason": "reinstallable dependency, generated build/cache or workspace tool state"
+    },
+    {
+      "path": ".openai/",
+      "reason": "reinstallable dependency, generated build/cache or workspace tool state"
+    },
+    {
+      "path": "deliverables/",
+      "reason": "reinstallable dependency, generated build/cache or workspace tool state"
+    },
+    {
+      "path": "firebase-security-dist/",
+      "reason": "reinstallable dependency, generated build/cache or workspace tool state"
+    },
+    {
+      "path": "tsconfig.tsbuildinfo",
+      "reason": "generated cache/log"
+    },
+    {
+      "path": "firestore-debug.log",
+      "reason": "generated cache/log"
+    },
+    {
+      "path": "firebase-functions/node_modules/",
+      "reason": "reinstallable dependency, generated build/cache or workspace tool state"
+    },
+    {
+      "path": "android-app/signing/",
+      "reason": "private signing delivered separately"
+    },
+    {
+      "path": "android-app/build/",
+      "reason": "reinstallable dependency, generated build/cache or workspace tool state"
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> site-creator-vinext-starter@0.1.0 build:firebase-security
+> VITE_FIREBASE_SPARK=true VITE_ORIN_PROGRAM_API_URL=https://europe-west1-orin-99951.cloudfunctions.net/orinApi VITE_ORIN_SECURITY_API_URL=https://europe-west1-orin-99951.cloudfunctions.net/orinSecurity vite build --config firebase-app/vite.config.mts --outDir ../firebase-security-dist
+
+vite v8.0.13 building client environment for production...
+[2Ktransforming...✓ 2328 modules transformed.
+rendering chunks...
+computing gzip size...
+firebase-security-dist/index.html                                   2.86 kB │ gzip:   1.44 kB
+firebase-security-dist/.vite/manifest.json                          3.68 kB │ gzip:   0.73 kB
+firebase-security-dist/assets/trading-workspace-CQfkr4DO.css       14.93 kB │ gzip:   3.55 kB
+firebase-security-dist/assets/control-center-hUzeOYPD.css          21.29 kB │ gzip:   5.24 kB
+firebase-security-dist/assets/index-DEaMFspC.css                  398.31 kB │ gzip:  70.78 kB
+firebase-security-dist/assets/typeof-Dtizcwqq.js                    0.27 kB │ gzip:   0.16 kB
+firebase-security-dist/assets/star-D7uhkpA4.js                      0.53 kB │ gzip:   0.31 kB
+firebase-security-dist/assets/chart-boundary-AmUUy4bp.js            1.21 kB │ gzip:   0.71 kB
+firebase-security-dist/assets/sliders-horizontal-4nFW7A6O.js        3.25 kB │ gzip:   1.27 kB
+firebase-security-dist/assets/tradingview-widget-DZs3o1C5.js        4.53 kB │ gzip:   2.14 kB
+firebase-security-dist/assets/account-transactions-CPmU2GpT.js      5.00 kB │ gzip:   2.20 kB
+firebase-security-dist/assets/purify.es-C_EYEgqH.js                28.10 kB │ gzip:  11.10 kB
+firebase-security-dist/assets/program-pages-C-nnhXEA.js            45.90 kB │ gzip:  15.72 kB
+firebase-security-dist/assets/control-center-DNQr4P12.js           80.76 kB │ gzip:  23.68 kB
+firebase-security-dist/assets/index.es-TLOExgLq.js                151.60 kB │ gzip:  48.96 kB
+firebase-security-dist/assets/html2canvas-DyDtctjc.js             199.59 kB │ gzip:  46.79 kB
+firebase-security-dist/assets/statement-pdf-Dgclc_lU.js           406.06 kB │ gzip: 132.64 kB
+firebase-security-dist/assets/trading-workspace-BuKBv9gu.js       462.53 kB │ gzip: 141.71 kB
+firebase-security-dist/assets/index-D1laIUnc.js                 1,003.02 kB │ gzip: 310.22 kB
+
+✓ built in 2.03s
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.

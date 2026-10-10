@@ -1,0 +1,8 @@
+{
+  "format": "PKCS12",
+  "alias": "orin",
+  "package": "com.orin.app",
+  "certificateSha256": "743a8d0179b768419931be6be205644d49509eaf0a90fe90b7b98950f5f66f02",
+  "verifiedPrivateArchive": true,
+  "signingRestorationMatchesOriginal": true
+}

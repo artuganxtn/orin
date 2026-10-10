@@ -1,0 +1,33 @@
+--- exported-production.rules
++++ control-review-candidate.rules
+@@ -2,9 +2,10 @@
+ service cloud.firestore {
+  match /databases/{database}/documents {
+   function signedIn() { return request.auth != null; }
+-  function owner() { return signedIn() && request.auth.token.email_verified == true && request.auth.token.email == 'khtaub7341@gmail.com'; }
++  function controlActive() { return exists(/databases/$(database)/documents/system/control-center); }
++  function owner() { return !controlActive() && signedIn() && request.auth.token.email_verified == true && request.auth.token.email == 'khtaub7341@gmail.com'; }
+   function admin() {
+-   return signedIn() && request.auth.token.email_verified == true &&
++   return !controlActive() && signedIn() && request.auth.token.email_verified == true &&
+     (owner() || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.disabled == false));
+   }
+   function validUser(data) {
+@@ -32,7 +33,7 @@
+     );
+    allow delete: if false;
+   }
+-  function activeUser() { return signedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.disabled == false; }
++  function activeUser() { return signedIn() && (!exists(/databases/$(database)/documents/orinControlAccess/$(request.auth.uid)) || get(/databases/$(database)/documents/orinControlAccess/$(request.auth.uid)).data.status != 'suspended') && (!exists(/databases/$(database)/documents/orinControlSessionRevocations/$(request.auth.uid)) || request.auth.token.auth_time * 1000 > get(/databases/$(database)/documents/orinControlSessionRevocations/$(request.auth.uid)).data.validAfter) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.disabled == false; }
+   function own(uid) { return activeUser() && request.auth.uid == uid; }
+   function limited() { return request.query.limit != null && request.query.limit <= 100; }
+   function symbols() { return ['BTC-USD','ETH-USD','XRP-USD','SOL-USD','BNB-USDT','DOGE-USD','TON-USDT','ADA-USD','EUR-USD','GBP-USD','XAU-USD','XAG-USD','SPX-USD','NDX-USD']; }
+@@ -138,6 +139,8 @@
+   match /orinJournals/{id} { allow read: if activeUser() && resource.data.user_id==request.auth.uid; allow write: if false; }
+   match /orinAudit/{id} { allow read: if activeUser() && admin() && limited(); allow write: if false; }
+ 
++  match /orinPublicConfiguration/{id} { allow read: if true; allow write: if false; }
++  match /orinPublicContent/{id} { allow read: if true; allow write: if false; }
+   match /{document=**} { allow read, write: if false; }
+  }
+ }

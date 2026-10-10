@@ -1,0 +1,99 @@
+[
+  {
+    "name": "home_154",
+    "until": "!!document.querySelector('.profile-shortcut')",
+    "timeout": 120000,
+    "screenshot": true
+  },
+  {
+    "name": "navigation_probe",
+    "evaluate": "(window.__orinStateProbe='retained',window.__orinTimeOrigin=performance.timeOrigin,document.querySelector('.balance-available').tagName)",
+    "contains": "DIV"
+  },
+  {
+    "name": "available_balance_no_popup",
+    "tap": ".balance-available",
+    "until": "location.pathname==='/'&&!document.querySelector('.orin-full-page')&&window.__orinStateProbe==='retained'"
+  },
+  {
+    "name": "support_label_removed",
+    "evaluate": "document.querySelector('.orin-support-fab').textContent.trim()===''",
+    "contains": "true"
+  },
+  {
+    "name": "profile_shortcut",
+    "tap": ".profile-shortcut",
+    "until": "location.pathname==='/settings/account'&&!!document.querySelector('.orin-full-page')",
+    "screenshot": true
+  },
+  {
+    "name": "profile_back_keeps_state",
+    "back": true,
+    "until": "location.pathname==='/'&&window.__orinTimeOrigin===performance.timeOrigin&&window.__orinStateProbe==='retained'"
+  },
+  {
+    "name": "recent_transactions",
+    "tap": ".home-transactions-shortcut",
+    "until": "location.pathname==='/activity'&&document.querySelectorAll('.transaction-row').length===2",
+    "screenshot": true
+  },
+  {
+    "name": "withdrawal_filter",
+    "tap": ".activity-filters button:nth-child(3)",
+    "until": "document.querySelectorAll('.transaction-row').length===1&&document.querySelector('.transaction-copy b').textContent.includes('سحب')"
+  },
+  {
+    "name": "transaction_details",
+    "tap": ".transaction-row",
+    "until": "!!document.querySelector('.transaction-detail')&&document.querySelector('.transaction-detail').textContent.includes('qa-withdraw')",
+    "screenshot": true
+  },
+  {
+    "name": "pdf_export_hook",
+    "evaluate": "(()=>{const click=HTMLAnchorElement.prototype.click;HTMLAnchorElement.prototype.click=function(){if(this.href.startsWith('data:application/pdf;'))window.__orinPdfData=this.href;return click.call(this)};return true})()",
+    "contains": "true"
+  },
+  {
+    "name": "native_pdf_save_dialog",
+    "tap": ".statement-export",
+    "until": "!!window.__orinPdfData&&window.__orinPdfData.includes(';base64,JVBER')",
+    "screenshot": true
+  },
+  {
+    "name": "cancel_pdf_save",
+    "back": true,
+    "until": "location.pathname==='/activity'&&window.__orinStateProbe==='retained'"
+  },
+  {
+    "name": "transactions_back",
+    "back": true,
+    "until": "location.pathname==='/'&&window.__orinTimeOrigin===performance.timeOrigin"
+  },
+  {
+    "name": "support_open",
+    "tap": ".orin-support-fab",
+    "until": "location.pathname==='/support'&&!!document.querySelector('.support-composer')",
+    "screenshot": true
+  },
+  {
+    "name": "support_back",
+    "back": true,
+    "until": "location.pathname==='/'"
+  },
+  {
+    "name": "registration_fields",
+    "tap": "#qa-register",
+    "until": "!!document.querySelector('#registration-code')&&!!document.querySelector('input[placeholder=\"ORIN-XXXXXXXXXXXX\"]')",
+    "screenshot": true
+  },
+  {
+    "name": "unconfigured_code_service_honest",
+    "evaluate": "document.querySelector('#registration-code').disabled&&document.querySelector('.auth-code-row button').disabled&&document.querySelector('.auth-verification-note').textContent.includes('رابط')",
+    "contains": "true"
+  },
+  {
+    "name": "no_horizontal_overflow",
+    "evaluate": "document.documentElement.scrollWidth<=innerWidth+1",
+    "contains": "true"
+  }
+]

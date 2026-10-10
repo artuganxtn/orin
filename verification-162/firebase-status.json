@@ -1,0 +1,9 @@
+{
+  "project": "orin-99951",
+  "observed": "2026-10-06",
+  "consoleAuthenticated": true,
+  "functionsDeployedThisTurn": false,
+  "billingAccountAvailable": false,
+  "required": "User creates/links Cloud Billing account and upgrades to Blaze; then coordinated server deployment/acceptance",
+  "onDeviceTest": "NOT RUN"
+}
