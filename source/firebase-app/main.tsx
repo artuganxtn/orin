@@ -15,13 +15,14 @@ import {createProgramTransport} from './program-transport';
 import React,{lazy,Suspense,useEffect,useState,useCallback} from 'react';
 import {createRoot} from 'react-dom/client';
 import {onAuthStateChanged,signOut,type User,connectAuthEmulator,getAuth,inMemoryPersistence,setPersistence,signInWithEmailAndPassword,signInWithCustomToken,EmailAuthProvider,reauthenticateWithCredential} from 'firebase/auth';
-import {app,auth,ensureProfile,to,AuthForm,type Profile} from './account';
+import {doc,onSnapshot,connectFirestoreEmulator} from 'firebase/firestore';
+import {app,auth,db,ensureProfile,to,AuthForm,type Profile} from './account';
 import {configureFirebaseTransport,apiFetch} from '../lib/client-api';
 import {safeDestination} from '../lib/orin-routes';
 import {PERMISSIONS,type Permission,type ControlSession} from '../lib/control-center';
 import {DEFAULT_PREFERENCES,DEFAULT_CONFIGURATION,CAPABILITIES,type SettingsState} from '../lib/preferences';
 import type {LabState} from '../lib/contracts';
-configureFirebaseTransport({base:apiBase,token:async(force=false)=>{await auth.authStateReady();if(!auth.currentUser)return null;try{return await auth.currentUser.getIdToken(force);}catch{return null;}},onUnauthorized:()=>{if(location.pathname.startsWith('/login')||location.pathname.startsWith('/register'))return;if(!auth.currentUser){const next=encodeURIComponent(location.pathname);to('/login?next='+next,true);}else{void auth.currentUser.getIdToken(true).catch(()=>{});}}});
+import {createSparkApi} from '../firebase-spark/adapter';
 import {UiBridge,NetworkState,ErrorBoundary,useUi,setUi} from './ui';
 import {Security} from './security';
 import {Legal,Help} from './legal';
@@ -50,14 +51,13 @@ import './release-157.css';
 import '../app/settings-refresh.css';
 const ADMIN_EMAILS = ['khtaub7341@gmail.com', 'khtaub99@gmail.com', 'mm@mm.mm'];
 const isOwnerEmail=(e?:string|null)=>{const em=e?.toLowerCase().trim()??'';return ADMIN_EMAILS.some(a=>a.toLowerCase()===em);};
-const apiBase = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_ORIN_PROGRAM_API_URL || '';
-configurePayments({base:import.meta.env.VITE_ORIN_PAYMENTS_API_URL || apiBase,token:async()=>{await auth.authStateReady();return auth.currentUser?.getIdToken()??null}});
-const chatService=supportTransport(null,()=>auth.currentUser?.uid??'',createProgramTransport(apiBase || import.meta.env.VITE_ORIN_PROGRAM_API_URL,async()=>auth.currentUser?.getIdToken()??null)),referralService=referralTransport(null,createProgramTransport(apiBase || import.meta.env.VITE_ORIN_PROGRAM_API_URL,async()=>auth.currentUser?.getIdToken()??null));
+configurePayments({base:import.meta.env.VITE_ORIN_PAYMENTS_API_URL,token:async()=>{await auth.authStateReady();return auth.currentUser?.getIdToken()??null}});
+const chatService=supportTransport(db,()=>auth.currentUser?.uid??'',createProgramTransport(import.meta.env.VITE_ORIN_PROGRAM_API_URL,async()=>auth.currentUser?.getIdToken()??null)),referralService=referralTransport(db,createProgramTransport(import.meta.env.VITE_ORIN_PROGRAM_API_URL,async()=>auth.currentUser?.getIdToken()??null));
 const loadWorkspace=()=>import('../app/trading-workspace');
 const loadDashboard=()=>import('./control-center').then(m=>({default:m.ControlCenter}));
 const OrinApp=lazy(loadWorkspace),Dashboard=lazy(loadDashboard);
-if((import.meta.env.DEV||import.meta.env.MODE==='android-qa')&&import.meta.env.VITE_FIREBASE_EMULATORS==='true'){connectAuthEmulator(auth,'http://127.0.0.1:9099',{disableWarnings:true});}
-configureFirebaseTransport({base:apiBase,token:async(force=false)=>{await auth.authStateReady();if(!auth.currentUser)return null;try{return await auth.currentUser.getIdToken(force);}catch{return null;}},onUnauthorized:()=>{if(location.pathname.startsWith('/login')||location.pathname.startsWith('/register'))return;if(!auth.currentUser){const next=encodeURIComponent(location.pathname);to('/login?next='+next,true);}else{void auth.currentUser.getIdToken(true).catch(()=>{});}}});
+if((import.meta.env.DEV||import.meta.env.MODE==='android-qa')&&import.meta.env.VITE_FIREBASE_EMULATORS==='true'){connectAuthEmulator(auth,'http://127.0.0.1:9099',{disableWarnings:true});connectFirestoreEmulator(db,'127.0.0.1',8080)}
+configureFirebaseTransport({token:async(force=false)=>{await auth.authStateReady();if(!auth.currentUser)return null;try{return await auth.currentUser.getIdToken(force);}catch{return null;}},onUnauthorized:()=>{if(location.pathname.startsWith('/login')||location.pathname.startsWith('/register'))return;if(!auth.currentUser){const next=encodeURIComponent(location.pathname);to('/login?next='+next,true);}else{void auth.currentUser.getIdToken(true).catch(()=>{});}},...(import.meta.env.VITE_FIREBASE_SPARK==='true'?{request:createSparkApi(db,async()=>{await auth.authStateReady();return auth.currentUser},createProgramTransport(import.meta.env.VITE_ORIN_PROGRAM_API_URL,async()=>{await auth.authStateReady();return auth.currentUser?.getIdToken()??null}))}:{})});
 const proofApp=getApps().find(a=>a.name==='orin-security-proof')??initializeApp(app.options,'orin-security-proof');
 const proofAuth=getAuth(proofApp);
 if((import.meta.env.DEV||import.meta.env.MODE==='android-qa')&&import.meta.env.VITE_FIREBASE_EMULATORS==='true')connectAuthEmulator(proofAuth,'http://127.0.0.1:9099',{disableWarnings:true});
@@ -78,7 +78,7 @@ function App(){
  useEffect(()=>{const sync=()=>setPath(location.pathname);addEventListener('popstate',sync);return()=>removeEventListener('popstate',sync)},[]);
  useEffect(()=>{const aliases:Record<string,string>={'/settings/privacy':'/settings/data','/settings/support':'/support','/settings/documents':'/documents','/settings/referral':'/referral','/settings/agent':'/agent','/kyc':'/settings/kyc'};if(aliases[path])to(aliases[path],true)},[path]);
  useEffect(()=>{
-  let version=0,disposed=false;
+  let stopProfile=()=>{},version=0,disposed=false;
   let activeUid:string|null=null,initializing=false;
   const controller=createStartupController<BootData>(setBoot);
   let pending=controller.begin(navigator.onLine);
@@ -86,7 +86,7 @@ function App(){
   const stop=onAuthStateChanged(auth,u=>{
    if(!u){
     activeUid=null;initializing=false;++version;
-    setProfile(null);setConfiguration(null);setSecurityGate(null);
+    stopProfile();setProfile(null);setConfiguration(null);setSecurityGate(null);
     pending=controller.begin(navigator.onLine);pending.ready({user:null});
     return;
    }
@@ -94,7 +94,7 @@ function App(){
    activeUid=u.uid;
    initializing=true;
    const current=++version;
-   setProfile(null);setConfiguration(null);setSecurityGate(null);
+   stopProfile();setProfile(null);setConfiguration(null);setSecurityGate(null);
    const valid=()=>!disposed&&(current===version||auth.currentUser?.uid===activeUid);
    pending=controller.begin(navigator.onLine);const ticket=pending;
    void (async()=>{
@@ -150,39 +150,50 @@ function App(){
      disabled: false
     };
 
-    void (async () => {
-     if (!valid()) return;
-
-     if (typeof document.fonts?.load==='function') document.fonts.load('400 16px ORIN').catch(()=>{});
-
-     try {
-      const [settings, lab, config] = await Promise.all([
-       getInitial<SettingsState>('/api/settings').catch(()=>defaultSettings),
-       getInitial<LabState>('/api/lab').catch(()=>defaultLab),
-       getInitial<any>('/api/experience/configuration').catch(()=>null),
-       loadWorkspace().catch(()=>loadWorkspace()),
-       ...((isOwnerOrAdmin)?[loadDashboard().catch(()=>null)]:[])
-      ]);
-
-      const isAppAdmin = (settings as any)?.isAdmin || isOwnerOrAdmin;
-      const p: Profile = {
-       uid: activeUser.uid,
-       email: (settings as any)?.email || activeUser.email || '',
-       displayName: (settings as any)?.profile?.displayName || activeUser.displayName || 'مستخدم ORIN',
-       role: isAppAdmin ? 'admin' : 'user',
-       disabled: false
-      };
-
-      if (!valid()) return;
-      enterApp(settings as any, lab as any, config, p);
-     } catch (e) {
-      console.warn('Startup initial data load fallback:', e);
-      if (valid()) enterApp(defaultSettings, defaultLab, null, fallbackUser);
+    let fallbackTimer: ReturnType<typeof setTimeout> | undefined = setTimeout(() => {
+     if (!initialized && !priming && valid()) {
+      console.warn('Profile onSnapshot slow or pending, launching with fallback profile');
+      enterApp(defaultSettings, defaultLab, null, fallbackUser);
      }
-    })();
+    }, 3500);
+
+    stopProfile=onSnapshot(doc(db,'users',activeUser.uid),snap=>{
+     if (fallbackTimer) { clearTimeout(fallbackTimer); fallbackTimer = undefined; }
+     if(!valid())return;
+     const p: Profile = snap.exists() ? snap.data() as Profile : fallbackUser;
+     if (isOwnerOrAdmin && p.role !== 'admin') p.role = 'admin';
+     setProfile(p);
+     if(initialized||priming)return;
+     if(p.disabled){initialized=ticket.ready({user:u});setSecurityGate(null);return}
+     priming=true;
+     if(typeof document.fonts?.load==='function') document.fonts.load('400 16px ORIN').catch(()=>{});
+     void Promise.all([
+      getInitial<SettingsState>('/api/settings').catch(()=>defaultSettings),
+      getInitial<LabState>('/api/lab').catch(()=>defaultLab),
+      getInitial<any>('/api/experience/configuration').catch(()=>null),
+      loadWorkspace().catch(()=>loadWorkspace()),
+      ...((p.role==='admin'||isOwnerEmail(u.email))?[loadDashboard().catch(()=>null)]:[])
+     ]).then(([settings,lab,config])=>{
+      enterApp(settings, lab, config, p);
+     }).catch(e=>{
+      console.warn('Startup initial data load fallback:', e);
+      enterApp(defaultSettings, defaultLab, null, p);
+     });
+    },e=>{
+     if (fallbackTimer) { clearTimeout(fallbackTimer); fallbackTimer = undefined; }
+     if(!valid())return;
+     if(initialized)console.warn('ORIN profile subscription unavailable',e.code);
+     else {
+      console.warn('Profile onSnapshot error, proceeding with fallback profile:', e);
+      setProfile(fallbackUser);
+      void loadWorkspace().finally(() => {
+       enterApp(defaultSettings, defaultLab, null, fallbackUser);
+      });
+     }
+    });
    })().catch(e=>{initializing=false;console.warn('Startup non-fatal error:',e);});
   },e=>pending.fail(e,!navigator.onLine));
-  return()=>{disposed=true;version++;controller.dispose();stop();removeEventListener('offline',offline)};
+  return()=>{if(fallbackTimer)clearTimeout(fallbackTimer);disposed=true;version++;controller.dispose();stopProfile();stop();removeEventListener('offline',offline)};
  },[attempt]);
  useEffect(()=>{if(!ready||!profile||profile.disabled)return;let active=true;const load=()=>{if(document.hidden||!navigator.onLine)return;void apiFetch('/api/experience/configuration').then(r=>r.ok?r.json():null).then((d:any)=>{if(active&&d)setConfiguration(d.configuration)}).catch(()=>{})};const timer=setInterval(load,60000);addEventListener('online',load);return()=>{active=false;clearInterval(timer);removeEventListener('online',load)}},[ready,profile?.uid,profile?.disabled]);
  useEffect(()=>{if(path==='/logout')void (async()=>{try{await endCurrentSecuritySession()}finally{await signOut(auth);if(isNativeSecurityAvailable())await unbindNativeAccount();to('/login')}})().catch(e=>setBoot({phase:'error',error:e}))},[path]);

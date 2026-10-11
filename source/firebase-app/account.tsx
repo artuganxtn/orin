@@ -2,15 +2,14 @@ import React,{useEffect,useState,type FormEvent} from 'react';
 import {KeyRound,Mail,LockKeyhole,UserRound,Eye,EyeOff,Gift} from 'lucide-react';
 import {initializeApp} from 'firebase/app';
 import {getAuth,createUserWithEmailAndPassword,signInWithEmailAndPassword,sendPasswordResetEmail,sendEmailVerification,signInWithCustomToken,updateProfile,type User} from 'firebase/auth';
+import {getFirestore,doc,updateDoc,serverTimestamp} from 'firebase/firestore';
 
+import {ensureAccountProfile} from '../firebase-web/account-service';
 import {firebaseConfig} from '../firebase-web/config';
 import {securityBackendConfigured,supportsPasskeys,loginWithPasskey,AccountSecurityError,ensureSecuritySession} from '../lib/account-security-client';
 import {useUi,readUi} from './ui';
 import {passwordStrength,EMAIL_RETURN_ORIGIN,validEmail} from '../lib/account-validation';
-export const app=initializeApp((import.meta.env.DEV||import.meta.env.MODE==='android-qa')&&import.meta.env.VITE_FIREBASE_EMULATORS==='true'?{...firebaseConfig,projectId:'demo-orin-auth',apiKey:'fake-api-key'}:firebaseConfig);
-export const auth=getAuth(app);
-export const db: any = null;
-auth.languageCode='ar';
+export const app=initializeApp((import.meta.env.DEV||import.meta.env.MODE==='android-qa')&&import.meta.env.VITE_FIREBASE_EMULATORS==='true'?{...firebaseConfig,projectId:'demo-orin-auth',apiKey:'fake-api-key'}:firebaseConfig);export const auth=getAuth(app),db=getFirestore(app);auth.languageCode='ar';
 export {navigateTo as to} from '../lib/navigation';
 import {navigateTo as to} from '../lib/navigation';
 
@@ -27,14 +26,7 @@ export const fail=(e:unknown)=>{const code=(e as {code?:string})?.code??'';const
 'permission-denied':['ليست لديك صلاحية لهذه العملية.','You do not have permission for this action.'],
 'unavailable':['الخدمة غير متاحة مؤقتًا. أعد المحاولة.','The service is temporarily unavailable. Please retry.']};return messages[code]?.[ar?0:1]??(ar?'تعذرت العملية. حاول مجددًا.':'The action could not be completed. Please retry.');};
 export type Profile={uid:string;email:string;displayName:string;role:'user'|'admin';disabled:boolean;createdAt?:{toDate:()=>Date};updatedAt?:unknown};
-export const ensureProfile=async (user:User)=>{
-  try {
-    const token = await user.getIdToken();
-    if (token) {
-      await fetch('/api/settings', { headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
-    }
-  } catch {}
-};
+export const ensureProfile=(user:User)=>ensureAccountProfile(db,user);
 
 const invitation=()=>{try{return sessionStorage.getItem('orin-referral-code')??''}catch{return ''}};
 export function AuthForm({path,done}:{path:string;done:()=>void}){

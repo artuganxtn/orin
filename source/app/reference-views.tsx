@@ -9,8 +9,7 @@ import {LiveAssetQuote,LiveQuoteSparkline,useMarketQuote} from './market-quote';
 import {hasNativeFeed} from '@/lib/live-market';
 import {useRoutePanel,useNavigation} from './orin-navigation';
 import {lazy,Suspense,useEffect,useRef,useState} from 'react';
-import {ArrowLeft,ArrowUpFromLine,Bell,ChartNoAxesCombined,ChevronDown,Eye,EyeOff,Info,LockKeyhole,Maximize2,Minimize2,MoreHorizontal,Pencil,RefreshCw,Search,SlidersHorizontal,Star,Users,Wallet,Check,CheckCircle2,KeyRound,ClipboardList,Timer,ShieldCheck,Menu,ArrowUpRight,ArrowDownRight,PlusCircle,ClipboardPaste,Copy} from 'lucide-react';
-import {toast} from 'sonner';
+import {ArrowLeft,ArrowUpFromLine,Bell,ChartNoAxesCombined,ChevronDown,Eye,EyeOff,Info,LockKeyhole,Maximize2,Minimize2,MoreHorizontal,Pencil,RefreshCw,Search,SlidersHorizontal,Star,Users,Wallet,Check,CheckCircle2,KeyRound,ClipboardList,Timer,ShieldCheck} from 'lucide-react';
 import {FullPage as Dialog,FullPageContent as DialogContent,FullPageHeader as DialogHeader,FullPageTitle as DialogTitle,FullPageDescription as DialogDescription} from './full-page';
 import {Select,SelectTrigger,SelectContent,SelectItem} from '@/components/ui/select';
 import {SuccessRing} from './reference-charts';
@@ -48,7 +47,7 @@ export function ReferenceHome({state,prefs,selectedPair,onPairChange,onHideBalan
  const {configuration,t,number,marketReady}=useOrin();const [localPair,setLocalPair]=useState(prefs.chartPair);const chosenPair=selectedPair??localPair,setPair=(value:string)=>{setLocalPair(value);onPairChange?.(value)};useEffect(()=>setLocalPair(prefs.chartPair),[prefs.chartPair]);const pair=configuration.enabledSymbols.includes(chosenPair)?chosenPair:configuration.defaultSymbol,symbol=marketSymbol(pair);
  const account=activeTradingAccount(state?.accountDirectory);
  const reloadAccounts=async()=>{const r=await apiFetch('/api/trading-accounts');if(!r.ok)throw new Error(t('تعذر قراءة الرصيد المحفوظ.','Unable to read saved balance.'));onAccountsChange?.(await r.json(),'confirmed')};
- const settled=(state?.positions ?? []).filter(p=>p.status==='settled')??[],win=settled.length?100*(settled ?? []).filter(p=>p.result_cents>0).length/settled.length:null;
+ const settled=state?.positions.filter(p=>p.status==='settled')??[],win=settled.length?100*settled.filter(p=>p.result_cents>0).length/settled.length:null;
  return <div className="reference-home">
   {sparkMode()?<BalanceAccounts state={state} onHideBalance={onHideBalance} onTerms={onTerms} onDirectoryChange={onAccountsChange}/>:<section className="balance-hero"><img src="/brand/orin-mark.png" alt=""/><div className="balance-top"><span>{t('إجمالي الرصيد','Total balance')}</span><button aria-label={prefs.hideBalance?t('إظهار الرصيد','Show balance'):t('إخفاء الرصيد','Hide balance')} onClick={onHideBalance}>{prefs.hideBalance?<EyeOff/>:<Eye/>}</button></div><strong className="balance-total num">{prefs.hideBalance?'••••••':state?`$${number((state.balanceCents+state.reservedCents)/100)}`:'$ —'}</strong><div className="balance-bottom"><span className={`num ${(state?.realizedCents??0)<0?'loss':'gain'}`}>{prefs.hideBalance?'••••':state?`${state.realizedCents>=0?'+':''}${number(state.realizedCents/100)}`:'—'}</span><button onClick={onTerms}>{t('حساب حقيقي','Real account')} · USD <Info size={13}/></button></div></section>}
   <div className="quick-actions">
@@ -66,7 +65,7 @@ export function ReferenceHome({state,prefs,selectedPair,onPairChange,onHideBalan
       }
       onFunding('withdraw');
     }}><span><ArrowUpFromLine/></span>{t('سحب','Withdraw')}</button>
-    {/* Transfer button hidden as requested until implemented */}
+    <button type="button" onClick={onTransfer}><span><ArrowLeftRight/></span>{t('تحويل','Transfer')}</button>
     <button type="button" onClick={onInvite}><span><Users/></span>{t('دعوة صديق','Invite a friend')}</button>
   </div>
   {activePosition&&(
@@ -105,341 +104,64 @@ export function ReferenceMarkets({onSelect,prefs,active=true}:{onSelect:(pair:st
  <Dialog open={edit} onOpenChange={setEdit}><DialogContent className="popup favorites-dialog"><DialogHeader><DialogTitle>{t('قائمة المفضلة','Favorites')}</DialogTitle><DialogDescription>{t('أصولك المفضلة تتزامن مع حسابك عند تسجيل الدخول.','Favorites sync across devices when you sign in.')}</DialogDescription></DialogHeader><div className="favorite-manager">{symbols.map(s=><button key={s.pair} disabled={busy} aria-pressed={favorites.includes(s.pair)} onClick={()=>toggle(s.pair)}><CoinIcon symbol={s.pair.split('-')[0]}/><span><b className="num">{s.label}</b><small>{s.name}</small></span><Star className={favorites.includes(s.pair)?'saved':''}/></button>)}</div></DialogContent></Dialog>
  </div>;
 }
-function formatDateTime(ts:number){if(!ts)return'--';const d=new Date(ts);return `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;}
-function formatTime(ts:number){if(!ts)return'--';const d=new Date(ts);return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;}
-function formatRange(startTs:number,endTs:number){if(!startTs||!endTs)return'--';return `${formatTime(startTs)}~${formatTime(endTs)}`;}
-
 interface TradeProps{state:LabState|null;current:Contract;selected:Contract|null;active?:Position;now:number;progress:number;code:string;setCode:(s:string)=>void;amount:string;setAmount:(s:string)=>void;lookup:()=>void;onExecuteCode?:(code:string,amount?:string)=>void;startJoin:()=>void;onBack:()=>void;onNotifications:()=>void;referencePair:string;setReferencePair:(s:string)=>void;mode:string;setMode:(s:string)=>void;busy:boolean;onAsset:(asset:Asset)=>void;prefs:Preferences;}
-
-const TIMEFRAME_CHIPS=[{key:'60s',label:'60s',sec:60},{key:'120s',label:'120s',sec:120},{key:'5min',label:'5min',sec:300},{key:'10min',label:'10min',sec:600}];
-
 export function ReferenceTrade(p:TradeProps){
- const {prefs,configuration:c,change,t,number,settings,status,marketReady}=useOrin(),{favorites,toggle,enabled,busy}=useFavorites();
- const stage=useRef<HTMLDivElement>(null);
- const [full,setFull]=useState(false),[options,setOptions]=useState(false),[reset,setReset]=useState(0);
- const [subTab,setSubTab]=useState<'plan'|'invites'|'history'|'positions'>('invites');
- const [selectedChip,setSelectedChip]=useState<string>('60s');
- const [confirmSheetOpen,setConfirmSheetOpen]=useState(false);
- const [sheetAmount,setSheetAmount]=useState(p.amount||'1000');
- const [inlineError,setInlineError]=useState('');
- const [dirDropdown,setDirDropdown]=useState(false);
-
- useEffect(()=>{if(p.amount)setSheetAmount(p.amount);},[p.amount]);
-
+ const {prefs,configuration:c,change,t,number,settings,status,marketReady}=useOrin(),{favorites,toggle,enabled,busy}=useFavorites();const stage=useRef<HTMLDivElement>(null);const [full,setFull]=useState(false),[options,setOptions]=useState(false),[reset,setReset]=useState(0);
  useEffect(()=>{if(!full)return;const old=document.body.style.overflow;document.body.style.overflow='hidden';const previousFocus=document.activeElement as HTMLElement|null;stage.current?.querySelector<HTMLButtonElement>('button')?.focus();const escape=(e:KeyboardEvent)=>{if(document.querySelector('[data-slot=dialog-content]'))return;if(e.key==='Escape')setFull(false);if(e.key==='Tab'){const nodes=Array.from(stage.current?.querySelectorAll<HTMLElement>('button:not(:disabled),a[href],iframe')??[]).filter(el=>el.getBoundingClientRect().width>0);const first=nodes[0],last=nodes[nodes.length-1];if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}}};document.addEventListener('keydown',escape);return()=>{document.body.style.overflow=old;document.removeEventListener('keydown',escape);previousFocus?.focus();};},[full]);
  useEffect(()=>{if(!c.fullscreen)setFull(false);},[c.fullscreen]);
-
  const invited=p.mode==='invited',requestedPair=invited?p.current.asset.replace('USD','-USD'):p.referencePair,pair=c.enabledSymbols.includes(requestedPair)?requestedPair:c.defaultSymbol,symbol=marketSymbol(pair),asset=pair.split('-')[0],locked=p.active?.contract??p.selected;
  const native=hasNativeFeed(pair),feed=useLiveMarket(native?pair:null,prefs.chartInterval,reset);
  const [drawing,setDrawing]=useState(false);useEffect(()=>setDrawing(false),[pair]);
  const [panel,setPanel]=useRoutePanel('/trade',['indicators','drawings','alerts'] as const);
-
  const canJoin=!sparkMode()&&!!p.selected&&!p.active&&!p.busy&&settings?.profile.closureStatus!=='requested'&&p.now>=p.selected.opens_at&&p.now<p.selected.closes_at&&!p.state?.positions.some(row=>row.contract_id===p.selected!.id);
-
- const contractDuration=locked?.duration_sec;
- const effectiveChip=contractDuration===60?'60s':contractDuration===120?'120s':contractDuration===300?'5min':contractDuration===600?'10min':(selectedChip||'60s');
-
- const balanceCents=p.state?.balanceCents??0;
- const availableBalance=(balanceCents/100).toFixed(2);
-
- const endsAt=p.active?.ends_at??(locked?.closes_at||(locked?p.now+locked.duration_sec*1000:0));
- const startsAt=p.active?.started_at??(locked?.opens_at||(locked?p.now:0));
- const timeRange=startsAt&&endsAt?formatRange(startsAt,endsAt):'20:20~20:21';
- const countdownSec=endsAt?Math.max(0,Math.ceil((endsAt-p.now)/1000)):(locked?.duration_sec??43);
- const countdownText=`${countdownSec} s`;
- const endTimeText=endsAt?formatDateTime(endsAt):'2026/2/3 20:20:00';
-
- const quoteChange=feed.data?.change??-3.62;
-
- const handleConfirmCode=()=>{
-  const codeStr=p.code.trim();
-  if(!codeStr){
-   toast.error(t('الرجاء إدخال رمز الطلب','Please enter order code'));
-   return;
-  }
-  p.lookup();
-  setConfirmSheetOpen(true);
- };
-
- const handleStartFollow=()=>{
-  if(!p.code.trim()&&locked?.code){
-   p.setCode(locked.code);
-  }
-  setConfirmSheetOpen(true);
- };
-
- const handleCopyHistory=async()=>{
-  const text=locked?`${locked.asset} · ${locked.direction} · ${percent(locked.settlement_bps)} · Code: ${locked.code}`:t('لا توجد بيانات صفقة محددة للنسخ','No loaded contract to copy');
-  try{await navigator.clipboard.writeText(text);toast.success(t('تم النسخ بنجاح','Copied successfully'));}catch{toast.info(text);}
- };
-
- const handlePasteCode=async()=>{
-  try{
-   const clip=await navigator.clipboard.readText();
-   if(clip)p.setCode(clip.trim().toUpperCase());
-  }catch{
-   toast.info(t('يمكنك كتابة كود الطلب مباشرة','Please enter the code directly'));
-  }
- };
-
- const handleDirectionClick=()=>{
-  if(!canJoin)return;
-  setConfirmSheetOpen(true);
- };
-
- const handleSheetConfirm=async()=>{
-  const val=Number(sheetAmount);
-  if(!sheetAmount.trim()||!Number.isFinite(val)||val<=0){
-   setInlineError(t('يرجى إدخال كمية صحيحة','Please enter a valid amount'));
-   return;
-  }
-  const amtCents=Math.round(val*100);
-  if(balanceCents>0&&amtCents>balanceCents){
-   setInlineError(`${t('الرصيد المتاح غير كافٍ','Insufficient balance')} (${availableBalance} USD)`);
-   return;
-  }
-  setInlineError('');
-  setConfirmSheetOpen(false);
-  p.setAmount(sheetAmount);
-  if(p.onExecuteCode&&p.code.trim()){
-   p.onExecuteCode(p.code,sheetAmount);
-  }else{
-   p.startJoin();
-  }
- };
-
- const positions=p.state?.positions??[];
-
- return <div className="reference-trade orin-trade-restyle" dir="rtl">
-  <AssetBackdrop pair={pair}/>
-  
-  {/* SCREEN 1: HEADER */}
-  <div className="trade-top-header">
-   <div className="trade-header-left">
-    <button type="button" className="trade-header-menu-btn" aria-label={t('العودة','Back')} onClick={p.onBack}>
-     <Menu size={22}/>
-    </button>
-    <span className="trade-header-title num">BTC / USDT</span>
-    <span className={`trade-header-change num ${quoteChange<0?'loss':'gain'}`} dir="ltr">
-     {quoteChange<0?'':'+'}{number(quoteChange)}%
-    </span>
-   </div>
-   <div className="trade-header-right">
-    <button type="button" className="trade-header-info-btn" aria-label={t('معلومات','Info')} onClick={()=>setOptions(!options)}>
-     <Info size={19}/>
-    </button>
-    <div className="trade-direction-pill" onClick={()=>setDirDropdown(!dirDropdown)}>
-     <span>{t('اتجاه','Direction')}</span>
-     <ChevronDown size={14}/>
-    </div>
-   </div>
-  </div>
-
+ const selectPair=(value:string)=>{if(invited&&['BTC-USD','ETH-USD','XAU-USD'].includes(value))p.onAsset(value.replace('-','') as Asset);else{p.setReferencePair(value);p.setMode('market');}void change({chartPair:value});};
+ return <div className="reference-trade"><AssetBackdrop pair={pair}/><div className="trade-titlebar"><button aria-label={t('العودة','Back')} onClick={p.onBack}><ArrowLeft/></button><SymbolSelector onSelect={selectPair} disabled={invited&&!!locked}><CoinIcon symbol={asset}/><span className="num">{symbol.label}</span><ChevronDown size={17}/></SymbolSelector>{enabled&&<button aria-label={t('المفضلة','Favorite')} disabled={busy} aria-pressed={favorites.includes(pair)} className={favorites.includes(pair)?'selected-star':''} onClick={()=>toggle(pair)}><Star/></button>}<button aria-label={t('تفاصيل العرض','Chart information')} onClick={()=>setOptions(!options)}><MoreHorizontal/></button></div>
   {options&&<div className="trade-options">{native?t('شموع مرجعية من Coinbase Exchange. مصدر بيانات البطاقة ووقت تحديثها موضحان أسفل السعر.','Reference candles from Coinbase Exchange. The card shows its quote source and update time below the price.'):t('المصدر TradingView. قد تتأخر الأسعار. وقت آخر سعر غير متاح عبر هذا التكامل لـ ORIN. تتحقق الأداة من اتصالها بالسوق؛ ORIN يستطيع اكتشاف انقطاع شبكة الجهاز فقط.','Source: TradingView. Quotes may be delayed. The last quote timestamp is not exposed to ORIN. The widget manages its market connection; ORIN can detect device network loss only.')}</div>}
   {pair!==requestedPair&&invited&&<p className="execution-note">{t('أصل العقد غير مفعّل في قائمة الشارت الحالية. الرمز الظاهر مرجع آخر ولا يغيّر العقد.','The contract asset is disabled in the chart list. The displayed reference symbol does not change your contract.')}</p>}
-  <div className="trade-price-summary" style={{display:'none'}}>{!marketReady?<ChartLoading/>:native?<LiveAssetQuote pair={pair}/>:null}</div>
-
-  {/* TIMEFRAME CHIPS */}
-  <div className="trade-timeframe-row" role="radiogroup" aria-label={t('الدورة الزمنية','Timeframe')}>
-   {TIMEFRAME_CHIPS.map(chip=><button key={chip.key} type="button" className={`trade-timeframe-chip ${effectiveChip===chip.key?'selected':''}`} onClick={()=>setSelectedChip(chip.key)}>{chip.label}</button>)}
-  </div>
-
-  {/* 3-COLUMN INFO ROW */}
-  <div className="trade-info-columns">
-   <div className="trade-info-col">
-    <span className="col-label">{t('الدورة الزمنية','Time cycle')}</span>
-    <span className="col-value num" dir="ltr">{timeRange}</span>
-   </div>
-   <div className="trade-info-col">
-    <span className="col-label">{t('العد التنازلي','Countdown')}</span>
-    <span className="col-value countdown-value num" dir="ltr">{countdownText}</span>
-   </div>
-   <div className="trade-info-col">
-    <span className="col-label">{t('وقت انتهاء الطلب','Order end time')}</span>
-    <span className="col-value num" dir="ltr">{endTimeText}</span>
-   </div>
-  </div>
-
-  {/* CANDLESTICK CHART */}
-  <div ref={stage} className={`trade-chart-card chart-stage ${full?'is-fullscreen':''}`} role={full?'dialog':undefined} aria-modal={full?true:undefined} aria-label={full?`${symbol.label} chart`:undefined}>
+  <div className="trade-price-summary">{!marketReady?<ChartLoading/>:native?<LiveAssetQuote pair={pair}/>:null}</div>
+  <div ref={stage} className={`chart-stage ${full?'is-fullscreen':''}`} role={full?'dialog':undefined} aria-modal={full?true:undefined} aria-label={full?`${symbol.label} chart`:undefined}>
    {full&&<div className="fullscreen-heading"><b>{symbol.label}</b><span>Market Reference</span><button aria-label={t('إغلاق التكبير','Exit fullscreen')} onClick={()=>setFull(false)}><Minimize2/></button></div>}
-   <div className="chart-header-sub">
-    <div className="chart-header-item">
-     <span>{t('مشاركة الوقت','Time sharing')}</span>
-     <ChevronDown size={13}/>
-    </div>
-    <div className="chart-header-item">
-     <span>VOL</span>
-     <ChevronDown size={13}/>
-    </div>
-   </div>
-   <div className="detail-chart tradingview-detail">
-    <Suspense fallback={<ChartLoading/>}>{marketReady?native?<ResilientCandles feed={feed} pair={pair} retry={()=>setReset(x=>x+1)} drawing={drawing} revision={reset}/>:<TradingViewChart key={reset} symbol={symbol.tv}/>:<ChartLoading/>}</Suspense>
-   </div>
-   <div className="trade-chart-illustrative-label">
-    {t('بيانات توضيحية','Illustrative data')}
-   </div>
-   <div className="trade-timeframes hidden-test-timeframes" style={{display:'none'}}>
-    {c.enabledTimeframes.map(f=><button key={f} disabled={busy} className={prefs.chartInterval===f?'active':''} onClick={()=>void change({chartInterval:f as Preferences['chartInterval']})}>{FRAME_NAMES[f]}</button>)}
-   </div>
+   <div className="trade-timeframes">{c.enabledTimeframes.map(f=><button key={f} disabled={busy} className={prefs.chartInterval===f?'active':''} onClick={()=>void change({chartInterval:f as Preferences['chartInterval']})}>{FRAME_NAMES[f]}</button>)}{c.fullscreen&&<button aria-label={t('تكبير الشارت','Fullscreen chart')} onClick={()=>setFull(!full)}>{full?<Minimize2 size={17}/>:<Maximize2 size={17}/>}</button>}</div>
+   {native&&drawing&&<p className="native-draw-hint">{t('المس نقطتين لرسم خط اتجاه. الرسم مؤقت لهذا العرض.','Tap two points to draw a trend line. Drawing is temporary for this view.')}</p>}
+   <div className="detail-chart tradingview-detail"><Suspense fallback={<ChartLoading/>}>{marketReady?native?<ResilientCandles feed={feed} pair={pair} retry={()=>setReset(x=>x+1)} drawing={drawing} revision={reset}/>:<TradingViewChart key={reset} symbol={symbol.tv}/>:<ChartLoading/>}</Suspense></div>
+   <div className="chart-tool-row"><button onClick={()=>setPanel('indicators')}><SlidersHorizontal/>{t('المؤشرات','Indicators')}{prefs.indicators.length>0&&<i>{prefs.indicators.length}</i>}</button><button aria-pressed={native?drawing:undefined} onClick={()=>native?setDrawing(x=>!x):setPanel('drawings')}><Pencil/>{t('رسم وتحليل','Draw')}</button><button onClick={()=>setPanel('alerts')}><Bell/>{t('التنبيهات','Alerts')}</button><button onClick={()=>setReset(x=>x+1)}><RefreshCw/>{t('إعادة العرض','Reset view')}</button></div>
   </div>
-
-  {/* TABS BELOW CHART */}
-  <div className="trade-subtabs-row" role="tablist">
-   <button role="tab" aria-selected={subTab==='plan'} className={`trade-subtab-btn ${subTab==='plan'?'active':''}`} onClick={()=>setSubTab('plan')}>{t('خطة المتابعة','Follow-up plan')}</button>
-   <button role="tab" aria-selected={subTab==='invites'} className={`trade-subtab-btn ${subTab==='invites'?'active':''}`} onClick={()=>setSubTab('invites')}>{t('دعواتي','My invitations')}</button>
-   <button role="tab" aria-selected={subTab==='history'} className={`trade-subtab-btn ${subTab==='history'?'active':''}`} onClick={()=>setSubTab('history')}>{t('الطلبات التاريخية','Historical orders')}</button>
-   <button role="tab" aria-selected={subTab==='positions'} className={`trade-subtab-btn ${subTab==='positions'?'active':''}`} onClick={()=>setSubTab('positions')}>{t('المراكز','Positions')}</button>
+  <div className="order-modes" role="tablist" aria-label={t('نوع الأمر','Order type')}>
+   {[['market',t('سوق','Market')],['limit',t('أمر محدد','Limit')],['invited',t('دعائي','Invited')]].map(([v,label])=><button role="tab" aria-selected={p.mode===v} className={p.mode===v?'active':''} onClick={()=>p.setMode(v)} key={v}>{label}</button>)}
   </div>
-
-  {/* TAB 1: SCREEN 1 ("دعواتي") */}
-  {subTab==='invites'&&(
-   <div className="trade-invites-panel">
-    <div className="trade-actions-duo">
-     <button type="button" className="trade-btn-copy-history" onClick={handleCopyHistory}>
-      <Copy size={16}/>
-      <span>{t('نسخ التاريخ','Copy history')}</span>
-     </button>
-     <button type="button" className="trade-btn-start-follow" onClick={handleStartFollow}>
-      <PlusCircle size={16}/>
-      <span>{t('بدء أمر المتابعة','Start follow order')}</span>
-     </button>
-    </div>
-    <div className="trade-code-input-row">
-     <div className="trade-code-input-wrap">
-      <input className="trade-code-field mono" placeholder={t('الرجاء إدخال رمز الطلب','Please enter order code')} value={p.code} onChange={e=>p.setCode(e.target.value.toUpperCase())} onKeyDown={e=>{if(e.key==='Enter')handleConfirmCode();}} maxLength={30} autoCapitalize="characters" spellCheck={false}/>
-      <button type="button" className="trade-code-paste-btn" aria-label={t('لصق الكود','Paste code')} onClick={handlePasteCode}>
-       <ClipboardPaste size={18}/>
-      </button>
-     </div>
-     <button type="button" className="trade-code-submit-btn" disabled={!p.code.trim()||p.busy} onClick={handleConfirmCode}>
-      {p.busy?t('جارِ التحقق…','Verifying…'):t('تأكيد','Confirm')}
-     </button>
-    </div>
-    {locked&&<div className="trade-locked-preview"><LockKeyhole size={14}/><span>{t('التسوية المقفلة:','Locked settlement:')} <b className="num gain">{percent(locked.settlement_bps)}</b> · {locked.duration_sec/60} {t('دقيقة','min')}</span></div>}
+  {invited&&<div className="invite-inline">
+   <label htmlFor="invite-code">{t('كود الدعوة','Invitation code')}</label>
+   <div>
+    <input id="invite-code" placeholder="LAB-XXXXXXXXXX" value={p.code} onChange={e=>p.setCode(e.target.value.toUpperCase())} onKeyDown={e=>{if(e.key==='Enter'){if(p.onExecuteCode&&p.code.trim())p.onExecuteCode(p.code,p.amount);else p.lookup();}}} maxLength={30} autoCapitalize="characters" spellCheck={false}/>
+    <button onClick={()=>{if(p.onExecuteCode&&p.code.trim())p.onExecuteCode(p.code,p.amount);else p.lookup();}} disabled={!p.state||!p.code.trim()||p.busy}>{p.busy?t('جارِ التحقق…','Verifying…'):t('تحقق','Verify')}</button>
    </div>
-  )}
-
-  {/* TAB 2: SCREEN 3 ("الطلبات التاريخية") */}
-  {subTab==='history'&&(
-   <div className="trade-history-list">
-    {positions.length>0?positions.map(pos=>{
-     const isBuy=pos.contract.direction==='BUY';
-     const isPositive=pos.result_cents>=0;
-     return <div key={pos.id} className="trade-history-card">
-      <div className={`trade-history-status ${pos.status==='active'?'active':'settled'}`}>
-       {pos.status==='active'?t('تم الافتتاح','Opened'):t('تمت التسوية','Settled')}
-      </div>
-      <div className="trade-history-grid">
-       <div className="trade-history-row">
-        <span className="label">{t('المنتج','Product')}</span>
-        <span className="value num">{pos.contract.asset}</span>
-       </div>
-       <div className="trade-history-row">
-        <span className="label">{t('الاتجاه','Direction')}</span>
-        <span className={`value ${isBuy?'gain':'loss'}`}>{isBuy?t('ارتفاع','Up'):t('انخفاض','Down')}</span>
-       </div>
-       <div className="trade-history-row">
-        <span className="label">{t('الدورة الزمنية','Time cycle')}</span>
-        <span className="value num" dir="ltr">{pos.contract.duration_sec}s ({formatRange(pos.started_at,pos.ends_at)})</span>
-       </div>
-       <div className="trade-history-row">
-        <span className="label">{t('الكمية','Quantity')}</span>
-        <span className="value num" dir="ltr">{(pos.amount_cents/100).toFixed(2)}</span>
-       </div>
-       <div className="trade-history-row">
-        <span className="label">{t('وقت الفتح','Open time')}</span>
-        <span className="value num" dir="ltr">{formatDateTime(pos.started_at)}</span>
-       </div>
-       <div className="trade-history-row">
-        <span className="label">{t('وقت الانتهاء','End time')}</span>
-        <span className="value num" dir="ltr">{formatDateTime(pos.ends_at)}</span>
-       </div>
-       <div className="trade-history-row">
-        <span className="label">{t('الربح أو الخسارة','Profit/Loss')}</span>
-        <span className={`value num ${isPositive?'gain':'loss'}`} dir="ltr">{isPositive?'+':''}{(pos.result_cents/100).toFixed(2)}</span>
-       </div>
-       <div className="trade-history-row">
-        <span className="label">{t('معدل العائد','Return rate')}</span>
-        <span className="value num" dir="ltr">{(pos.contract.settlement_bps/100).toFixed(2)}%</span>
-       </div>
-      </div>
-     </div>;
-    }):<div className="trade-history-empty"><p>{t('لا توجد طلبات تاريخية حالياً.','No historical orders yet.')}</p></div>}
-   </div>
-  )}
-
-  {subTab==='plan'&&(
-   <div className="trade-tab-panel-simple">
-    <div className="plan-card">
-     <h3>{t('خطة المتابعة الآمنة','Secure Follow-up Plan')}</h3>
-     <p>{t('تتبع الصفقات وفق معايير إدارة المخاطر والشروط المقفلة مسبقاً لكل دورة تداول.','Execute trades per locked terms and predefined settlement criteria.')}</p>
-     <ul>
-      <li>{t('نسبة العائد مقفلة رقمياً لكل صفقة','Locked cryptographic return rate per signal')}</li>
-      <li>{t('تحديث فوري لنتائج المحفظة عند انتهاء المؤقت','Instant wallet settlement upon timer expiration')}</li>
-     </ul>
-    </div>
-   </div>
-  )}
-
-  {subTab==='positions'&&(
-   <div className="trade-tab-panel-simple">
-    {p.active?<div className="active-ticket">
-     <div><span>{t('المركز نشط','Position active')}</span><strong className="num">{remaining(p.active.ends_at-p.now)}</strong></div>
-     <div><span>{t('نتيجة العقد عند اكتماله','Result at maturity')}</span><b className={`num ${p.active.result_cents>=0?'gain':'loss'}`}>{p.active.result_cents>=0?'+':''}{number(p.active.result_cents/100)} USD</b></div>
-     <progress value={p.progress} max="1"/>
-     <small>{t('تسوية داخلية مقفلة؛ لا تتغير مع الشارت.','Locked internal settlement; independent of the chart.')}</small>
-    </div>:<div className="trade-history-empty"><p>{t('لا توجد مراكز نشطة حالياً.','No active positions currently.')}</p></div>}
-   </div>
-  )}
-
-  {sparkMode()&&<div className="execution-note" style={{display:'none'}}><LockKeyhole size={14}/>{t('عرض السوق فقط. التداول وحجز الأرصدة غير مفعلين في هذه النسخة.','Trading and balance allocation are unavailable in this release.')}</div>}
-
-  {/* BOTTOM BAR: TWO ROUNDED BUTTONS (ارتفاع / انخفاض) */}
-  <div className="trade-bottom-action-bar">
-   <button className="buy" disabled={sparkMode()||!canJoin||locked?.direction!=='BUY'} onClick={handleDirectionClick}>
-    <div className="dir-label-group">
-     <ArrowUpRight size={20}/>
-     <span>{t('ارتفاع','Up')}</span>
-    </div>
-    <span className="dir-rate num">
-     {locked?.direction==='BUY'?`${(locked.settlement_bps/100).toFixed(2)}%`:'--'}
-    </span>
-   </button>
-   <button className="sell" disabled={sparkMode()||!canJoin||locked?.direction!=='SELL'} onClick={handleDirectionClick}>
-    <div className="dir-label-group">
-     <ArrowDownRight size={20}/>
-     <span>{t('انخفاض','Down')}</span>
-    </div>
-    <span className="dir-rate num">
-     {locked?.direction==='SELL'?`${(locked.settlement_bps/100).toFixed(2)}%`:'--'}
-    </span>
-   </button>
+   <InvitationActions onCode={p.setCode}/>
+   {locked&&<span className="locked-inline"><LockKeyhole size={14}/>{t('التسوية المقفلة','Locked settlement')} <b className="num">{percent(locked.settlement_bps)}</b> · {locked.duration_sec/60} {t('دقيقة','min')}</span>}
+  </div>}
+  {p.active&&invited&&<div className="active-ticket">
+   <div><span>{t('المركز نشط','Position active')}</span><strong className="num">{remaining(p.active.ends_at-p.now)}</strong></div>
+   <div><span>{t('نتيجة العقد عند اكتماله','Result at maturity')}</span><b className={`num ${p.active.result_cents>=0?'gain':'loss'}`}>{p.active.result_cents>=0?'+':''}{number(p.active.result_cents/100)} USD</b></div>
+   <progress value={p.progress} max="1"/>
+   <small>{t('تسوية داخلية مقفلة؛ لا تتغير مع الشارت.','Locked internal settlement; independent of the chart.')}</small>
+  </div>}
+  <label className="amount-label" htmlFor="trade-amount">{t('المبلغ','Amount')} <span className="num">(USD)</span></label>
+  <div className="trade-amount">
+   <button aria-label={t('إعادة تعيين المبلغ','Reset amount')} onClick={()=>p.setAmount('1000')} disabled={!!p.active&&invited}><RefreshCw size={16}/></button>
+   <input id="trade-amount" type="number" step="0.01" min="1" value={p.active&&invited?(p.active.amount_cents/100):p.amount} onChange={e=>p.setAmount(e.target.value)} disabled={!!p.active&&invited}/>
   </div>
-
-  {/* SCREEN 2: CONFIRM AMOUNT BOTTOM SHEET */}
-  {confirmSheetOpen&&(
-   <>
-    <div className="trade-sheet-backdrop" onClick={()=>setConfirmSheetOpen(false)}/>
-    <div className="trade-confirm-sheet" role="dialog" aria-modal="true">
-     <div className="trade-sheet-header">
-      <h3 className="trade-sheet-title">{t('تأكيد لمتابعة الطلب','Confirm follow order')}</h3>
-      <button type="button" className="trade-sheet-cancel" onClick={()=>setConfirmSheetOpen(false)}>
-       {t('إلغاء','Cancel')}
-      </button>
-     </div>
-     <label className="trade-sheet-label">
-      {t('كمية الطلب','Order quantity')} ({availableBalance})
-     </label>
-     <input type="number" step="0.01" min="1" className="trade-sheet-input-box num" value={sheetAmount} onChange={e=>{setSheetAmount(e.target.value);setInlineError('');}} autoFocus/>
-     {inlineError&&<div className="trade-sheet-error" role="alert">{inlineError}</div>}
-     <button type="button" className="trade-sheet-submit" onClick={handleSheetConfirm}>
-      {t('تحديد','Select')}
-     </button>
-    </div>
-   </>
-  )}
-
+  <div className="amount-percent">
+   {[100,75,50,25].map(n=><button key={n} disabled={!p.state||(!!p.active&&invited)} onClick={()=>p.setAmount((Math.floor((p.state?.balanceCents??0)*n/100)/100).toFixed(2))}>{n}%</button>)}
+  </div>
+  <div className="trade-totals">
+   <div><span>{t('الرسوم','Fees')}</span><b className="num">{invited&&!sparkMode()?`${number(0)} USD`:'—'}</b></div>
+   <div><span>{t('الإجمالي','Total')}</span><b className="num">{Number.isFinite(Number(p.amount))?number(Number(p.amount)):'—'} USD</b></div>
+  </div>
+  {(!invited||sparkMode())&&<div className="execution-note"><LockKeyhole size={14}/>{sparkMode()?t('عرض السوق فقط. التداول وحجز الأرصدة غير مفعلين في هذه النسخة.','Market view only. Trading and balance allocation are unavailable in this release.'):t('تنفيذ أوامر السوق غير متصل. استخدم «دعائي» للعقود الداخلية.','Market execution is not connected. Use Invited for internal contracts.')}</div>}
+  <div className="buy-sell-row">
+   <button className="buy" disabled={!invited||!canJoin||locked?.direction!=='BUY'} onClick={p.startJoin}>{t('شراء','Buy')} <span>BUY</span></button>
+   <button className="sell" disabled={!invited||!canJoin||locked?.direction!=='SELL'} onClick={p.startJoin}>{t('بيع','Sell')} <span>SELL</span></button>
+  </div>
+  <p className="trade-disclosure">{invited?t('حساب تجريبي · النتيجة وفق شروط العقد، لا حركة السوق.','Demo account · Settlement follows the contract terms, not market movement.'):'Market Reference · '+t('للقراءة فقط','View only')}</p>
   <Dialog open={panel!==null} onOpenChange={v=>{if(!v)setPanel(null)}}><DialogContent className="popup chart-tools-dialog" dir={prefs.chartLocale==='ar'?'rtl':'ltr'}><DialogHeader><DialogTitle>{panel==='indicators'?t('المؤشرات','Indicators'):panel==='drawings'?t('رسم وتحليل','Drawing & analysis'):t('تنبيهات الأسعار','Price alerts')}</DialogTitle><DialogDescription>{panel==='indicators'?t('اختر من المؤشرات التي فعّلتها الإدارة.','Choose from the indicators enabled by your administrator.'):t('حالة التكامل الحالي','Current integration capability')}</DialogDescription></DialogHeader>{panel==='indicators'?<div className="indicator-list">{c.allowedIndicators.map(k=><button key={k} disabled={status==='saving'||status==='loading'} aria-pressed={prefs.indicators.includes(k)} onClick={()=>void change({indicators:prefs.indicators.includes(k)?prefs.indicators.filter(x=>x!==k):[...prefs.indicators,k]})}><span><b>{INDICATOR_NAMES[k]}</b><small>{native?({MA:'9',EMA:'9',RSI:'14',MACD:'12 / 26 / 9',BB:'20 / 2'} as Record<string,string>)[k]:t('إعدادات المؤشر','Indicator parameters')}</small></span>{prefs.indicators.includes(k)?<Check/>:<span className="empty-check"/>}</button>)}{!c.allowedIndicators.length&&<p>{t('لا توجد مؤشرات مفعّلة.','No indicators enabled.')}</p>}</div>:<div className="capability-message"><LockKeyhole/><p>{panel==='drawings'?t('لوحة رسم ORIN وحفظ الرسومات غير متصلين. يحتاجان تكاملًا يدعم أدوات الرسم عبر API لمعالجة الرسومات وحفظها.','An ORIN drawing panel and drawing storage are not connected. They require an integration with a drawing API.'):t('تنبيهات الأسعار غير متاحة في هذا التكامل؛ تحتاج بيانات أسعار تصل إلى الخادم وخدمة Push متصلة. إشعارات العقود متاحة في مركز الإشعارات.','Price alerts require a server-side price feed and a connected push service. Contract notifications are available in the notification center.')}</p>{panel==='alerts'&&<button className="btn-outline full" onClick={()=>{setPanel(null);p.onNotifications();}}>{t('إشعارات العقود','Contract notifications')}</button>}</div>}</DialogContent></Dialog>
  </div>;
 }

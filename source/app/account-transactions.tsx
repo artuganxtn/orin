@@ -23,7 +23,7 @@ export function AccountTransactions({state}:{state:LabState|null}){
   return()=>{disposed=true;clearInterval(timer);window.removeEventListener('online',read);document.removeEventListener('visibilitychange',read)};
  },[open,state?.user.id,account?.id]);
  const visible=snapshot?.account.id===account?.id?snapshot:null;
- const rows=(visible?.transactions ?? []).filter(r=>filter==='all'||r.kind===filter)??[];
+ const rows=visible?.transactions.filter(r=>filter==='all'||r.kind===filter)??[];
  const exportPdf=async()=>{if(!visible||exporting.current)return;exporting.current=true;setBusy(true);try{await saveStatement(visible,prefs.chartLocale==='ar')}catch{setError(t('تعذر إنشاء كشف PDF. تحقق من المساحة المتاحة وحاول مجددًا.','Could not create the PDF. Check available storage and try again.'))}finally{exporting.current=false;setBusy(false)}};
  return <FullPage open={open} onOpenChange={v=>{if(!v)nav.back('/')}}><FullPageContent pageClassName="orin-activity-screen" navTitle={<strong>{t('المعاملات','Transactions')}</strong>}>
  <header className="activity-heading"><span className="activity-mark"><ArrowLeftRight/></span><div><h1>{t('المعاملات الأخيرة','Recent transactions')}</h1><p>{account?t(account.type==='real'?'حساب حقيقي':'حساب تجريبي',account.type==='real'?'Real account':'Demo account'):t('الحساب','Account')} <bdi>{account?.accountNumber} · USD</bdi></p></div></header>
