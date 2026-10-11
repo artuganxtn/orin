@@ -9,7 +9,7 @@ import {LiveAssetQuote,LiveQuoteSparkline,useMarketQuote} from './market-quote';
 import {hasNativeFeed} from '@/lib/live-market';
 import {useRoutePanel,useNavigation} from './orin-navigation';
 import {lazy,Suspense,useEffect,useRef,useState} from 'react';
-import {ArrowLeft,ArrowUpFromLine,Bell,ChartNoAxesCombined,ChevronDown,Eye,EyeOff,Info,LockKeyhole,Maximize2,Minimize2,MoreHorizontal,Pencil,RefreshCw,Search,SlidersHorizontal,Star,Users,Wallet,Check,CheckCircle2,KeyRound,ClipboardList,Timer,ShieldCheck} from 'lucide-react';
+import {ArrowLeft,ArrowUpFromLine,Bell,ChartNoAxesCombined,ChevronDown,Eye,EyeOff,Info,LockKeyhole,Maximize2,Minimize2,MoreHorizontal,Pencil,RefreshCw,Search,SlidersHorizontal,Star,Users,Wallet,Check,CheckCircle2,KeyRound,ClipboardList,Timer,ShieldCheck,ShieldAlert,Clock} from 'lucide-react';
 import {FullPage as Dialog,FullPageContent as DialogContent,FullPageHeader as DialogHeader,FullPageTitle as DialogTitle,FullPageDescription as DialogDescription} from './full-page';
 import {Select,SelectTrigger,SelectContent,SelectItem} from '@/components/ui/select';
 import {SuccessRing} from './reference-charts';
@@ -61,18 +61,49 @@ function HomeKycBanner() {
 
   if (kycStatus === 'verified') return null;
 
+  const isReview = kycStatus === 'review' || kycStatus === 'pending';
+  const isRejected = kycStatus === 'rejected';
+
   return (
     <section className="kyc-overview-card home-kyc-banner" style={{ margin: '12px 0', padding: '16px', background: 'var(--orin-surface)', border: '1px solid var(--orin-line)', borderRadius: '16px' }}>
       <div className="kyc-overview-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
         <div className="kyc-overview-title" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <ShieldCheck size={28} style={{ color: '#0788ff', flex: 'none' }} />
+          {isReview ? (
+            <Clock size={28} style={{ color: '#f59e0b', flex: 'none' }} />
+          ) : isRejected ? (
+            <ShieldAlert size={28} style={{ color: '#ff4d5e', flex: 'none' }} />
+          ) : (
+            <ShieldCheck size={28} style={{ color: '#0788ff', flex: 'none' }} />
+          )}
           <div>
-            <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 600 }}>{t('أكمل تأكيد هويتك', 'Complete Identity Verification')}</h3>
-            <p style={{ margin: '2px 0 0', fontSize: '12px', color: 'var(--orin-muted)' }}>{t('استكمل بيانات حسابك لإتمام الإيداع والتداول والسحب.', 'Complete your account details for deposits, trading, and withdrawals.')}</p>
+            <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 600 }}>
+              {isReview
+                ? t('طلب التوثيق قيد المراجعة', 'KYC Request Under Review')
+                : isRejected
+                ? t('تم رفض طلب التوثيق', 'KYC Request Rejected')
+                : t('أكمل تأكيد هويتك', 'Complete Identity Verification')}
+            </h3>
+            <p style={{ margin: '2px 0 0', fontSize: '12px', color: 'var(--orin-muted)' }}>
+              {isReview
+                ? t('تم استلام وثائقك وهي قيد المراجعة من قبل فريق الامتثال.', 'Your documents were received and are under review by compliance.')
+                : isRejected
+                ? t('يرجى مراجعة سبب الرفض وإعادة تقديم وثيقة صالحة.', 'Please review rejection reason and re-submit a valid document.')
+                : t('استكمل بيانات حسابك لإتمام الإيداع والتداول والسحب.', 'Complete your account details for deposits, trading, and withdrawals.')}
+            </p>
           </div>
         </div>
-        <button type="button" className="btn-primary kyc-action-btn" style={{ padding: '8px 18px', fontSize: '13px', borderRadius: '10px' }} onClick={() => navigate('/settings/kyc')}>
-          {t('تحقق الآن', 'Verify Now')}
+        <button
+          type="button"
+          className="btn-primary kyc-action-btn"
+          style={{
+            padding: '8px 18px',
+            fontSize: '13px',
+            borderRadius: '10px',
+            background: isReview ? '#f59e0b' : isRejected ? '#ff4d5e' : '#0788ff'
+          }}
+          onClick={() => navigate('/settings/kyc')}
+        >
+          {isReview ? t('متابعة حالة التوثيق', 'Check Status') : isRejected ? t('إعادة التقديم', 'Re-submit') : t('تحقق الآن', 'Verify Now')}
         </button>
       </div>
     </section>

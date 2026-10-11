@@ -425,6 +425,21 @@ api.post('/invitations/verify', async (req: Request, res: Response) => {
 });
 
 // Control Center endpoints
+api.get('/control/session', async (req: Request, res: Response) => {
+  try {
+    res.json({
+      id: 'session-' + req.user!.id,
+      uid: req.user!.id,
+      role: req.user!.role || 'admin',
+      roles: ['admin', 'operations', 'compliance', 'finance'],
+      status: 'active',
+      createdAt: Date.now()
+    });
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message, code: err.code });
+  }
+});
+
 api.get('/control/queues', async (req: Request, res: Response) => {
   try {
     const result = await operationQueues(req.user!, (req.user as any).roles || []);
@@ -465,6 +480,74 @@ api.get('/control/staff', async (req: Request, res: Response) => {
   try {
     const result = await controlRead(req.user!, 'staff');
     res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message, code: err.code });
+  }
+});
+
+api.get('/control/user', async (req: Request, res: Response) => {
+  try {
+    const uid = String(req.query.uid || req.query.id || '');
+    const result = await withTx(async (client) => {
+      const pRes = await client.query('SELECT * FROM profiles WHERE id = $1', [uid]);
+      if (pRes.rowCount === 0) throw Object.assign(new Error('User not found'), { status: 404 });
+      const p = pRes.rows[0];
+      const accRes = await client.query('SELECT * FROM accounts WHERE user_id = $1', [uid]);
+      return {
+        id: p.id,
+        uid: p.id,
+        email: p.email,
+        displayName: p.display_name,
+        role: p.role,
+        disabled: p.disabled,
+        accounts: accRes.rows.map(a => ({
+          id: a.id,
+          type: a.type,
+          balanceCents: Number(a.balance_cents),
+          status: a.status
+        }))
+      };
+    });
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message, code: err.code });
+  }
+});
+
+api.get('/control/:module', async (req: Request, res: Response) => {
+  try {
+    const moduleName = String(req.params.module || '');
+    const result = await controlRead(req.user!, moduleName, req.query);
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message, code: err.code });
+  }
+});
+
+api.get('/experience/admin/users', async (req: Request, res: Response) => {
+  try {
+    const result = await withTx(async (client) => {
+      const qRes = await client.query('SELECT id AS uid, display_name AS "displayName", email, role, disabled, created_at AS "createdAt" FROM profiles ORDER BY created_at DESC LIMIT 1000');
+      return { users: qRes.rows.map(r => ({ ...r, createdAt: new Date(r.createdAt).getTime() })), truncated: false };
+    });
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message, code: err.code });
+  }
+});
+
+api.get('/experience/admin/requests', async (req: Request, res: Response) => {
+  try {
+    res.json({ requests: [] });
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message, code: err.code });
+  }
+});
+
+api.get('/experience/admin/audit', async (req: Request, res: Response) => {
+  try {
+    const result = await readAudit(req.user!, req.query);
+    res.json({ events: result.rows });
   } catch (err: any) {
     res.status(err.status || 400).json({ error: err.message, code: err.code });
   }
