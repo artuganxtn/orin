@@ -1,6 +1,7 @@
 import { withTx, pool } from './db.ts';
 import { createHash } from 'node:crypto';
 import { getTradingAccounts } from './client-services.ts';
+import { requireVerifiedKyc } from './kyc.ts';
 
 export interface Identity {
   id: string;
@@ -92,6 +93,8 @@ export async function join(u: Identity, input: any, now = Date.now()) {
   }
 
   return withTx(async (client) => {
+    await requireVerifiedKyc(u, client);
+
     // 1. Fetch Contract
     const cRes = await client.query(
       `SELECT c.*, COALESCE(r.revoked, false) AS is_revoked

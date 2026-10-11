@@ -8,6 +8,7 @@ export type SecurityStepAction='totp.enroll'|'totp.disable'|'recovery.regenerate
 type Runtime={base?:string;token:(force?:boolean)=>Promise<string|null>;uid:()=>string|null;exchangeToken:(token:string)=>Promise<void>;onRevoked:()=>void;reauthenticate:(password:string)=>Promise<string>};
 let runtime:Runtime|null=null,session:SecuritySession|null=null,refreshing:Promise<void>|null=null,sessionReadyAt=0,pendingPrimaryToken:string|null=null;
 const SESSION_KEY='orin-security-session-v1';
+const TRUST_KEY='orin-trusted-device-v1';
 export class AccountSecurityError extends Error{constructor(public code:string,message:string,public status=503){super(message);this.name='AccountSecurityError'}}
 function isValidSecurityEndpoint(base:string){
  if(!base || base==='') return true;

@@ -3,6 +3,7 @@ import { recordConfirmedDeposit } from './program-ingestion.ts';
 import { NowPayments, providerId, units, validIpn } from './nowpayments.ts';
 import { PAYMENT_COINS, type DepositView, type DepositStatus } from '../../lib/payments';
 import { createHash } from 'node:crypto';
+import { requireVerifiedKyc } from './kyc.ts';
 
 export type Data = Record<string, any>;
 export interface Identity {
@@ -33,7 +34,7 @@ const depositView = (d: Data): DepositView => ({
   status: d.status,
   paymentId: d.payment_id ?? d.paymentId ?? null,
   address: d.pay_address ?? d.address ?? null,
-  payAmount: d.pay_amount ? String(d.pay_amount) : null,
+  payAmount: d.pay_amount ? String(d.pay_amount) : (d.payAmount ? String(d.payAmount) : null),
   extraId: d.extra_id ?? d.extraId ?? null,
   credited: !!d.credited,
   createdAt: d.created_at ? new Date(d.created_at).getTime() : d.createdAt
@@ -70,6 +71,8 @@ export function paymentService(provider: Pick<NowPayments, 'create' | 'get'>, ip
       if (gateRes.rows[0]?.status === 'suspended' || gateRes.rows[0]?.status === 'restricted') {
         throw new ApiError('الحساب موقوف.', 403);
       }
+
+      await requireVerifiedKyc(u, client);
 
       // 2. Check real USD account
       const accRes = await client.query('SELECT * FROM accounts WHERE user_id = $1 AND id = $2', [u.id, accountId]);
@@ -204,9 +207,9 @@ export function paymentService(provider: Pick<NowPayments, 'create' | 'get'>, ip
 
       await client.query(
         `UPDATE deposits
-         SET payment_id = $1, pay_address = $2, status = $3, updated_at = NOW()
-         WHERE id = $4`,
-        [pid, payment.pay_address, reversal ? 'review' : (row.credited ? 'finished' : status), safeOrderId]
+         SET payment_id = $1, pay_address = $2, pay_amount = $3, extra_id = $4, status = $5, updated_at = NOW()
+         WHERE id = $6`,
+        [pid, payment.pay_address, String(payment.pay_amount ?? ''), payment.payin_extra_id ?? payment.extra_id ?? null, reversal ? 'review' : (row.credited ? 'finished' : status), safeOrderId]
       );
 
       return row;

@@ -96,7 +96,8 @@ const migrationFiles = [
   '003_docs_and_indexes.sql',
   '004_audit_unique_action_reference.sql',
   '005_grant_reconciliation_view.sql',
-  '006_grant_app_permissions.sql'
+  '006_grant_app_permissions.sql',
+  '007_deposits_pay_amount_and_extra_id.sql'
 ];
 
 for (const file of migrationFiles) {
@@ -210,6 +211,9 @@ await appClient.query(`
   VALUES ('acc-bob-real', 'bob', '222233334444', 'real', 'USD', 0, 'active')
   ON CONFLICT (id) DO NOTHING;
 `);
+
+await recordVerifiedCustomer('alice', '77a2ce4cc4ab8bcc48e2162914d5c85f59f9159f6cd050969ad76a7e7dcb0499', 'kyc-alice', '2222');
+await recordVerifiedCustomer('bob', '67a2ce4cc4ab8bcc48e2162914d5c85f59f9159f6cd050969ad76a7e7dcb0455', 'kyc-bob', '1111');
 
 const secret = 'TEST-IPN-SECRET-2026';
 let serial = 100000;
@@ -435,6 +439,8 @@ const bonusLossContract = await publish({ id: 'admin1' }, {
   eligibility: 'all'
 }, contractNow);
 
+await recordVerifiedCustomer('carol', '88a2ce4cc4ab8bcc48e2162914d5c85f59f9159f6cd050969ad76a7e7dcb0488', 'kyc-carol', '3333');
+
 const carolJoin = await join({ id: 'carol' }, {
   code: bonusLossContract.code,
   amountCents: 10000,
@@ -560,6 +566,13 @@ assert.equal(userARow.rowCount, 1);
 const userAAcc = await appClient.query("SELECT * FROM accounts WHERE user_id = 'userA'");
 assert.equal(userAAcc.rowCount, 1);
 const accAId = userAAcc.rows[0].id;
+
+await appClient.query(`
+  INSERT INTO customer_registry (customer_key, user_id)
+  VALUES ('ck-userA', 'userA') ON CONFLICT DO NOTHING;
+  INSERT INTO verified_customers (user_id, customer_key, id_number_last4, verified, revoked, event_id)
+  VALUES ('userA', 'ck-userA', '8888', true, false, 'ev-userA') ON CONFLICT DO NOTHING;
+`);
 console.log(`[PASS] User A profile & account created automatically on first request (ID: ${accAId}).`);
 
 // 2. Deposit Webhook
@@ -891,12 +904,12 @@ console.log('[PASS] User status restricted (0 journals created).');
 const dummyKycReqId = 'kyc-req-test-123';
 await appClient.query(`
   INSERT INTO customer_registry (customer_key, user_id)
-  VALUES ('dummy_ck_123', 'userA')
-  ON CONFLICT (customer_key) DO NOTHING;
+  VALUES ('ck-userA', 'userA')
+  ON CONFLICT (user_id) DO NOTHING;
 `);
 await appClient.query(`
   INSERT INTO kyc_requests (id, user_id, customer_key, status, reason)
-  VALUES ($1, 'userA', 'dummy_ck_123', 'pending', 'User review')
+  VALUES ($1, 'userA', 'ck-userA', 'pending', 'User review')
   ON CONFLICT (id) DO NOTHING;
 `, [dummyKycReqId]);
 

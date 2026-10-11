@@ -15,8 +15,7 @@ import {createProgramTransport} from './program-transport';
 import React,{lazy,Suspense,useEffect,useState,useCallback} from 'react';
 import {createRoot} from 'react-dom/client';
 import {onAuthStateChanged,signOut,type User,connectAuthEmulator,getAuth,inMemoryPersistence,setPersistence,signInWithEmailAndPassword,signInWithCustomToken,EmailAuthProvider,reauthenticateWithCredential} from 'firebase/auth';
-import {doc,onSnapshot,connectFirestoreEmulator} from 'firebase/firestore';
-import {app,auth,db,ensureProfile,to,AuthForm,type Profile} from './account';
+import {app,auth,ensureProfile,to,AuthForm,type Profile} from './account';
 import {configureFirebaseTransport,apiFetch} from '../lib/client-api';
 import {safeDestination} from '../lib/orin-routes';
 import {PERMISSIONS,type Permission,type ControlSession} from '../lib/control-center';
@@ -52,12 +51,12 @@ import '../app/settings-refresh.css';
 const ADMIN_EMAILS = ['khtaub7341@gmail.com', 'khtaub99@gmail.com', 'mm@mm.mm'];
 const isOwnerEmail=(e?:string|null)=>{const em=e?.toLowerCase().trim()??'';return ADMIN_EMAILS.some(a=>a.toLowerCase()===em);};
 configurePayments({base:import.meta.env.VITE_ORIN_PAYMENTS_API_URL,token:async()=>{await auth.authStateReady();return auth.currentUser?.getIdToken()??null}});
-const chatService=supportTransport(db,()=>auth.currentUser?.uid??'',createProgramTransport(import.meta.env.VITE_ORIN_PROGRAM_API_URL,async()=>auth.currentUser?.getIdToken()??null)),referralService=referralTransport(db,createProgramTransport(import.meta.env.VITE_ORIN_PROGRAM_API_URL,async()=>auth.currentUser?.getIdToken()??null));
+const chatService=supportTransport(null,()=>auth.currentUser?.uid??'',createProgramTransport(import.meta.env.VITE_ORIN_PROGRAM_API_URL,async()=>auth.currentUser?.getIdToken()??null)),referralService=referralTransport(null,createProgramTransport(import.meta.env.VITE_ORIN_PROGRAM_API_URL,async()=>auth.currentUser?.getIdToken()??null));
 const loadWorkspace=()=>import('../app/trading-workspace');
 const loadDashboard=()=>import('./control-center').then(m=>({default:m.ControlCenter}));
 const OrinApp=lazy(loadWorkspace),Dashboard=lazy(loadDashboard);
-if((import.meta.env.DEV||import.meta.env.MODE==='android-qa')&&import.meta.env.VITE_FIREBASE_EMULATORS==='true'){connectAuthEmulator(auth,'http://127.0.0.1:9099',{disableWarnings:true});connectFirestoreEmulator(db,'127.0.0.1',8080)}
-configureFirebaseTransport({token:async(force=false)=>{await auth.authStateReady();if(!auth.currentUser)return null;try{return await auth.currentUser.getIdToken(force);}catch{return null;}},onUnauthorized:()=>{if(location.pathname.startsWith('/login')||location.pathname.startsWith('/register'))return;if(!auth.currentUser){const next=encodeURIComponent(location.pathname);to('/login?next='+next,true);}else{void auth.currentUser.getIdToken(true).catch(()=>{});}},...(import.meta.env.VITE_FIREBASE_SPARK==='true'?{request:createSparkApi(db,async()=>{await auth.authStateReady();return auth.currentUser},createProgramTransport(import.meta.env.VITE_ORIN_PROGRAM_API_URL,async()=>{await auth.authStateReady();return auth.currentUser?.getIdToken()??null}))}:{})});
+if((import.meta.env.DEV||import.meta.env.MODE==='android-qa')&&import.meta.env.VITE_FIREBASE_EMULATORS==='true'){connectAuthEmulator(auth,'http://127.0.0.1:9099',{disableWarnings:true});}
+configureFirebaseTransport({token:async(force=false)=>{await auth.authStateReady();if(!auth.currentUser)return null;try{return await auth.currentUser.getIdToken(force);}catch{return null;}},onUnauthorized:()=>{if(location.pathname.startsWith('/login')||location.pathname.startsWith('/register'))return;if(!auth.currentUser){const next=encodeURIComponent(location.pathname);to('/login?next='+next,true);}else{void auth.currentUser.getIdToken(true).catch(()=>{});}},...(import.meta.env.VITE_FIREBASE_SPARK==='true'?{request:createSparkApi(null,async()=>{await auth.authStateReady();return auth.currentUser},createProgramTransport(import.meta.env.VITE_ORIN_PROGRAM_API_URL,async()=>{await auth.authStateReady();return auth.currentUser?.getIdToken()??null}))}:{})});
 const proofApp=getApps().find(a=>a.name==='orin-security-proof')??initializeApp(app.options,'orin-security-proof');
 const proofAuth=getAuth(proofApp);
 if((import.meta.env.DEV||import.meta.env.MODE==='android-qa')&&import.meta.env.VITE_FIREBASE_EMULATORS==='true')connectAuthEmulator(proofAuth,'http://127.0.0.1:9099',{disableWarnings:true});
@@ -150,17 +149,25 @@ function App(){
      disabled: false
     };
 
-    let fallbackTimer: ReturnType<typeof setTimeout> | undefined = setTimeout(() => {
-     if (!initialized && !priming && valid()) {
-      console.warn('Profile onSnapshot slow or pending, launching with fallback profile');
-      enterApp(defaultSettings, defaultLab, null, fallbackUser);
+    void (async () => {
+     let p: Profile = fallbackUser;
+     try {
+      const res = await apiFetch('/api/settings');
+      if (res.ok) {
+       const data = (await res.json()) as any;
+       if (data.profile) {
+        p = {
+         uid: activeUser.uid,
+         email: activeUser.email || '',
+         displayName: data.profile.displayName || activeUser.displayName || 'مستخدم ORIN',
+         role: data.profile.role || 'user',
+         disabled: data.profile.disabled === true
+        };
+       }
+      }
+     } catch (e) {
+      console.warn('Profile fetch error:', e);
      }
-    }, 3500);
-
-    stopProfile=onSnapshot(doc(db,'users',activeUser.uid),snap=>{
-     if (fallbackTimer) { clearTimeout(fallbackTimer); fallbackTimer = undefined; }
-     if(!valid())return;
-     const p: Profile = snap.exists() ? snap.data() as Profile : fallbackUser;
      if (isOwnerOrAdmin && p.role !== 'admin') p.role = 'admin';
      setProfile(p);
      if(initialized||priming)return;
@@ -179,21 +186,10 @@ function App(){
       console.warn('Startup initial data load fallback:', e);
       enterApp(defaultSettings, defaultLab, null, p);
      });
-    },e=>{
-     if (fallbackTimer) { clearTimeout(fallbackTimer); fallbackTimer = undefined; }
-     if(!valid())return;
-     if(initialized)console.warn('ORIN profile subscription unavailable',e.code);
-     else {
-      console.warn('Profile onSnapshot error, proceeding with fallback profile:', e);
-      setProfile(fallbackUser);
-      void loadWorkspace().finally(() => {
-       enterApp(defaultSettings, defaultLab, null, fallbackUser);
-      });
-     }
-    });
+    })();
    })().catch(e=>{initializing=false;console.warn('Startup non-fatal error:',e);});
   },e=>pending.fail(e,!navigator.onLine));
-  return()=>{if(fallbackTimer)clearTimeout(fallbackTimer);disposed=true;version++;controller.dispose();stopProfile();stop();removeEventListener('offline',offline)};
+  return()=>{disposed=true;version++;controller.dispose();stopProfile();stop();removeEventListener('offline',offline)};
  },[attempt]);
  useEffect(()=>{if(!ready||!profile||profile.disabled)return;let active=true;const load=()=>{if(document.hidden||!navigator.onLine)return;void apiFetch('/api/experience/configuration').then(r=>r.ok?r.json():null).then((d:any)=>{if(active&&d)setConfiguration(d.configuration)}).catch(()=>{})};const timer=setInterval(load,60000);addEventListener('online',load);return()=>{active=false;clearInterval(timer);removeEventListener('online',load)}},[ready,profile?.uid,profile?.disabled]);
  useEffect(()=>{if(path==='/logout')void (async()=>{try{await endCurrentSecuritySession()}finally{await signOut(auth);if(isNativeSecurityAvailable())await unbindNativeAccount();to('/login')}})().catch(e=>setBoot({phase:'error',error:e}))},[path]);
@@ -212,7 +208,7 @@ function App(){
    }
   }
  },[ready,user?.email,profile?.role,path]);
- useEffect(()=>{if(!user||!profile||profile.disabled)return;let code='';try{code=sessionStorage.getItem('orin-referral-code')??'';const recipient=sessionStorage.getItem('orin-referral-email');if(recipient&&recipient!==user.email?.toLowerCase())code=''}catch{}if(code)void attributeReferral(db,user.uid,code).then(()=>{sessionStorage.removeItem('orin-referral-code');sessionStorage.removeItem('orin-referral-email')}).catch(()=>console.warn('ORIN referral attribution is pending'))},[user?.uid,profile?.disabled]);
+ useEffect(()=>{if(!user||!profile||profile.disabled)return;let code='';try{code=sessionStorage.getItem('orin-referral-code')??'';const recipient=sessionStorage.getItem('orin-referral-email');if(recipient&&recipient!==user.email?.toLowerCase())code=''}catch{}if(code)void attributeReferral(null,user.uid,code).then(()=>{sessionStorage.removeItem('orin-referral-code');sessionStorage.removeItem('orin-referral-email')}).catch(()=>console.warn('ORIN referral attribution is pending'))},[user?.uid,profile?.disabled]);
  useEffect(()=>{if(!ready||!user||!securityBackendConfigured()||!getSecuritySessionId())return;let stopped=false;const check=()=>{if(document.hidden||!navigator.onLine)return;void securityRequest('state').catch(e=>{if(stopped)return;if(e instanceof AccountSecurityError&&e.status===401)void refreshSecuritySession().catch(()=>{});})};const timer=setInterval(check,45000);addEventListener('online',check);document.addEventListener('visibilitychange',check);return()=>{stopped=true;clearInterval(timer);removeEventListener('online',check);document.removeEventListener('visibilitychange',check)}},[ready,user?.uid]);
  const retry=()=>{setBoot({phase:'starting'});setAttempt(v=>v+1)};
  // Security gate completely removed for direct dashboard entry

@@ -589,3 +589,53 @@ export async function accountActivity(u: Identity, accountId: string) {
     };
   });
 }
+
+export async function getReferralsSummary(u: Identity) {
+  return await withTx(async (client) => {
+    let codeRes = await client.query('SELECT code FROM referral_codes WHERE user_id = $1', [u.id]);
+    let code = codeRes.rows[0]?.code;
+    if (!code) {
+      const bytes = crypto.getRandomValues(new Uint8Array(6));
+      code = 'ORIN-' + Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
+      await client.query(
+        'INSERT INTO referral_codes (code, user_id) VALUES ($1, $2) ON CONFLICT (user_id) DO NOTHING',
+        [code, u.id]
+      );
+      codeRes = await client.query('SELECT code FROM referral_codes WHERE user_id = $1', [u.id]);
+      code = codeRes.rows[0]?.code || code;
+    }
+
+    const memRes = await client.query('SELECT * FROM program_members WHERE user_id = $1', [u.id]);
+    const attrRes = await client.query('SELECT * FROM referral_attributions WHERE referrer_user_id = $1', [u.id]);
+    const rewRes = await client.query('SELECT * FROM referral_rewards WHERE referrer_user_id = $1', [u.id]);
+
+    const mem = memRes.rows[0] || {};
+    const invited = attrRes.rowCount || mem.direct_count || 0;
+    const successful = mem.qualified_count || rewRes.rows.filter((r: any) => r.status === 'paid' || r.status === 'approved').length || 0;
+    const totalRewardCents = Number(mem.paid_cents || 0) + Number(mem.pending_cents || 0);
+
+    const rewards = rewRes.rows.map((r: any) => ({
+      id: r.referred_user_id,
+      status: r.status || 'pending',
+      amountCents: Number(r.amount_cents || 0),
+      createdAt: r.created_at ? new Date(r.created_at).getTime() : Date.now()
+    }));
+
+    const referrals = attrRes.rows.map((r: any) => ({
+      id: r.user_id,
+      status: 'approved' as const
+    }));
+
+    return {
+      code,
+      invited,
+      successful,
+      totalRewardCents,
+      rewards: rewards || [],
+      referrals: referrals || [],
+      terms: 'برنامج الإحالات المعتمد من ORIN',
+      rewardsActive: true,
+      summaryState: 'ready' as const
+    };
+  });
+}

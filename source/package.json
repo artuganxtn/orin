@@ -73,6 +73,7 @@
     "eslint-config-next": "16.3.4",
     "firebase-tools": "^15.32.1",
     "json-rpc-2.0": "1.7.1",
+    "playwright": "^1.64.0",
     "raw-body": "3.0.2",
     "react-server-dom-webpack": "19.2.6",
     "tailwindcss": "4.2.1",

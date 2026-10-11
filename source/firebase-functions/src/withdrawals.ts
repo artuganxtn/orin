@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { withTx } from './db.ts';
+import { requireVerifiedKyc } from './kyc.ts';
 
 export class WithdrawalError extends Error {
   constructor(message: string, public status = 400) {
@@ -33,11 +34,13 @@ export async function requestWithdrawal(
   const nowMs = input.now ? (input.now instanceof Date ? input.now.getTime() : Number(input.now)) : Date.now();
 
   return await withTx(async (client) => {
-    // Verify user profile is active
+    // Verify user profile is active and KYC is verified
     const pRes = await client.query('SELECT id, disabled FROM profiles WHERE id = $1', [user.id]);
     if (pRes.rowCount === 0 || pRes.rows[0].disabled) {
       throw new WithdrawalError('الوصول إلى الحساب غير متاح.', 403);
     }
+
+    await requireVerifiedKyc(user, client);
 
     // Earliest confirmed deposit must be at least 20 days old (20-day lock)
     const depRes = await client.query(

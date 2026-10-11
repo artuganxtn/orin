@@ -1,0 +1,5 @@
+ALTER TABLE deposits
+  ADD COLUMN IF NOT EXISTS pay_amount TEXT,
+  ADD COLUMN IF NOT EXISTS extra_id TEXT;
+
+GRANT SELECT, INSERT, UPDATE ON deposits TO orin_app;

@@ -9,7 +9,7 @@ type Nav={path:string;navigate:(path:string,replace?:boolean,state?:Record<strin
 const Context=createContext<Nav|null>(null);
 export const OrinNavigationContext=Context;
 export function OrinNavigation({children}:{children:ReactNode}){
- const [path,setPath]=useState(()=>typeof window==='undefined'||!firebaseMode()?'/':safeDestination(location.pathname));
+ const [path,setPath]=useState(()=>typeof window==='undefined'?'/':safeDestination(location.pathname));
  useEffect(()=>{const sync=()=>{setPath(safeDestination(location.pathname));requestAnimationFrame(()=>window.scrollTo(0,Number(history.state?.orinScroll??0)))};sync();addEventListener('popstate',sync);return()=>removeEventListener('popstate',sync)},[]);
  const navigate=useCallback((requested:string,replace=false,state:Record<string,unknown>={})=>navigateTo(safeDestination(requested),replace,state),[]);
  const back=useCallback((fallback='/')=>{if(Number(history.state?.orinDepth??0)>0)history.back();else navigate(fallback,true)},[navigate]);

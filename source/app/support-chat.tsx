@@ -11,7 +11,7 @@ export function SupportChat(){const {settings}=useOrin();return <SupportSession 
 /** A support-person silhouette, not a photograph or a claim about a specific employee. */
 function AdamAvatar({small=false}:{small?:boolean}){return <span className={'adam-avatar'+(small?' small':'')} aria-hidden="true"><svg viewBox="0 0 64 64" fill="none"><circle cx="32" cy="25" r="10" fill="currentColor" opacity=".95"/><path d="M14 54c1-12 9-18 18-18s17 6 18 18" fill="currentColor" opacity=".95"/><path d="M15 29v-4c0-10 7-17 17-17s17 7 17 17v4M49 34v4c0 5-4 8-10 8" stroke="#82e8ff" strokeWidth="3.4" strokeLinecap="round"/><rect x="10" y="23" width="8" height="15" rx="4" fill="#82e8ff"/><rect x="46" y="23" width="8" height="15" rx="4" fill="#82e8ff"/><rect x="33" y="43" width="10" height="5" rx="2.5" fill="#82e8ff"/></svg></span>}
 function SupportSession({uid}:{uid:string}){
- const transport=useContext(SupportContext),{path,back}=useNavigation(),{t,prefs}=useOrin(),open=path==='/support';
+ const transport=useContext(SupportContext),{path,back}=useNavigation(),{t,prefs}=useOrin(),open=path==='/support'||path.startsWith('/support/');
  const [snapshot,setSnapshot]=useState<SupportSnapshot>({messages:[],handoffRequested:false,hasOlder:false});
  const [connection,setConnection]=useState<SupportConnection>('connecting'),[pending,setPending]=useState<PendingMessage[]>(()=>uid?readOutbox(uid):[]);
  const [text,setText]=useState(''),[error,setError]=useState(''),[revision,setRevision]=useState(0),[assistant,setAssistant]=useState<SupportAssistantCapability|null>(null);

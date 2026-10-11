@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { authMiddleware } from './auth-middleware.ts';
 import { paymentsHandle } from './payments-http.ts';
-import { programSummary, programAction, adminPrograms, accountActivity } from './programs.ts';
+import { programSummary, programAction, adminPrograms, accountActivity, getReferralsSummary } from './programs.ts';
 import { action, state, verify } from './contracts.ts';
 import { getSettings, saveSettings, configuration, saveConfiguration } from './settings.ts';
 import { inbox, readNotices, listCampaigns, campaign } from './notifications.ts';
@@ -225,7 +225,7 @@ api.post('/programs', async (req: Request, res: Response) => {
 
 api.get('/referrals', async (req: Request, res: Response) => {
   try {
-    const result = await programSummary(req.user!);
+    const result = await getReferralsSummary(req.user!);
     res.json(result);
   } catch (err: any) {
     res.status(err.status || 400).json({ error: err.message });

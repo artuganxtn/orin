@@ -3,8 +3,20 @@ import { withTx } from './db.ts';
 import { recordVerifiedCustomer } from './program-ingestion.ts';
 
 export class KycError extends Error {
-  constructor(message: string, public status = 400) {
+  code: string;
+  constructor(message: string, public status = 400, code = 'kyc_error') {
     super(message);
+    this.code = code;
+  }
+}
+
+export async function requireVerifiedKyc(user: { id: string }, client: any) {
+  const res = await client.query(
+    'SELECT verified, revoked FROM verified_customers WHERE user_id = $1',
+    [user.id]
+  );
+  if (!res.rowCount || !res.rows[0].verified || res.rows[0].revoked) {
+    throw new KycError('توثيق الهوية (KYC) مطلوب لإتمام هذه العملية. / Identity verification (KYC) is required for this action.', 403, 'kyc_required');
   }
 }
 
@@ -55,7 +67,7 @@ function encryptAesGcm(plainText: string, keyBuffer: Buffer) {
 
 export async function submitKyc(
   user: { id: string },
-  input: { country: string; documentType: string; idNumber: string; documentImage?: string }
+  input: { fullName?: string; country: string; documentType: string; idNumber: string; documentImage?: string }
 ) {
   const country = String(input.country || '').trim().toUpperCase();
   if (!/^[A-Z]{2}$/.test(country)) {
@@ -83,18 +95,24 @@ export async function submitKyc(
   const kycFileId = 'kyc-file-' + randomUUID();
 
   return await withTx(async (client) => {
-    // 1. Insert customer registry mapping
+    // 1. Check if customer_key is registered to another user
+    const existing = await client.query('SELECT user_id FROM customer_registry WHERE customer_key = $1', [customerKey]);
+    if (existing.rowCount && existing.rows[0].user_id !== user.id) {
+      throw new KycError('وثيقة الهوية هذه مسجلة بالفعل لحساب آخر. / This ID document is already registered to another account.', 409, 'duplicate_document');
+    }
+
     await client.query(
       `INSERT INTO customer_registry (customer_key, user_id)
        VALUES ($1, $2)
-       ON CONFLICT (customer_key) DO UPDATE SET user_id = EXCLUDED.user_id`,
+       ON CONFLICT (customer_key) DO NOTHING`,
       [customerKey, user.id]
     );
 
     // 2. Insert kyc request
     await client.query(
       `INSERT INTO kyc_requests (id, user_id, customer_key, status, reason)
-       VALUES ($1, $2, $3, 'pending', 'User KYC verification request')`,
+       VALUES ($1, $2, $3, 'pending', 'User KYC verification request')
+       ON CONFLICT (id) DO NOTHING`,
       [kycReqId, user.id, customerKey]
     );
 
@@ -120,6 +138,14 @@ export async function submitKyc(
       ]
     );
 
+    // 4. Update profile display name if fullName provided
+    if (input.fullName && input.fullName.trim()) {
+      await client.query(
+        `UPDATE profiles SET display_name = $1, updated_at = NOW() WHERE id = $2`,
+        [input.fullName.trim(), user.id]
+      );
+    }
+
     return {
       ok: true,
       requestId: kycReqId,
@@ -138,34 +164,55 @@ export async function getKycStatus(user: { id: string }) {
       [user.id]
     );
     if (vRes.rowCount && vRes.rows[0].verified && !vRes.rows[0].revoked) {
+      const pRes = await client.query('SELECT display_name FROM profiles WHERE id = $1', [user.id]);
+      const kycFileRes = await client.query('SELECT country, document_type FROM kyc_files WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1', [user.id]);
+      const kycFile = kycFileRes.rows[0];
       return {
+        exists: true,
+        status: 'verified' as const,
         verified: true,
-        status: 'verified',
         idNumberLast4: vRes.rows[0].id_number_last4,
-        customerKey: vRes.rows[0].customer_key
+        customerKey: vRes.rows[0].customer_key,
+        request: {
+          fullName: pRes.rows[0]?.display_name || 'Verified User',
+          documentType: kycFile?.document_type || 'passport',
+          idNumber: `•••• ${vRes.rows[0].id_number_last4}`,
+          country: kycFile?.country || 'US',
+          status: 'verified' as const
+        }
       };
     }
 
-    // Check latest kyc request
-    const reqRes = await client.query(
-      'SELECT id, status, reason, created_at, reviewed_at FROM kyc_requests WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1',
+    // Check latest kyc request / file
+    const fileRes = await client.query(
+      'SELECT id, country, document_type, status, created_at, updated_at FROM kyc_files WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1',
       [user.id]
     );
-    if (reqRes.rowCount) {
-      const row = reqRes.rows[0];
+    if (fileRes.rowCount) {
+      const row = fileRes.rows[0];
+      const statusMap: Record<string, string> = { pending: 'pending', review: 'pending', approved: 'verified', verified: 'verified', rejected: 'rejected' };
+      const mappedStatus = statusMap[row.status] || 'pending';
+      const pRes = await client.query('SELECT display_name FROM profiles WHERE id = $1', [user.id]);
       return {
-        verified: false,
-        status: row.status,
-        reason: row.reason,
-        requestId: row.id,
-        createdAt: row.created_at,
-        reviewedAt: row.reviewed_at
+        exists: true,
+        status: mappedStatus,
+        verified: mappedStatus === 'verified',
+        request: {
+          fullName: pRes.rows[0]?.display_name || 'User',
+          documentType: row.document_type || 'passport',
+          idNumber: '••••',
+          country: row.country || 'US',
+          status: mappedStatus,
+          createdAt: new Date(row.created_at).getTime(),
+          updatedAt: new Date(row.updated_at).getTime()
+        }
       };
     }
 
     return {
-      verified: false,
-      status: 'unsubmitted'
+      exists: false,
+      status: 'unverified' as const,
+      verified: false
     };
   });
 }
@@ -205,6 +252,13 @@ export async function verifyKycCustomer(
       [admin.id, target]
     );
 
+    await client.query(
+      `UPDATE kyc_files
+       SET status = 'verified', updated_at = NOW()
+       WHERE user_id = $1 AND status = 'review'`,
+      [target]
+    );
+
     return {
       ok: true,
       verified: true,
@@ -217,43 +271,53 @@ export async function verifyKycCustomer(
 
 export async function listKycFiles(_staff: { id: string }) {
   return await withTx(async (client) => {
-    // List query NEVER returns image data or encrypted numbers
-    const res = await client.query(`
-      SELECT id, user_id AS "userId", country, document_type AS "documentType",
-             status, created_at AS "createdAt", updated_at AS "updatedAt"
-      FROM kyc_files
-      ORDER BY created_at DESC
-      LIMIT 50
-    `);
-    return { files: res.rows };
+    const res = await client.query(
+      `SELECT id, user_id, country, document_type, status, created_at, updated_at
+       FROM kyc_files ORDER BY created_at DESC LIMIT 100`
+    );
+    const files = res.rows.map(r => ({
+      id: r.id,
+      userId: r.user_id,
+      country: r.country,
+      documentType: r.document_type,
+      status: r.status,
+      createdAt: new Date(r.created_at).getTime(),
+      updatedAt: new Date(r.updated_at).getTime()
+    }));
+    return { files };
   });
 }
 
 export async function readKycFile(staff: { id: string }, fileId: string, reason: string) {
-  if (!reason || !reason.trim()) {
-    throw new KycError('Audit reason required for accessing KYC document', 400);
+  if (!reason || reason.trim().length < 5) {
+    throw new KycError('سبب الوصول إلى وثيقة الهوية مطلوب بحد أدنى 5 أحرف.', 400);
   }
   return await withTx(async (client) => {
-    // 1. Read document
     const res = await client.query(
-      `SELECT id, user_id AS "userId", country, document_type AS "documentType", status, created_at AS "createdAt"
+      `SELECT id, user_id, country, document_type, status, created_at, updated_at
        FROM kyc_files WHERE id = $1`,
       [fileId]
     );
     if (res.rowCount === 0) {
-      throw new KycError('KYC file not found', 404);
+      throw new KycError('ملف الهوية غير موجود.', 404);
     }
+    const row = res.rows[0];
 
-    // 2. Write access log in the SAME transaction
+    // Log staff access
     await client.query(
-      `INSERT INTO kyc_access_log (staff_id, kyc_file_id, action, reason, accessed_at)
-       VALUES ($1, $2, 'view', $3, NOW())`,
+      `INSERT INTO kyc_access_log (staff_id, kyc_file_id, action, reason)
+       VALUES ($1, $2, 'read_metadata', $3)`,
       [staff.id, fileId, reason.trim()]
     );
 
     return {
-      ok: true,
-      file: res.rows[0],
+      id: row.id,
+      userId: row.user_id,
+      country: row.country,
+      documentType: row.document_type,
+      status: row.status,
+      createdAt: new Date(row.created_at).getTime(),
+      updatedAt: new Date(row.updated_at).getTime(),
       accessLogged: true
     };
   });

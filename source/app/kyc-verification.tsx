@@ -62,7 +62,7 @@ export function KycVerificationSection({ onOpenModal }: { onOpenModal?: () => vo
       setLoading(true);
       const res = await apiFetch('/api/kyc');
       if (res.ok) {
-        const json = await res.json();
+        const json = (await res.json()) as KycData;
         setData(json);
       }
     } catch (e) {
@@ -76,7 +76,13 @@ export function KycVerificationSection({ onOpenModal }: { onOpenModal?: () => vo
     void fetchStatus();
   }, []);
 
-  const status: KycStatus = data?.status || 'unverified';
+  const mapKycStatus = (raw?: string): KycStatus => {
+    if (raw === 'verified') return 'verified';
+    if (raw === 'review' || raw === 'pending') return 'review';
+    if (raw === 'rejected') return 'rejected';
+    return 'unverified';
+  };
+  const status: KycStatus = mapKycStatus(data?.status);
   const openFlow = () => {
     if (onOpenModal) onOpenModal();
     else setShowModal(true);
@@ -288,7 +294,7 @@ export function KycModal({
       });
 
       if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
+        const errJson = (await res.json().catch(() => ({}))) as { error?: string };
         throw new Error(errJson.error || t('تعذر إرسال طلب التوثيق. أعد المحاولة.', 'Failed to submit KYC. Try again.'));
       }
 
