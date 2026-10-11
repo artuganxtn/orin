@@ -51,7 +51,7 @@ import '../app/settings-refresh.css';
 const ADMIN_EMAILS = ['khtaub7341@gmail.com', 'khtaub99@gmail.com', 'mm@mm.mm'];
 const isOwnerEmail=(e?:string|null)=>{const em=e?.toLowerCase().trim()??'';return ADMIN_EMAILS.some(a=>a.toLowerCase()===em);};
 configurePayments({base:import.meta.env.VITE_ORIN_PAYMENTS_API_URL,token:async()=>{await auth.authStateReady();return auth.currentUser?.getIdToken()??null}});
-const chatService=supportTransport(null,()=>auth.currentUser?.uid??'',createProgramTransport(import.meta.env.VITE_ORIN_PROGRAM_API_URL,async()=>auth.currentUser?.getIdToken()??null)),referralService=referralTransport(null,createProgramTransport(import.meta.env.VITE_ORIN_PROGRAM_API_URL,async()=>auth.currentUser?.getIdToken()??null));
+const chatService=supportTransport(null,()=>auth.currentUser?.uid??'',apiFetch),referralService=referralTransport(null,createProgramTransport(import.meta.env.VITE_ORIN_PROGRAM_API_URL,async()=>auth.currentUser?.getIdToken()??null));
 const loadWorkspace=()=>import('../app/trading-workspace');
 const loadDashboard=()=>import('./control-center').then(m=>({default:m.ControlCenter}));
 const OrinApp=lazy(loadWorkspace),Dashboard=lazy(loadDashboard);

@@ -18,6 +18,7 @@ import {
   markWithdrawalPaid
 } from './withdrawals.ts';
 import { submitKyc, getKycStatus, verifyKycCustomer, listKycFiles, readKycFile } from './kyc.ts';
+import { supportAssistantCapability, supportAssistantReply, escalateSupportTicket } from './support.ts';
 import { operationQueues, readAudit, readTickets } from './control-operations.ts';
 import { controlAction, controlRead } from './control-center.ts';
 
@@ -752,15 +753,32 @@ api.get('/admin/support/threads', async (req: Request, res: Response) => {
   }
 });
 
-// Support AI deprecated routes return 501
-api.all('/support/assistant', (_req: Request, res: Response) => {
-  res.status(501).json({ error: 'Support AI is deprecated and not implemented on server' });
+// Support AI & Ticket Escalation Routes
+api.get('/support/assistant', async (req: Request, res: Response) => {
+  try {
+    const result = await supportAssistantCapability(req.user!);
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message, code: err.code });
+  }
 });
-api.all('/support/escalate', (_req: Request, res: Response) => {
-  res.status(501).json({ error: 'Support AI is deprecated and not implemented on server' });
+
+api.post('/support/assistant', async (req: Request, res: Response) => {
+  try {
+    const result = await supportAssistantReply(req.user!, req.body || {});
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message, code: err.code });
+  }
 });
-api.all('/admin/support-ai', (_req: Request, res: Response) => {
-  res.status(501).json({ error: 'Support AI is deprecated and not implemented on server' });
+
+api.post('/support/escalate', async (req: Request, res: Response) => {
+  try {
+    const result = await escalateSupportTicket(req.user!, req.body?.messageId);
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message, code: err.code });
+  }
 });
 
 // Mount /api

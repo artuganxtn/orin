@@ -95,6 +95,17 @@ export async function submitKyc(
   const kycFileId = 'kyc-file-' + randomUUID();
 
   return await withTx(async (client) => {
+    // 0. Check if user is already verified or has a request under review
+    const verifiedCheck = await client.query('SELECT verified, revoked FROM verified_customers WHERE user_id = $1', [user.id]);
+    if (verifiedCheck.rowCount && verifiedCheck.rows[0].verified && !verifiedCheck.rows[0].revoked) {
+      throw new KycError('تم توثيق حسابك بنجاح مسبقًا. / Your identity is already verified.', 409, 'already_verified');
+    }
+
+    const pendingCheck = await client.query("SELECT status FROM kyc_files WHERE user_id = $1 AND status IN ('review', 'pending')", [user.id]);
+    if (pendingCheck.rowCount > 0) {
+      throw new KycError('طلب توثيق الهوية الخاص بك قيد المراجعة حاليًا. / Your KYC verification request is currently under review.', 409, 'kyc_pending');
+    }
+
     // 1. Check if customer_key is registered to another user
     const existing = await client.query('SELECT user_id FROM customer_registry WHERE customer_key = $1', [customerKey]);
     if (existing.rowCount && existing.rows[0].user_id !== user.id) {

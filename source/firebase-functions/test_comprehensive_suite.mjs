@@ -741,15 +741,16 @@ console.log('[PASS] Unported routes return 501 Not Implemented.');
 // ===================================================================
 console.log('\n--- PART E: ITEMS 1, 2, 3, 5, 6 VERIFICATION OVER HTTP ---');
 
-// --- E.1 Support AI Routes Return 501 ---
-console.log('Testing Support AI routes return 501...');
-const resSuppAst = await request(app).post('/api/support/assistant').set('Authorization', `Bearer ${tokenA}`).send({});
-assert.equal(resSuppAst.status, 501);
-const resSuppEsc = await request(app).post('/api/support/escalate').set('Authorization', `Bearer ${tokenA}`).send({});
-assert.equal(resSuppEsc.status, 501);
-const resAdminSupp = await request(app).post('/api/admin/support-ai').set('Authorization', `Bearer ${tokenAdmin1}`).send({});
-assert.equal(resAdminSupp.status, 501);
-console.log('[PASS] Support AI routes (/support/assistant, /support/escalate, /admin/support-ai) return 501 Not Implemented.');
+// --- E.1 Support Assistant & Ticket Escalation Routes ---
+console.log('Testing Support Assistant & Escalation routes...');
+const resSuppAst = await request(app).get('/api/support/assistant').set('Authorization', `Bearer ${tokenA}`);
+assert.equal(resSuppAst.status, 200);
+assert.equal(resSuppAst.body.available, true);
+
+const resSuppEsc = await request(app).post('/api/support/escalate').set('Authorization', `Bearer ${tokenA}`).send({ messageId: 'msg-123' });
+assert.equal(resSuppEsc.status, 200);
+assert.equal(typeof resSuppEsc.body.ticket.id, 'string');
+console.log('[PASS] Support Assistant and Escalation routes (/support/assistant, /support/escalate) return 200 OK.');
 
 // --- E.2 Control Center Actions over HTTP (as orin_app) ---
 console.log('\nTesting Control Center ported actions over HTTP...');

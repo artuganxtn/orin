@@ -211,6 +211,18 @@ export function KycModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const [existingStatus, setExistingStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void apiFetch('/api/kyc')
+      .then(res => res.ok ? res.json() : null)
+      .then((d: any) => {
+        if (active && d && d.status) setExistingStatus(d.status);
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -326,18 +338,26 @@ export function KycModal({
         )}
       </div>
 
-      {submitted ? (
+      {existingStatus === 'review' || existingStatus === 'pending' || submitted ? (
+        <div className="kyc-success-view">
+          <div className="kyc-success-circle" style={{ background: '#f59e0b20', color: '#f59e0b' }}>
+            <Clock size={40} />
+          </div>
+          <h3>{t('طلب التوثيق قيد المراجعة حاليًا', 'KYC Request Under Review')}</h3>
+          <p>
+            {t(
+              'تم استلام طلب التوثيق الخاص بك وهو قيد المراجعة من قبل فريق الامتثال. لا يمكن تقديم طلب جديد أثناء المراجعة.',
+              'Your verification request has been received and is under review. A new request cannot be submitted while review is pending.'
+            )}
+          </p>
+        </div>
+      ) : existingStatus === 'verified' ? (
         <div className="kyc-success-view">
           <div className="kyc-success-circle">
             <Check size={40} />
           </div>
-          <h3>{t('تم إرسال طلب التوثيق بنجاح!', 'KYC Request Submitted Successfully!')}</h3>
-          <p>
-            {t(
-              'طلبك الآن قيد المراجعة من قبل فريق الامتثال. سيتم تحديث حالة حسابك فور اكتمال التدقيق.',
-              'Your request is now being reviewed by compliance. Your account status will update upon approval.'
-            )}
-          </p>
+          <h3>{t('تم توثيق هويتك بنجاح!', 'Identity Verified Successfully!')}</h3>
+          <p>{t('حسابك موثّق بالكامل وبإمكانك إجراء الإيداع والتداول والسحب.', 'Your account is fully verified for deposits, trading, and withdrawals.')}</p>
         </div>
       ) : (
         <form className="kyc-form" onSubmit={handleSubmit}>

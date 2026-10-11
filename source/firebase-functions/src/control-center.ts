@@ -11,8 +11,8 @@ export async function controlRead(u: Identity, module: string, _q: Data = {}) {
     throw new ApiError('Support AI is deprecated and not implemented on server', 501);
   }
 
-  if (module === 'staff') {
-    return await withTx(async (client) => {
+  return await withTx(async (client) => {
+    if (module === 'staff') {
       const res = await client.query(`
         SELECT s.user_id AS id, p.email, p.display_name AS "displayName",
                s.roles, s.status, s.valid_after AS "validAfter", s.created_at AS "createdAt"
@@ -21,11 +21,9 @@ export async function controlRead(u: Identity, module: string, _q: Data = {}) {
         ORDER BY s.created_at DESC
       `);
       return { rows: res.rows, nextCursor: null };
-    });
-  }
+    }
 
-  if (module === 'kyc') {
-    return await withTx(async (client) => {
+    if (module === 'kyc') {
       const res = await client.query(`
         SELECT id, user_id AS "userId", country, document_type AS "documentType",
                status, created_at AS "createdAt", updated_at AS "updatedAt"
@@ -34,10 +32,197 @@ export async function controlRead(u: Identity, module: string, _q: Data = {}) {
         LIMIT 50
       `);
       return { rows: res.rows, nextCursor: null };
-    });
-  }
+    }
 
-  throw new ApiError(`Module ${module} not implemented on server yet`, 501);
+    if (module === 'dashboard' || module === 'overview') {
+      const [uRes, dRes, wRes, cRes, aRes] = await Promise.all([
+        client.query('SELECT COUNT(*) FROM profiles'),
+        client.query("SELECT COUNT(*) FROM deposits WHERE status = 'waiting'"),
+        client.query("SELECT COUNT(*) FROM withdrawal_requests WHERE status = 'requested'"),
+        client.query("SELECT COUNT(*) FROM contracts WHERE status = 'active'"),
+        client.query("SELECT COUNT(*) FROM approvals WHERE status = 'pending'")
+      ]);
+      return {
+        rows: [{
+          id: 'dashboard-summary',
+          usersCount: Number(uRes.rows[0].count),
+          pendingDepositsCount: Number(dRes.rows[0].count),
+          pendingWithdrawalsCount: Number(wRes.rows[0].count),
+          activeContractsCount: Number(cRes.rows[0].count),
+          pendingApprovalsCount: Number(aRes.rows[0].count),
+          updatedAt: Date.now()
+        }],
+        nextCursor: null
+      };
+    }
+
+    if (module === 'users') {
+      const res = await client.query(`
+        SELECT id, email, display_name AS "displayName", role, disabled, created_at AS "createdAt"
+        FROM profiles
+        ORDER BY created_at DESC
+        LIMIT 100
+      `);
+      return { rows: res.rows, nextCursor: null };
+    }
+
+    if (module === 'accounts') {
+      const res = await client.query(`
+        SELECT a.id, a.user_id AS "userId", p.email, a.account_number AS "accountNumber",
+               a.type, a.currency, a.balance_cents AS "balanceCents", a.status, a.created_at AS "createdAt"
+        FROM accounts a
+        LEFT JOIN profiles p ON a.user_id = p.id
+        ORDER BY a.created_at DESC
+        LIMIT 100
+      `);
+      return { rows: res.rows, nextCursor: null };
+    }
+
+    if (module === 'wallets') {
+      const res = await client.query(`
+        SELECT w.id, w.user_id AS "userId", p.email, w.account_id AS "accountId",
+               w.cash_cents AS "cashCents", w.bonus_cents AS "bonusCents", w.profit_cents AS "profitCents"
+        FROM bonus_wallets w
+        LEFT JOIN profiles p ON w.user_id = p.id
+        ORDER BY w.created_at DESC
+        LIMIT 100
+      `);
+      return { rows: res.rows, nextCursor: null };
+    }
+
+    if (module === 'deposits') {
+      const res = await client.query(`
+        SELECT d.id, d.user_id AS "userId", p.email, d.account_id AS "accountId",
+               d.amount_cents AS "amountCents", d.coin, d.pay_address AS "payAddress",
+               d.pay_amount AS "payAmount", d.extra_id AS "extraId", d.status, d.credited, d.created_at AS "createdAt"
+        FROM deposits d
+        LEFT JOIN profiles p ON d.user_id = p.id
+        ORDER BY d.created_at DESC
+        LIMIT 100
+      `);
+      return { rows: res.rows, nextCursor: null };
+    }
+
+    if (module === 'withdrawals') {
+      const res = await client.query(`
+        SELECT w.id, w.user_id AS "userId", p.email, w.amount_cents AS "amountCents",
+               w.address, w.coin, w.status, w.created_at AS "createdAt"
+        FROM withdrawal_requests w
+        LEFT JOIN profiles p ON w.user_id = p.id
+        ORDER BY w.created_at DESC
+        LIMIT 100
+      `);
+      return { rows: res.rows, nextCursor: null };
+    }
+
+    if (module === 'approvals') {
+      const res = await client.query(`
+        SELECT id, kind, reward_kind AS "rewardKind", user_id AS "userId", account_id AS "accountId",
+               delta_cents AS "deltaCents", status, reason, requested_by AS "requestedBy", created_at AS "createdAt"
+        FROM approvals
+        ORDER BY created_at DESC
+        LIMIT 100
+      `);
+      return { rows: res.rows, nextCursor: null };
+    }
+
+    if (module === 'trading' || module === 'contracts') {
+      const res = await client.query(`
+        SELECT id, code, title, asset, direction, duration_sec AS "durationSec",
+               settlement_bps AS "settlementBps", status, hash, created_at AS "createdAt"
+        FROM contracts
+        ORDER BY created_at DESC
+        LIMIT 100
+      `);
+      return { rows: res.rows, nextCursor: null };
+    }
+
+    if (module === 'markets') {
+      const res = await client.query(`
+        SELECT data FROM docs WHERE collection = 'system' AND id = 'markets'
+      `);
+      const data = res.rows[0]?.data || {};
+      return { rows: [{ id: 'markets', ...data }], nextCursor: null };
+    }
+
+    if (module === 'bonus') {
+      const res = await client.query(`
+        SELECT w.user_id AS "userId", p.email, w.account_id AS "accountId",
+               w.bonus_cents AS "bonusCents", w.profit_limit_cents AS "profitLimitCents", w.claimed
+        FROM bonus_wallets w
+        LEFT JOIN profiles p ON w.user_id = p.id
+        ORDER BY w.created_at DESC
+        LIMIT 100
+      `);
+      return { rows: res.rows, nextCursor: null };
+    }
+
+    if (module === 'referrals') {
+      const res = await client.query(`
+        SELECT r.code, r.user_id AS "userId", p.email, r.created_at AS "createdAt"
+        FROM referral_codes r
+        LEFT JOIN profiles p ON r.user_id = p.id
+        ORDER BY r.created_at DESC
+        LIMIT 100
+      `);
+      return { rows: res.rows, nextCursor: null };
+    }
+
+    if (module === 'team') {
+      const res = await client.query(`
+        SELECT m.user_id AS "userId", p.email, m.referral_code AS "referralCode",
+               m.direct_count AS "directCount", m.team_count AS "teamCount", m.paid_cents AS "paidCents"
+        FROM program_members m
+        LEFT JOIN profiles p ON m.user_id = p.id
+        ORDER BY m.created_at DESC
+        LIMIT 100
+      `);
+      return { rows: res.rows, nextCursor: null };
+    }
+
+    if (module === 'agencies' || module === 'badges') {
+      const res = await client.query(`
+        SELECT id, owner_id AS "userId", data, created_at AS "createdAt"
+        FROM docs WHERE collection = $1
+        ORDER BY created_at DESC LIMIT 100
+      `, [module]);
+      return { rows: res.rows.map(r => ({ id: r.id, userId: r.userId, ...(r.data || {}), createdAt: new Date(r.createdAt).getTime() })), nextCursor: null };
+    }
+
+    if (module === 'notifications') {
+      const res = await client.query(`
+        SELECT id, owner_id AS "ownerId", data, created_at AS "createdAt"
+        FROM docs WHERE collection = 'orinNotices'
+        ORDER BY created_at DESC LIMIT 100
+      `);
+      return { rows: res.rows.map(r => ({ id: r.id, ownerId: r.ownerId, ...(r.data || {}), createdAt: new Date(r.createdAt).getTime() })), nextCursor: null };
+    }
+
+    if (module === 'content' || module === 'configuration') {
+      const res = await client.query(`
+        SELECT id, data, updated_at AS "updatedAt" FROM docs WHERE collection = 'system'
+      `);
+      return { rows: res.rows.map(r => ({ id: r.id, ...(r.data || {}), updatedAt: new Date(r.updatedAt).getTime() })), nextCursor: null };
+    }
+
+    if (module === 'security' || module === 'audit') {
+      const res = await client.query(`
+        SELECT id, actor_id AS "actorId", action, reference, payload_hash AS "payloadHash", created_at AS "createdAt"
+        FROM audit ORDER BY created_at DESC LIMIT 100
+      `);
+      return { rows: res.rows.map(r => ({ id: r.id, actorId: r.actorId, action: r.action, reference: r.reference, payloadHash: r.payloadHash, createdAt: new Date(r.createdAt).getTime() })), nextCursor: null };
+    }
+
+    if (module === 'tickets') {
+      const res = await client.query(`
+        SELECT id, owner_id AS "ownerId", data, created_at AS "createdAt"
+        FROM docs WHERE collection = 'support_tickets' ORDER BY created_at DESC LIMIT 100
+      `);
+      return { rows: res.rows.map(r => ({ id: r.id, ownerId: r.ownerId, ...(r.data || {}), createdAt: new Date(r.createdAt).getTime() })), nextCursor: null };
+    }
+
+    return { rows: [], nextCursor: null };
+  });
 }
 
 export async function controlAction(u: Identity, input: Data) {
