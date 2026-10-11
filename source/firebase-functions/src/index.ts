@@ -1,78 +1,546 @@
-export {orinIdentity,identityHandle} from './email-registration-http';
-export {orinPayments,paymentsHandle} from './payments-http';
-export {orinSecurity,securityHandle} from './account-security-http';
-import {securityEnabled} from './account-security';
-import {supportAssistantCapability,supportAssistantReply,supportEscalate} from './support-assistant';
-import {referralSummary} from './referrals';
-import {onSchedule} from 'firebase-functions/v2/scheduler';
-import {deliverControlNotifications} from './control-worker';
-export {deliverControlNotifications};
-import {controlRead,controlAction,controlUser,acceptStaffInvitation} from './control-center';
-import {controlDocument} from './control-documents';
-import {controlProgramConfiguration} from './control-programs';
-import {requirePermission,controlAccess} from './control-auth';
-import {ref} from './store';
-import {programSummary,programAction,adminPrograms,accountActivity} from './programs';
-import {onRequest} from 'firebase-functions/v2/https';
-import {identity,configuration,settings,ApiError} from './store';
-import {action,state,verify} from './contracts';
-import {saveSettings,saveConfiguration} from './settings';
-import {inbox,readNotices,listCampaigns,campaign} from './notifications';
-export async function handle(req:any,res:any){
- res.set('Cache-Control','private, no-store');res.set('X-Content-Type-Options','nosniff');
- try{
-  const path=req.path,method=req.method,origin=req.get('origin');
-  const allowedOrigins=['https://orin-99951.web.app','https://orin-99951.firebaseapp.com'];
-  if(process.env.ALLOWED_ORIGINS)allowedOrigins.push(...process.env.ALLOWED_ORIGINS.split(',').map(s=>s.trim()));
-  if(origin&&!allowedOrigins.includes(origin)&&!(process.env.FUNCTIONS_EMULATOR==='true'&&/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)))throw new ApiError('مصدر الطلب غير مسموح.',403);
-  if(origin){res.set('Access-Control-Allow-Origin',origin);res.set('Vary','Origin');res.set('Access-Control-Allow-Headers','Authorization, Content-Type, X-Orin-Session');res.set('Access-Control-Allow-Methods','GET, POST, PATCH, OPTIONS');}
-  if(method==='OPTIONS'){res.status(204).send('');return}
-  if(method==='GET'&&path==='/api/health'){res.json({ok:true,app:'ORIN',backend:'firebase',mode:'production'});return}
-  if(method==='GET'&&path==='/api/markets/configuration'){res.json(await configuration());return}
-  if(!['GET','POST','PATCH'].includes(method))throw new ApiError('طريقة غير مدعومة.',405);
-  const u=await identity(req.get('authorization'),req.get('x-orin-session'));let result:unknown;
-  if(method!=='GET'&&(!req.is('application/json')||!req.body||Array.isArray(req.body)||typeof req.body!=='object'||Buffer.byteLength(JSON.stringify(req.body))>(path.startsWith('/api/control/')?50000:12000)))throw new ApiError('بيانات الطلب غير صالحة أو كبيرة.',400);
-  if((path.startsWith('/api/admin/')||path==='/api/markets/configuration'&&method!=='GET')&&(await ref('system','control-center').get()).exists){if(method!=='GET')throw new ApiError('Use the audited Control Center workflow',409);await requirePermission(u,'staff.manage');}
-  if(path==='/api/support/assistant'&&method==='GET')result=await supportAssistantCapability(u,securityEnabled()&&!!u.securitySessionId);
-  else if(path==='/api/support/assistant'&&method==='POST'){
-   const secured=securityEnabled()&&!!u.securitySessionId;
-   if(String(req.get('accept')??'').includes('text/event-stream')){
-    res.set('Content-Type','text/event-stream; charset=utf-8');res.set('X-Accel-Buffering','no');res.flushHeaders();
-    let disconnected=false;res.on('close',()=>{disconnected=true});
-    const emit=(event:string,data:unknown)=>{if(!disconnected&&!res.writableEnded)res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)};
-    try{const completion=await supportAssistantReply(u,req.body,secured,{onChunk:chunk=>emit(chunk.type,chunk)});emit('complete',completion)}
-    catch(error){const status=(error as {status?:number}).status;emit('error',{status:status??503,error:status?(error as Error).message:'نواجه تأخيرًا مؤقتًا في خدمة الدعم. يرجى المحاولة مرة أخرى.'})}
-    finally{if(!res.writableEnded)res.end()}
-    return;
-   }
-   result=await supportAssistantReply(u,req.body,secured);
-  }
-  else if(path==='/api/support/escalate'&&method==='POST')result=await supportEscalate(u,req.body,securityEnabled()&&!!u.securitySessionId);
-  else if(path==='/api/control/accept-invitation'&&method==='POST')result=await acceptStaffInvitation(u);
-  else if(path==='/api/control/action'&&method==='POST')result=req.body.action==='program.configure'?await controlProgramConfiguration(u,req.body):await controlAction(u,req.body);
-  else if(path==='/api/control/user'&&method==='GET')result=await controlUser(u,String(req.query.uid??''));
-  else if(path==='/api/control/kyc-document'&&method==='GET'){await controlDocument(u,String(req.query.id??''),String(req.query.documentId??''),res);return}
-  else if(path.startsWith('/api/control/')&&method==='GET')result=await controlRead(u,path.slice('/api/control/'.length),req.query);
-  else if(path==='/api/account-activity'&&method==='GET')result=await accountActivity(u,String(req.query.accountId??''));
-  else if(path==='/api/referrals'&&method==='GET')result=await referralSummary(u);
-  else if(path==='/api/programs'&&method==='GET')result=await programSummary(u);
-  else if(path==='/api/programs'&&method==='POST')result=await programAction(u,req.body);
-  else if(path==='/api/admin/programs'&&method==='GET')result=await adminPrograms(u);
-  else if(path==='/api/admin/programs'&&method==='POST')result=await adminPrograms(u,req.body);
-  else if(path==='/api/lab'&&method==='GET')result=await state(u);
-  else if(path==='/api/lab'&&method==='POST')result=await action(u,req.body);
-  else if(path==='/api/settings'&&method==='GET')result=await settings(u);
-  else if(path==='/api/settings'&&method==='PATCH')result=await saveSettings(u,req.body);
-  else if(path==='/api/markets/configuration'&&method==='PATCH')result=await saveConfiguration(u,req.body);
-  else if(path==='/api/invitations/verify'&&method==='POST')result=await verify(u,req.body.code);
-  else if(path==='/api/notifications'&&method==='GET'){const offset=Number(req.query.offset??0),key=req.query.id;if(!Number.isSafeInteger(offset)||offset<0||offset>100000||key!==undefined&&(typeof key!=='string'||key.length>200))throw new ApiError('طلب غير صالح.');result=await inbox(u,Date.now(),offset,key)}
-  else if(path==='/api/notifications'&&method==='POST')result=await readNotices(u,req.body);
-  else if(path==='/api/admin/notifications'&&method==='GET')result=await listCampaigns(u);
-  else if(path==='/api/admin/notifications'&&method==='POST')result=await campaign(u,req.body);
-  else throw new ApiError('المسار غير متاح.',404);
-  res.json(result);
- }catch(error){const status=(error as {status?:number}).status;if(!status)console.error('ORIN_BACKEND_FAILURE',{name:error instanceof Error?error.name:'Unknown'});res.status(status??503).json({error:status?(error as Error).message:'تعذر الاتصال بالخدمة. أعد المحاولة.'})}
-}
-export const orinApi=onRequest({region:'europe-west1',memory:'256MiB',timeoutSeconds:60,minInstances:0,maxInstances:2,concurrency:20,secrets:['ORIN_SUPPORT_AI_API_KEY'],cors:false},handle);
+import express, { type Request, type Response } from 'express';
+import cors from 'cors';
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { authMiddleware } from './auth-middleware.ts';
+import { paymentsHandle } from './payments-http.ts';
+import { programSummary, programAction, adminPrograms, accountActivity } from './programs.ts';
+import { action, state, verify } from './contracts.ts';
+import { getSettings, saveSettings, configuration, saveConfiguration } from './settings.ts';
+import { inbox, readNotices, listCampaigns, campaign } from './notifications.ts';
+import {
+  requestWithdrawal,
+  getUserWithdrawals,
+  getWithdrawalById,
+  proposeWithdrawalApproval,
+  approveWithdrawal,
+  markWithdrawalPaid
+} from './withdrawals.ts';
+import { submitKyc, getKycStatus, verifyKycCustomer, listKycFiles, readKycFile } from './kyc.ts';
+import { operationQueues, readAudit, readTickets } from './control-operations.ts';
+import { controlAction, controlRead } from './control-center.ts';
 
-export const orinControlNotificationWorker=onSchedule({schedule:'every 1 minutes',region:'europe-west1',memory:'256MiB',timeoutSeconds:120,maxInstances:1},async()=>{await deliverControlNotifications()});
+import {
+  getTradingAccounts,
+  createTradingAccount,
+  selectTradingAccount,
+  getDemoWallet,
+  operateDemoWallet,
+  getSupportMessages,
+  sendSupportMessage,
+  attributeReferral
+} from './client-services.ts';
+import { withTx } from './db.ts';
+
+export const app = express();
+
+// Middleware
+app.use(cors({
+  origin: true,
+  credentials: true,
+  methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Authorization', 'Content-Type', 'X-Orin-Session', 'X-Nowpayments-Sig']
+}));
+
+// Body parser with raw body retention for webhooks
+app.use(express.json({
+  limit: '10mb',
+  verify: (req: any, _res, buf) => {
+    req.rawBody = buf;
+  }
+}));
+
+// 1. Health checks
+app.get('/healthz', (_req: Request, res: Response) => {
+  res.status(200).json({ ok: true, status: 'healthy', timestamp: Date.now() });
+});
+
+app.get('/api/health', (_req: Request, res: Response) => {
+  res.status(200).json({ ok: true, app: 'ORIN', backend: 'postgres', mode: 'production' });
+});
+
+import { identityHandle } from './email-registration-http.ts';
+
+// 2. NOWPayments webhook & public payment endpoints
+app.all('/api/payments/nowpayments/ipn', paymentsHandle);
+app.get('/api/payments/readiness', paymentsHandle);
+
+// Public identity & registration endpoints
+app.use('/orinIdentity', identityHandle);
+app.use('/api/identity', identityHandle);
+
+// 3. Public market configuration
+app.get('/api/markets/configuration', async (_req: Request, res: Response) => {
+  try {
+    res.json(await configuration());
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 4. Authenticated routes under /api
+const api = express.Router();
+api.use(authMiddleware);
+
+// Payments (user authenticated)
+api.use('/payments', paymentsHandle);
+
+// Withdrawals
+api.post('/withdrawals', async (req: Request, res: Response) => {
+  try {
+    const result = await requestWithdrawal(req.user!, req.body);
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+api.get('/withdrawals', async (req: Request, res: Response) => {
+  try {
+    const result = await getUserWithdrawals(req.user!);
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+api.get('/withdrawals/:id', async (req: Request, res: Response) => {
+  try {
+    const id = String(req.params.id || '');
+    const result = await getWithdrawalById(req.user!, id);
+    if (!result) {
+      return res.status(404).json({ error: 'طلب السحب غير موجود' });
+    }
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+// KYC routes
+api.post('/kyc', async (req: Request, res: Response) => {
+  try {
+    const result = await submitKyc(req.user!, req.body);
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+api.get('/kyc', async (req: Request, res: Response) => {
+  try {
+    const result = await getKycStatus(req.user!);
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+// Settings
+api.get('/settings', async (req: Request, res: Response) => {
+  try {
+    const result = await getSettings(req.user!);
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+api.patch('/settings', async (req: Request, res: Response) => {
+  try {
+    const result = await saveSettings(req.user!, req.body);
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+api.patch('/markets/configuration', async (req: Request, res: Response) => {
+  try {
+    const result = await saveConfiguration(req.user!, req.body);
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+// Notifications
+api.get('/notifications', async (req: Request, res: Response) => {
+  try {
+    const offset = Number(req.query.offset || 0);
+    const key = req.query.id as string | undefined;
+    const result = await inbox(req.user!, Date.now(), offset, key);
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+api.post('/notifications', async (req: Request, res: Response) => {
+  try {
+    const result = await readNotices(req.user!, req.body);
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+api.get('/admin/notifications', async (req: Request, res: Response) => {
+  try {
+    const result = await listCampaigns(req.user!);
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+api.post('/admin/notifications', async (req: Request, res: Response) => {
+  try {
+    const result = await campaign(req.user!, req.body);
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+// Programs & Referrals
+api.get('/programs', async (req: Request, res: Response) => {
+  try {
+    const result = await programSummary(req.user!);
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+api.post('/programs', async (req: Request, res: Response) => {
+  try {
+    const result = await programAction(req.user!, req.body);
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+api.get('/referrals', async (req: Request, res: Response) => {
+  try {
+    const result = await programSummary(req.user!);
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+api.get('/admin/programs', async (req: Request, res: Response) => {
+  try {
+    const result = await adminPrograms(req.user!);
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+api.post('/admin/programs', async (req: Request, res: Response) => {
+  try {
+    const result = await adminPrograms(req.user!, req.body);
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+// Admin Users Directory & Management
+api.get('/admin/users', async (req: Request, res: Response) => {
+  try {
+    if (req.user?.role !== 'admin') {
+      return res.status(403).json({ error: 'صلاحية الإدارة مطلوبة.' });
+    }
+    const result = await withTx(async (client) => {
+      const qRes = await client.query(
+        `SELECT id as uid, email, display_name as "displayName", role, disabled, created_at as "createdAt"
+         FROM profiles
+         ORDER BY created_at DESC
+         LIMIT 50`
+      );
+      return qRes.rows;
+    });
+    res.json({ users: result });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+api.patch('/admin/users/:id', async (req: Request, res: Response) => {
+  try {
+    if (req.user?.role !== 'admin') {
+      return res.status(403).json({ error: 'صلاحية الإدارة مطلوبة.' });
+    }
+    const { id } = req.params;
+    const { displayName, role, disabled } = req.body;
+    await withTx(async (client) => {
+      await client.query(
+        `UPDATE profiles
+         SET display_name = COALESCE($1, display_name),
+             role = COALESCE($2, role),
+             disabled = COALESCE($3, disabled),
+             updated_at = NOW()
+         WHERE id = $4`,
+        [displayName, role, disabled, id]
+      );
+    });
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+api.get('/account-activity', async (req: Request, res: Response) => {
+  try {
+    const result = await accountActivity(req.user!, String(req.query.accountId || ''));
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+// Trading Accounts
+api.get('/trading-accounts', async (req: Request, res: Response) => {
+  try {
+    const result = await getTradingAccounts(req.user!);
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+api.post('/trading-accounts', async (req: Request, res: Response) => {
+  try {
+    const result = await createTradingAccount(req.user!, req.body);
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+api.patch('/trading-accounts', async (req: Request, res: Response) => {
+  try {
+    const result = await selectTradingAccount(req.user!, req.body);
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+// Demo Wallet
+api.get('/demo-wallet', async (req: Request, res: Response) => {
+  try {
+    const accountId = String(req.query.accountId || '');
+    const result = await getDemoWallet(req.user!, accountId);
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+api.post('/demo-wallet', async (req: Request, res: Response) => {
+  try {
+    const result = await operateDemoWallet(req.user!, req.body);
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+// Support Messages
+api.get('/support/messages', async (req: Request, res: Response) => {
+  try {
+    const result = await getSupportMessages(req.user!);
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+api.post('/support/messages', async (req: Request, res: Response) => {
+  try {
+    const result = await sendSupportMessage(req.user!, req.body);
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+// Referral Code Attribution
+api.post('/referrals/attribute', async (req: Request, res: Response) => {
+  try {
+    const result = await attributeReferral(req.user!, req.body?.code);
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+// Published Content
+api.get('/content/:slug', async (req: Request, res: Response) => {
+  try {
+    const result = await withTx(async (client) => {
+      const docRes = await client.query('SELECT data FROM docs WHERE collection = $1 AND id = $2', ['public_content', req.params.slug]);
+      return docRes.rows[0]?.data || null;
+    });
+    if (!result) return res.status(404).json({ error: 'Content not found' });
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Contracts & Lab
+api.get('/lab', async (req: Request, res: Response) => {
+  try {
+    const result = await state(req.user!);
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+api.post('/lab', async (req: Request, res: Response) => {
+  try {
+    const result = await action(req.user!, req.body);
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+api.post('/invitations/verify', async (req: Request, res: Response) => {
+  try {
+    const result = await verify(req.user!, req.body?.code);
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+// Control Center endpoints
+api.get('/control/queues', async (req: Request, res: Response) => {
+  try {
+    const result = await operationQueues(req.user!, (req.user as any).roles || []);
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+api.get('/control/audit', async (req: Request, res: Response) => {
+  try {
+    const result = await readAudit(req.user!, req.query);
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+api.get('/control/tickets', async (req: Request, res: Response) => {
+  try {
+    const result = await readTickets(req.user!, req.query);
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+api.post('/control/action', async (req: Request, res: Response) => {
+  try {
+    const result = await controlAction(req.user!, req.body);
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+api.get('/control/staff', async (req: Request, res: Response) => {
+  try {
+    const result = await controlRead(req.user!, 'staff');
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+api.get('/admin/staff', async (req: Request, res: Response) => {
+  try {
+    const result = await controlRead(req.user!, 'staff');
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+api.get('/admin/kyc/files', async (req: Request, res: Response) => {
+  try {
+    const result = await listKycFiles(req.user!);
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+api.get('/admin/kyc/files/:id', async (req: Request, res: Response) => {
+  try {
+    const id = String(req.params.id || '');
+    const reason = String(req.query.reason || 'Staff audit review');
+    const result = await readKycFile(req.user!, id, reason);
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+// Support AI deprecated routes return 501
+api.all('/support/assistant', (_req: Request, res: Response) => {
+  res.status(501).json({ error: 'Support AI is deprecated and not implemented on server' });
+});
+api.all('/support/escalate', (_req: Request, res: Response) => {
+  res.status(501).json({ error: 'Support AI is deprecated and not implemented on server' });
+});
+api.all('/admin/support-ai', (_req: Request, res: Response) => {
+  res.status(501).json({ error: 'Support AI is deprecated and not implemented on server' });
+});
+
+// Mount /api
+app.use('/api', api);
+
+// 5. Unported routes under /api return 501
+app.use('/api', (req: Request, res: Response) => {
+  res.status(501).json({ error: 'Route not implemented on server yet', path: req.path });
+});
+
+// 6. Built web app as static files
+const candidates = [
+  resolve(process.cwd(), '../firebase-dist'),
+  resolve(process.cwd(), '../firebase-web/dist'),
+  resolve(process.cwd(), '../dist'),
+  resolve(process.cwd(), 'public')
+];
+let staticPath = candidates.find(p => existsSync(p));
+if (staticPath) {
+  app.use(express.static(staticPath));
+  app.use((req: Request, res: Response, next) => {
+    if (req.path.startsWith('/api') || req.path === '/healthz') return next();
+    res.sendFile(resolve(staticPath!, 'index.html'));
+  });
+}
+
+import { validateProductionEnv } from './env-validation.ts';
+export { validateProductionEnv };
+
+// Start server if executed directly
+const PORT = Number(process.env.PORT || 10000);
+if (process.argv[1]?.endsWith('index.ts') || process.argv[1]?.endsWith('index.js')) {
+  validateProductionEnv();
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`ORIN Express backend running on http://0.0.0.0:${PORT}`);
+  });
+}
+

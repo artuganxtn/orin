@@ -1,151 +1,444 @@
-import {db,ref,account,check,bootstrap,hash,id,audit,journal,notice,active,owner,ApiError,FieldValue,type Identity,type Data} from './store';
-import {ASSETS,resultCents} from '../../lib/contracts';
-import {inbox} from './notifications';
-async function resolveTradingDoc(tx:FirebaseFirestore.Transaction,uid:string,preferredId?:string,isSettle=false){
- let accountId=typeof preferredId==='string'&&preferredId.trim()?preferredId.trim():'';
- if(isSettle){
-  if(!accountId)throw new ApiError('معرف حساب التداول مطلوب للتسوية.',409);
- }else if(!accountId){
-  const selection=await tx.get(ref('sparkAccountSelections',uid));
-  if(selection.exists&&selection.data()?.accountId)accountId=selection.data()!.accountId;
- }
- if(!accountId)throw new ApiError('حساب التداول غير محدد.',409);
- const tradingRef=db.doc(`sparkTradingAccounts/${uid}/accounts/${accountId}`);
- const tradingDoc=await tx.get(tradingRef);
- if(!tradingDoc.exists||tradingDoc.data()?.type!=='real')throw new ApiError('حساب تداول حقيقي مطلوب.',409);
- return {id:accountId,ref:tradingRef,snap:tradingDoc};
+import { withTx, pool } from './db.ts';
+import { createHash } from 'node:crypto';
+
+export interface Identity {
+  id: string;
+  email?: string;
+  verified?: boolean;
+  role?: string;
 }
-export async function publish(u:Identity,input:Data,now=Date.now()){
- const title=typeof input.title==='string'?input.title.trim():'',asset=input.asset,direction=input.direction,duration=Number(input.durationSec),bps=Number(input.settlementBps),opensAt=Number(input.opensAt),closesAt=Number(input.closesAt),eligibility=input.eligibility??'all';
- if(!title||title.length>80||!Object.hasOwn(ASSETS,asset)||!['BUY','SELL'].includes(direction))throw new ApiError('بيانات العقد غير صالحة.');
- if(!Number.isInteger(duration)||duration<60||duration>300||!Number.isInteger(bps)||Math.abs(bps)>1000)throw new ApiError('المدة 60–300 ثانية والتسوية من ‎-10% إلى ‎+10%.');
- if(!['all','standard','advanced'].includes(eligibility)||!Number.isSafeInteger(opensAt)||!Number.isSafeInteger(closesAt)||opensAt<now-60000||closesAt<=Math.max(now,opensAt)||closesAt-opensAt>30*86400000)throw new ApiError('نافذة المشاركة أو الأهلية غير صالحة.');
- const key=id(),code=`LAB-${id().replaceAll('-','').slice(0,10).toUpperCase()}`;
- const terms={version:1,mode:'production',id:key,code,title,asset,direction,durationSec:duration,settlementBps:bps,eligibility,opensAt,closesAt,publishedAt:now,adminId:u.id},canonical=JSON.stringify(terms),digest=hash(canonical);
- await db.runTransaction(async tx=>{await check(tx,u,true);const existing=await tx.get(ref('orinCodes',code));if(existing.exists)throw new ApiError('أعد المحاولة لإنشاء كود جديد.',409);
-  tx.create(ref('orinContracts',key),{id:key,code,title,asset,direction,duration_sec:duration,settlement_bps:bps,eligibility,opens_at:opensAt,closes_at:closesAt,published_at:now,admin_id:u.id,canonical,hash:digest,participants:0});tx.create(ref('orinCodes',code),{contractId:key});
-  tx.set(ref('orinControlContractStates',key),{status:'active',revision:0,updatedAt:now,updatedBy:u.id},{merge:true});
-  audit(tx,`publish:${key}`,u.id,'CONTRACT_PUBLISHED_AND_LOCKED',key,{terms,sha256:digest},now);
-  notice(tx,`publish:${key}`,'*','دعوة جديدة من ORIN',`${title} · الكود ${code}`,key,now,{eligibility});
- });return {id:key,code,hash:digest};
+
+export function hash(data: string): string {
+  return createHash('sha256').update(data).digest('hex');
 }
-function integrity(c:Data){if(hash(c.canonical)!==c.hash)throw new ApiError('تعذر التحقق من سلامة العقد.',409)}
-export async function verify(u:Identity,value:unknown,now=Date.now()){
- await bootstrap(u,now);if(typeof value!=='string')throw new ApiError('كود الدعوة غير صالح.');
- const formattedCode = value.trim().toUpperCase();
- if(!formattedCode||formattedCode.length<3||formattedCode.length>40)throw new ApiError('كود الدعوة غير صالح.');
- const candidates=[formattedCode];
- if(!formattedCode.startsWith('LAB-'))candidates.push(`LAB-${formattedCode}`);
- let c:Data|null=null;
- for(const candidate of candidates){
-  const codeDoc=await ref('orinCodes',candidate).get();
-  let contractId=codeDoc.exists?codeDoc.data()?.contractId:null;
-  if(contractId){const cDoc=await ref('orinContracts',contractId).get();if(cDoc.exists)c=cDoc.data()!;}
-  if(!c){
-   const snap=await db.collection('orinContracts').where('code','==',candidate).limit(1).get();
-   if(!snap.empty)c=snap.docs[0].data();
+
+export function resultCents(amountCents: number, bps: number): number {
+  return Math.round((amountCents * bps) / 10000);
+}
+
+export class ApiError extends Error {
+  statusCode: number;
+  constructor(message: string, statusCode = 400) {
+    super(message);
+    this.statusCode = statusCode;
   }
-  if(c)break;
- }
- if(!c)throw new ApiError('لا توجد دعوة متاحة لحسابك بهذا الكود.',404);
- const a=(await account(u.id).get()).data()??{tier:'standard'};
- const p=(await ref('users',u.id).get()).data();
- const isAdmin=u.verified&&(p?.role==='admin'||owner(u));
- const userTier=a.tier||'standard';
- if(c.eligibility!=='all'&&c.eligibility!==userTier&&!isAdmin)throw new ApiError('هذا الكود مخصص لفئة حسابات أخرى.',403);
- const stateDoc=await ref('orinControlContractStates',c.id).get();
- if(stateDoc.exists&&stateDoc.data()?.status==='revoked')throw new ApiError('تم إيقاف هذا الكود.',409);
- integrity(c);return {contract:c,serverTime:now};
 }
-export async function join(u:Identity,input:Data,now=Date.now()){
- await bootstrap(u,now);
- const rawCode=String(input.code??'').trim().toUpperCase(),amount=Number(input.amountCents);
- if(!rawCode||rawCode.length<3||rawCode.length>40||!Number.isSafeInteger(amount)||amount<100||amount>100000000||input.confirmed!==true)throw new ApiError('راجع المبلغ وأكّد شروط الحساب.');
- return db.runTransaction(async tx=>{
-  await check(tx,u,false,true);
-  const trading=await resolveTradingDoc(tx,u.id,input.accountId);
-  const tradingData=trading.snap?.exists?trading.snap.data()!:{balanceCents:0,reservedCents:0,realizedCents:0};
-  const currentBalance=tradingData.balanceCents??0;
-  const accDoc=await tx.get(account(u.id));
-  const a=accDoc.data()??{tier:'standard',profile:{closureStatus:'open'},accepted_at:now};
-  const candidates=[rawCode];
-  if(!rawCode.startsWith('LAB-'))candidates.push(`LAB-${rawCode}`);
-  let c:Data|null=null;
-  for(const candidate of candidates){
-   const lookup=await tx.get(ref('orinCodes',candidate));
-   let contractId=lookup.exists?lookup.data()!.contractId:null;
-   if(contractId){const cDoc=await tx.get(ref('orinContracts',contractId));if(cDoc.exists)c=cDoc.data()!;}
-   if(!c){
-    const snap=await tx.get(db.collection('orinContracts').where('code','==',candidate).limit(1));
-    if(!snap.empty)c=snap.docs[0].data();
-   }
-   if(c)break;
+
+export async function publish(u: Identity, input: any, now = Date.now()) {
+  const title = typeof input.title === 'string' ? input.title.trim() : '';
+  const asset = input.asset;
+  const direction = input.direction;
+  const duration = Number(input.durationSec);
+  const bps = Number(input.settlementBps);
+  const opensAt = Number(input.opensAt);
+  const closesAt = Number(input.closesAt);
+  const eligibility = input.eligibility ?? 'all';
+
+  if (!title || title.length > 80 || !['BUY', 'SELL'].includes(direction)) {
+    throw new ApiError('بيانات العقد غير صالحة.');
   }
-  if(!c)throw new ApiError('الدعوة غير متاحة لحسابك.',404);
-  const contractState=(await tx.get(ref('orinControlContractStates',c.id))).data();
-  if(contractState?.status==='revoked')throw new ApiError('تم إيقاف هذا الكود.',409);
-  const p=(await tx.get(ref('users',u.id))).data();
-  const isAdmin=u.verified&&(p?.role==='admin'||owner(u));
-  const userTier=a.tier||'standard';
-  if(c.eligibility!=='all'&&c.eligibility!==userTier&&!isAdmin)throw new ApiError('الدعوة غير متاحة لفئة حسابك.',404);
-  if(a.profile?.closureStatus==='requested')throw new ApiError('الحساب بانتظار الإغلاق.',403);
-  integrity(c);if(input.contractHash!==c.hash)throw new ApiError('راجع شروط العقد الحالية.',409);
-  const key=hash(`position:${u.id}:${c.id}`),previous=await tx.get(ref('orinPositions',key));
-  if(previous.exists){if(previous.data()!.amount_cents!==amount)throw new ApiError('سبق الاشتراك بمبلغ مختلف.',409);return {id:key,reused:true}}
-  if(now<c.opens_at||now>=c.closes_at)throw new ApiError('العقد خارج نافذة المشاركة.',409);
-  if(currentBalance<amount)throw new ApiError('الرصيد المتاح غير كافٍ لهذا العقد. الرصيد الحالي: '+(currentBalance/100).toFixed(2)+' USD',409);
-  const counterRef=ref('orinContractCounts',c.id),count=(await tx.get(counterRef)).data()?.count??0;
-  const endsAt=now+c.duration_sec*1000,pnl=resultCents(amount,c.settlement_bps);
-  tx.create(ref('orinPositions',key),{id:key,user_id:u.id,contract_id:c.id,account_id:trading.id,amount_cents:amount,result_cents:pnl,started_at:now,ends_at:endsAt,status:'active',settled_at:null,contract:c});
-  tx.set(trading.ref,{balanceCents:currentBalance-amount,reservedCents:(tradingData.reservedCents??0)+amount,updatedAt:FieldValue.serverTimestamp()},{merge:true});
-  if(!a.accepted_at){tx.set(account(u.id),{accepted_at:now},{merge:true});}
-  tx.set(counterRef,{count:count+1});
-  journal(tx,`allocate:${key}`,u.id,'allocation',key,[[`user:${u.id}:cash`,-amount],[`user:${u.id}:reserved`,amount]],now,now);
-  audit(tx,`join:${key}`,u.id,'AMOUNT_ALLOCATED',key,{contractId:c.id,contractHash:c.hash,amountCents:amount,startedAt:now,endsAt,accountId:trading.id},now);
-  notice(tx,`start:${key}`,u.id,'بدأ العقد',`${c.title}`,c.id,now);return {id:key,reused:false};
- });
-}
-export async function settle(u:Identity,now=Date.now()){
- const due=await db.collection('orinPositions').where('user_id','==',u.id).where('status','==','active').get();
- for(const row of due.docs){if(row.data().ends_at>now)continue;
-  await db.runTransaction(async tx=>{await check(tx,u);const p=(await tx.get(row.ref)).data();if(!p||p.status!=='active'||p.ends_at>now)return;
-   const trading=await resolveTradingDoc(tx,u.id,p.account_id,true);
-   const a=trading.snap?.exists?trading.snap.data()!:{balanceCents:0,reservedCents:0,realizedCents:0};
-   const c=(await tx.get(ref('orinContracts',p.contract_id))).data();
-   if(!c)throw new ApiError('العقد غير متاح.',409);integrity(c);const expected=resultCents(p.amount_cents,c.settlement_bps);if(expected!==p.result_cents||(a.reservedCents??0)<p.amount_cents)throw new ApiError('تعارض في بيانات التسوية.',409);
-   const receipt={version:1,mode:'production',receiptId:`R-${p.id.slice(0,12).toUpperCase()}`,contractId:c.id,contractCode:c.code,contractHash:c.hash,positionId:p.id,asset:c.asset,direction:c.direction,amountCents:p.amount_cents,durationSec:c.duration_sec,lockedSettlementBps:c.settlement_bps,startedAt:p.started_at,endsAt:p.ends_at,effectiveAt:p.ends_at,processedAt:now,resultCents:expected,returnedCents:p.amount_cents+expected,settlement:'executed-contract-settlement'},payload=JSON.stringify(receipt),digest=hash(payload),jid=`settle:${p.id}`;
-   tx.update(trading.ref,{balanceCents:(a.balanceCents??0)+p.amount_cents+expected,reservedCents:(a.reservedCents??0)-p.amount_cents,realizedCents:(a.realizedCents??0)+expected,updatedAt:FieldValue.serverTimestamp()});tx.update(row.ref,{status:'settled',settled_at:now});
-   journal(tx,jid,u.id,'settlement',p.id,[[`user:${u.id}:reserved`,-p.amount_cents],[`user:${u.id}:cash`,p.amount_cents+expected],['system:trading-pnl',-expected]],p.ends_at,now);
-   tx.create(ref('orinReceipts',`receipt:${p.id}`),{id:`receipt:${p.id}`,position_id:p.id,user_id:u.id,payload,hash:digest,created_at:now});
-   audit(tx,jid,'settlement-engine','CONTRACT_SETTLED',p.id,{contractId:c.id,contractHash:c.hash,resultCents:expected,effectiveAt:p.ends_at,processedAt:now,receiptHash:digest},now);
-   notice(tx,`end:${p.id}`,u.id,'انتهت مدة العقد',`${c.title} · اكتملت مدة المشاركة`,c.id,p.ends_at);
-   notice(tx,jid,u.id,'اكتملت التسوية',`${c.title} · النتيجة ${expected>=0?'+':''}${(expected/100).toFixed(2)} دولار`,c.id,now);
+  if (!Number.isInteger(duration) || duration < 60 || duration > 300 || !Number.isInteger(bps) || Math.abs(bps) > 1000) {
+    throw new ApiError('المدة 60–300 ثانية والتسوية من -10% إلى +10%.');
+  }
+  if (!['all', 'standard', 'advanced', 'vip'].includes(eligibility) || opensAt >= closesAt) {
+    throw new ApiError('نافذة المشاركة أو الأهلية غير صالحة.');
+  }
+
+  const key = `cnt-${hash(title + asset + opensAt).slice(0, 16)}`;
+  const code = `LAB-${hash(key).slice(0, 10).toUpperCase()}`;
+  const terms = {
+    version: 1,
+    id: key,
+    code,
+    title,
+    asset,
+    direction,
+    durationSec: duration,
+    settlementBps: bps,
+    eligibility,
+    opensAt,
+    closesAt,
+    publishedAt: now,
+    adminId: u.id,
+  };
+  const canonical = JSON.stringify(terms);
+  const digest = hash(canonical);
+
+  return withTx(async (client) => {
+    await client.query(
+      `INSERT INTO contracts (id, code, title, asset, direction, duration_sec, settlement_bps, opens_at, closes_at, eligibility, canonical, published_at, admin_id, hash, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, to_timestamp($8 / 1000.0), to_timestamp($9 / 1000.0), $10, $11, to_timestamp($12 / 1000.0), $13, $14, 'active')`,
+      [key, code, title, asset, direction, duration, bps, opensAt, closesAt, eligibility, canonical, now, u.id, digest]
+    );
+
+    const payload = JSON.stringify({ terms, sha256: digest });
+    await client.query(
+      `INSERT INTO audit (actor_id, action, reference, payload, payload_hash)
+       VALUES ($1, 'CONTRACT_PUBLISHED_AND_LOCKED', $2, $3::jsonb, $4)
+       ON CONFLICT (action, reference) DO NOTHING`,
+      [u.id, key, payload, hash(payload)]
+    );
+
+    return { id: key, code, hash: digest };
   });
- }
 }
-export async function state(u:Identity,now=Date.now()){
- await bootstrap(u,now);const [a,p,cs,ps,rs,js,feed,selection,accountsSnap]=await Promise.all([account(u.id).get(),ref('users',u.id).get(),db.collection('orinContracts').orderBy('published_at','desc').limit(100).get(),db.collection('orinPositions').where('user_id','==',u.id).get(),db.collection('orinReceipts').where('user_id','==',u.id).get(),db.collection('orinJournals').where('user_id','==',u.id).get(),inbox(u,now),ref('sparkAccountSelections',u.id).get(),db.collection(`sparkTradingAccounts/${u.id}/accounts`).get()]);
- const user=active(p.data(),u),data=a.data()!,isAdmin=u.verified&&(user.role==='admin'||owner(u));
- let activeAccount:Data|null=null;
- const selectedId=selection.data()?.accountId;
- if(selectedId){const match=accountsSnap.docs.find(d=>d.id===selectedId);if(match)activeAccount=match.data();}
- if(!activeAccount){const realMatch=accountsSnap.docs.find(d=>d.data().type==='real');if(realMatch)activeAccount=realMatch.data();else if(!accountsSnap.empty)activeAccount=accountsSnap.docs[0].data();}
- const balanceCents=activeAccount?.balanceCents??0,reservedCents=activeAccount?.reservedCents??0,realizedCents=activeAccount?.realizedCents??0;
- const positions=ps.docs.map(d=>d.data()).sort((a,b)=>b.started_at-a.started_at).slice(0,100);
- const counts=cs.size?await db.getAll(...cs.docs.map(d=>ref('orinContractCounts',d.id))):[];
- const contracts=cs.docs.map((d,i)=>({...d.data(),participants:counts[i]?.data()?.count??0} as Data)).filter(c=>isAdmin||c.eligibility==='all'||c.eligibility===data.tier);
- const audits=isAdmin?(await db.collection('orinAudit').orderBy('created_at','desc').limit(100).get()).docs.map(d=>d.data()):[];
- return {serverTime:now,user:{id:u.id,name:user.displayName,tier:data.tier,accepted_at:data.accepted_at,seen_at:data.seen_at},isAdmin,balanceCents,reservedCents,realizedCents,contracts,positions,notifications:feed.items,receipts:rs.docs.map(d=>d.data()).sort((a,b)=>b.created_at-a.created_at).slice(0,100),ledger:js.docs.flatMap(d=>d.data().entries).sort((a,b)=>b.effective_at-a.effective_at).slice(0,300),audit:audits};
+
+export async function join(u: Identity, input: any, now = Date.now()) {
+  const rawCode = String(input.code ?? input.contractId ?? '').trim();
+  const amount = Number(input.amountCents);
+  if (!rawCode || !Number.isSafeInteger(amount) || amount <= 0 || input.confirmed !== true) {
+    throw new ApiError('راجع المبلغ وأكّد شروط الحساب.');
+  }
+
+  return withTx(async (client) => {
+    // 1. Fetch Contract
+    const cRes = await client.query(
+      `SELECT c.*, COALESCE(r.revoked, false) AS is_revoked
+       FROM contracts c
+       LEFT JOIN contract_revocation_state r ON c.id = r.contract_id
+       WHERE c.code = $1 OR c.id = $1`,
+      [rawCode]
+    );
+    if (cRes.rows.length === 0) throw new ApiError('الدعوة غير متاحة لحسابك.', 404);
+    const c = cRes.rows[0];
+
+    if (c.is_revoked || c.status !== 'active') throw new ApiError('تم إيقاف هذا الكود.', 409);
+
+    const opensAtMs = new Date(c.opens_at).getTime();
+    const closesAtMs = new Date(c.closes_at).getTime();
+    if (now < opensAtMs || now >= closesAtMs) throw new ApiError('العقد خارج نافذة المشاركة.', 409);
+
+    if (input.contractHash && input.contractHash !== c.hash) {
+      throw new ApiError('راجع شروط العقد الحالية.', 409);
+    }
+
+    // 2. Eligibility Check against Profile Tier
+    const profRes = await client.query('SELECT tier FROM profiles WHERE id = $1', [u.id]);
+    const userTier = profRes.rows[0]?.tier ?? 'standard';
+    if (c.eligibility !== 'all' && c.eligibility !== userTier) {
+      throw new ApiError('حسابك غير مؤهل لهذا العقد.', 403);
+    }
+
+    // 3. Resolve Account & Lock for Update
+    const accRes = await client.query(
+      `SELECT * FROM accounts WHERE user_id = $1 AND type = 'real' FOR UPDATE`,
+      [u.id]
+    );
+    if (accRes.rows.length === 0) throw new ApiError('حساب تداول حقيقي مطلوب.', 404);
+    const acc = accRes.rows[0];
+
+    // 4. Unique position check (idempotent retry)
+    const posId = hash(`position:${u.id}:${c.id}`);
+    const existingPos = await client.query(`SELECT * FROM positions WHERE id = $1`, [posId]);
+    if (existingPos.rows.length > 0) {
+      if (Number(existingPos.rows[0].amount_cents) !== amount) {
+        throw new ApiError('سبق الاشتراك بمبلغ مختلف.', 409);
+      }
+      return { id: posId, reused: true };
+    }
+
+    const useBonus = input.useBonus === true;
+    if (useBonus) {
+      // Bonus wallet checks: claimed, expiry, and eligible assets
+      const bRes = await client.query('SELECT * FROM bonus_wallets WHERE user_id = $1', [u.id]);
+      if (bRes.rows.length === 0 || !bRes.rows[0].claimed) {
+        throw new ApiError('محفظة البونص غير مفعلة.', 409);
+      }
+      const bWallet = bRes.rows[0];
+      if (bWallet.expires_at && now >= new Date(bWallet.expires_at).getTime()) {
+        throw new ApiError('انتهت صلاحية محفظة البونص.', 409);
+      }
+      const eligibleAssets = Array.isArray(bWallet.eligible_assets)
+        ? bWallet.eligible_assets
+        : (typeof bWallet.eligible_assets === 'string' ? JSON.parse(bWallet.eligible_assets) : []);
+      if (Array.isArray(eligibleAssets) && eligibleAssets.length > 0 && !eligibleAssets.includes(c.asset)) {
+        throw new ApiError('الأصل غير مؤهل للتداول بالبونص.', 409);
+      }
+      if (BigInt(acc.bonus_cents) < BigInt(amount)) {
+        throw new ApiError('رصيد البونص غير كافٍ لهذا العقد.', 409);
+      }
+    } else {
+      if (BigInt(acc.balance_cents) < BigInt(amount)) {
+        throw new ApiError('الرصيد المتاح غير كافٍ لهذا العقد.', 409);
+      }
+    }
+
+    const durationSec = c.duration_sec;
+    const endsAtMs = now + durationSec * 1000;
+    const pnl = resultCents(amount, c.settlement_bps);
+
+    // 5. Insert Position
+    await client.query(
+      `INSERT INTO positions (id, user_id, contract_id, account_id, amount_cents, result_cents, is_bonus, status, started_at, ends_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', to_timestamp($8 / 1000.0), to_timestamp($9 / 1000.0))`,
+      [posId, u.id, c.id, acc.id, amount, pnl, useBonus, now, endsAtMs]
+    );
+
+    // 6. Insert Journal & Entries (Double-Entry Ledger)
+    const jid = `allocate:${posId}`;
+    const kind = useBonus ? 'bonus_allocation' : 'allocation';
+    await client.query(
+      `INSERT INTO journals (id, kind, reference) VALUES ($1, $2, $3)`,
+      [jid, kind, posId]
+    );
+
+    if (useBonus) {
+      await client.query(
+        `INSERT INTO journal_entries (journal_id, user_id, account_id, bucket, amount_cents) VALUES
+         ($1, $2, $3, 'bonus', $4),
+         ($1, $2, $3, 'bonus_reserved', $5)`,
+        [jid, u.id, acc.id, -amount, amount]
+      );
+    } else {
+      await client.query(
+        `INSERT INTO journal_entries (journal_id, user_id, account_id, bucket, amount_cents) VALUES
+         ($1, $2, $3, 'cash', $4),
+         ($1, $2, $3, 'reserved', $5)`,
+        [jid, u.id, acc.id, -amount, amount]
+      );
+    }
+
+    // 7. Audit (idempotent unique on action + reference)
+    const auditPayload = JSON.stringify({
+      contractId: c.id,
+      contractHash: c.hash,
+      amountCents: amount,
+      startedAt: now,
+      endsAt: endsAtMs,
+      accountId: acc.id,
+      isBonus: useBonus,
+    });
+    await client.query(
+      `INSERT INTO audit (actor_id, action, reference, payload, payload_hash)
+       VALUES ($1, 'AMOUNT_ALLOCATED', $2, $3::jsonb, $4)
+       ON CONFLICT (action, reference) DO NOTHING`,
+      [u.id, posId, auditPayload, hash(auditPayload)]
+    );
+
+    return { id: posId, reused: false };
+  });
 }
-export async function action(u:Identity,input:Data,now=Date.now()){
- await bootstrap(u,now);await settle(u,now);let result:unknown={ok:true};
- if(input.action==='publish')result=await publish(u,input,now);
- else if(input.action==='join')result=await join(u,input,now);
- else if(input.action==='settle'){}
- else if(['accept','read','tier'].includes(input.action))await db.runTransaction(async tx=>{await check(tx,u,input.action==='tier');const a=(await tx.get(account(u.id))).data()!;
-  if(input.action==='accept'&&!a.accepted_at){tx.update(account(u.id),{accepted_at:now});audit(tx,`accept:${u.id}`,u.id,'TERMS_ACCEPTED',u.id,{version:1},now)}
-  if(input.action==='read')tx.update(account(u.id),{seen_at:now});
-  if(input.action==='tier'){if(!['standard','advanced'].includes(input.tier))throw new ApiError('فئة غير صالحة.');tx.update(account(u.id),{tier:input.tier});audit(tx,id(),u.id,'TIER_CHANGED',u.id,{tier:input.tier},now)}
- });else throw new ApiError('عملية غير مدعومة.');
- return {result,state:await state(u,now)};
+
+export async function settle(u: Identity, now = Date.now()) {
+  return withTx(async (client) => {
+    // Select active positions due for settlement
+    const posRes = await client.query(
+      `SELECT p.*, c.settlement_bps, c.code AS contract_code, c.hash AS contract_hash, c.asset, c.direction, c.duration_sec
+       FROM positions p
+       JOIN contracts c ON p.contract_id = c.id
+       WHERE p.user_id = $1 AND p.status = 'active' AND p.ends_at <= to_timestamp($2 / 1000.0)
+       FOR UPDATE OF p SKIP LOCKED`,
+      [u.id, now]
+    );
+
+    const settledResults = [];
+    for (const p of posRes.rows) {
+      if (p.status !== 'active') continue;
+
+      const expected = resultCents(Number(p.amount_cents), p.settlement_bps);
+      const jid = `settle:${p.id}`;
+      const amountCents = Number(p.amount_cents);
+
+      // Update position
+      await client.query(
+        `UPDATE positions SET status = 'settled', settled_at = to_timestamp($1 / 1000.0) WHERE id = $2`,
+        [now, p.id]
+      );
+
+      // Receipt
+      const receipt = {
+        version: 1,
+        receiptId: `R-${p.id.slice(0, 12).toUpperCase()}`,
+        contractId: p.contract_id,
+        contractCode: p.contract_code,
+        contractHash: p.contract_hash,
+        positionId: p.id,
+        asset: p.asset,
+        direction: p.direction,
+        amountCents,
+        durationSec: p.duration_sec,
+        lockedSettlementBps: p.settlement_bps,
+        resultCents: expected,
+        returnedCents: amountCents + expected,
+        processedAt: now,
+      };
+      const payloadStr = JSON.stringify(receipt);
+      const receiptHash = hash(payloadStr);
+
+      await client.query(
+        `INSERT INTO receipts (id, position_id, user_id, payload, hash)
+         VALUES ($1, $2, $3, $4::jsonb, $5)
+         ON CONFLICT (position_id) DO NOTHING`,
+        [`receipt:${p.id}`, p.id, u.id, payloadStr, receiptHash]
+      );
+
+      // Journal & entries
+      if (p.is_bonus) {
+        await client.query(
+          `INSERT INTO journals (id, kind, reference) VALUES ($1, 'bonus_settlement', $2)`,
+          [jid, p.id]
+        );
+        if (expected >= 0) {
+          // Profit: principal returned to bonus bucket, profit to bonus_profit bucket
+          await client.query(
+            `INSERT INTO journal_entries (journal_id, user_id, account_id, bucket, amount_cents) VALUES
+             ($1, $2, $3, 'bonus_reserved', $4),
+             ($1, $2, $3, 'bonus', $5)`,
+            [jid, u.id, p.account_id, -amountCents, amountCents]
+          );
+          if (expected > 0) {
+            await client.query(
+              `INSERT INTO journal_entries (journal_id, user_id, account_id, bucket, amount_cents) VALUES
+               ($1, $2, $3, 'bonus_profit', $4),
+               ($1, NULL, NULL, 'system:program-payout', $5)`,
+              [jid, u.id, p.account_id, expected, -expected]
+            );
+          }
+        } else {
+          // Loss: principal returned minus loss to bonus bucket, counter-entry on system:program-pnl
+          const returnedBonus = amountCents + expected;
+          const lossCents = -expected;
+          await client.query(
+            `INSERT INTO journal_entries (journal_id, user_id, account_id, bucket, amount_cents) VALUES
+             ($1, $2, $3, 'bonus_reserved', $4),
+             ($1, $2, $3, 'bonus', $5),
+             ($1, NULL, NULL, 'system:program-pnl', $6)`,
+            [jid, u.id, p.account_id, -amountCents, returnedBonus, lossCents]
+          );
+        }
+      } else {
+        await client.query(
+          `INSERT INTO journals (id, kind, reference) VALUES ($1, 'settlement', $2)`,
+          [jid, p.id]
+        );
+        await client.query(
+          `INSERT INTO journal_entries (journal_id, user_id, account_id, bucket, amount_cents) VALUES
+           ($1, $2, $3, 'reserved', $4),
+           ($1, $2, $3, 'cash', $5),
+           ($1, NULL, NULL, 'system:trading-pnl', $6)`,
+          [jid, u.id, p.account_id, -amountCents, amountCents + expected, -expected]
+        );
+      }
+
+      // Audit (idempotent unique on action + reference)
+      await client.query(
+        `INSERT INTO audit (actor_id, action, reference, payload, payload_hash)
+         VALUES ('settlement-engine', 'CONTRACT_SETTLED', $1, $2::jsonb, $3)
+         ON CONFLICT (action, reference) DO NOTHING`,
+        [p.id, payloadStr, receiptHash]
+      );
+
+      settledResults.push({ positionId: p.id, resultCents: expected });
+    }
+    return settledResults;
+  });
 }
+
+export async function state(u: Identity, now = Date.now()) {
+  const client = await pool.connect();
+  try {
+    const profRes = await client.query(`SELECT * FROM profiles WHERE id = $1`, [u.id]);
+    const accRes = await client.query(`SELECT * FROM accounts WHERE user_id = $1 AND type = 'real'`, [u.id]);
+    const posRes = await client.query(
+      `SELECT * FROM positions WHERE user_id = $1 ORDER BY started_at DESC LIMIT 100`,
+      [u.id]
+    );
+    const cntRes = await client.query(
+      `SELECT * FROM contracts ORDER BY opens_at DESC LIMIT 100`
+    );
+    const recRes = await client.query(
+      `SELECT * FROM receipts WHERE user_id = $1 ORDER BY created_at DESC LIMIT 100`,
+      [u.id]
+    );
+    const jrnRes = await client.query(
+      `SELECT je.*, j.kind, j.reference, j.created_at
+       FROM journal_entries je
+       JOIN journals j ON je.journal_id = j.id
+       WHERE je.user_id = $1
+       ORDER BY je.id DESC LIMIT 300`,
+      [u.id]
+    );
+
+    const user = profRes.rows[0] ?? { id: u.id, display_name: '', tier: 'standard' };
+    const acc = accRes.rows[0] ?? {
+      balance_cents: '0',
+      reserved_cents: '0',
+      realized_cents: '0',
+      bonus_cents: '0',
+      bonus_reserved_cents: '0',
+      bonus_profit_cents: '0',
+    };
+
+    return {
+      serverTime: now,
+      user: {
+        id: u.id,
+        name: user.display_name,
+        tier: user.tier,
+      },
+      balanceCents: Number(acc.balance_cents),
+      reservedCents: Number(acc.reserved_cents),
+      realizedCents: Number(acc.realized_cents),
+      bonusCents: Number(acc.bonus_cents),
+      bonusReservedCents: Number(acc.bonus_reserved_cents),
+      bonusProfitCents: Number(acc.bonus_profit_cents),
+      bonus_cents: Number(acc.bonus_cents),
+      bonus_reserved_cents: Number(acc.bonus_reserved_cents),
+      bonus_profit_cents: Number(acc.bonus_profit_cents),
+      contracts: cntRes.rows,
+      positions: posRes.rows,
+      receipts: recRes.rows,
+      ledger: jrnRes.rows,
+    };
+  } finally {
+    client.release();
+  }
+}
+
+export async function revokeContract(u: Identity, contractId: string, reason?: string, effectiveNow = Date.now()) {
+  return await withTx(async (client) => {
+    await client.query(`UPDATE contracts SET status = 'cancelled' WHERE id = $1`, [contractId]);
+    await client.query(`
+      INSERT INTO contract_revocation_state (contract_id, revoked, reason, revoked_by, revoked_at)
+      VALUES ($1, TRUE, $2, $3, TO_TIMESTAMP($4 / 1000.0))
+      ON CONFLICT (contract_id) DO UPDATE SET revoked = TRUE, reason = $2, revoked_by = $3, revoked_at = TO_TIMESTAMP($4 / 1000.0)
+    `, [contractId, reason || 'Revoked by admin', u.id, effectiveNow]);
+    return { ok: true, revoked: true, contractId };
+  });
+}
+
+export async function action(u: Identity, input: any, now = Date.now()) {
+  const act = input?.action;
+  const effectiveNow = input?.now || now;
+  if (act === 'publish') {
+    return await publish(u, input.contract || input, effectiveNow);
+  }
+  if (act === 'join') {
+    const joinInput = {
+      code: input.code || input.contractCode || input.contractId,
+      amountCents: input.amountCents,
+      confirmed: input.confirmed !== false,
+      contractHash: input.contractHash,
+      useBonus: input.useBonus
+    };
+    return await join(u, joinInput, effectiveNow);
+  }
+  if (act === 'settle') {
+    return await settle(u, effectiveNow);
+  }
+  if (act === 'revoke') {
+    return await revokeContract(u, input.contractId, input.reason, effectiveNow);
+  }
+  throw new ApiError(`Unsupported contract action: ${act}`, 400);
+}
+
+export async function verify(u: Identity, code: string) {
+  return await withTx(async (client) => {
+    const res = await client.query('SELECT * FROM contracts WHERE code = $1 OR hash = $1', [code]);
+    if (res.rowCount === 0) {
+      throw new ApiError('العقد غير صالح أو لم يتم العثور عليه.', 404);
+    }
+    return { ok: true, contract: res.rows[0] };
+  });
+}
+

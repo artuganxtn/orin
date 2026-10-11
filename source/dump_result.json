@@ -1,0 +1,1656 @@
+[
+  {
+    "path": "orinAccountSecurity",
+    "docId": "usr-alice-100",
+    "sampleDoc": {
+      "uid": "usr-alice-100",
+      "twoFactorEnabled": false,
+      "updatedAt": 1791691031738
+    },
+    "fields": [
+      "uid: STRING",
+      "twoFactorEnabled: BOOLEAN",
+      "updatedAt: INTEGER"
+    ]
+  },
+  {
+    "path": "orinAccounts",
+    "docId": "usr-alice-100",
+    "sampleDoc": {
+      "id": "usr-alice-100",
+      "tier": "standard",
+      "balanceCents": 0,
+      "reservedCents": 0,
+      "realizedCents": 0,
+      "revision": 1,
+      "updated_at": 1791691027093,
+      "accepted_at": 1791691027723
+    },
+    "fields": [
+      "id: STRING",
+      "tier: STRING",
+      "balanceCents: INTEGER",
+      "reservedCents: INTEGER",
+      "realizedCents: INTEGER",
+      "revision: INTEGER",
+      "updated_at: INTEGER",
+      "accepted_at: INTEGER"
+    ]
+  },
+  {
+    "path": "orinActivityPayments",
+    "docId": "usr-alice-100_2026-10",
+    "sampleDoc": {
+      "uid": "usr-alice-100",
+      "cents": 2500,
+      "configurationRevision": 1,
+      "netRevenueCents": 200000,
+      "createdAt": 1791691030712,
+      "approvalId": "req-team-prop-1"
+    },
+    "fields": [
+      "uid: STRING",
+      "cents: INTEGER",
+      "configurationRevision: INTEGER",
+      "netRevenueCents: INTEGER",
+      "createdAt: INTEGER",
+      "approvalId: STRING"
+    ]
+  },
+  {
+    "path": "orinAudit",
+    "docId": "create-np-59f6cc7c66be1ed4ce3b57a2336778602968a596ea0419570ce485e42c7e8f8f",
+    "sampleDoc": {
+      "id": "create-np-59f6cc7c66be1ed4ce3b57a2336778602968a596ea0419570ce485e42c7e8f8f",
+      "actor_id": "usr-bob-200",
+      "action": "DEPOSIT_REQUESTED",
+      "reference": "np-59f6cc7c66be1ed4ce3b57a2336778602968a596ea0419570ce485e42c7e8f8f",
+      "payload": "{\"accountId\":\"acc-2c0ef306-9c03-4f4e-a94a-9c7123a13afc\",\"amountCents\":100000,\"coin\":\"usdtbsc\"}",
+      "payload_hash": "99fa18966eb5b5d70c3c1414766a6041d9612edb97a7f26892ad266625fb17be",
+      "created_at": 1791691029798
+    },
+    "fields": [
+      "id: STRING",
+      "actor_id: STRING",
+      "action: STRING",
+      "reference: STRING",
+      "payload: STRING",
+      "payload_hash: STRING",
+      "created_at: INTEGER"
+    ]
+  },
+  {
+    "path": "orinBonusClaims",
+    "docId": "f14a7e8179703d40e34dd6e046b49a677d6033bdb882ea19f1d2c4017f741a61",
+    "sampleDoc": {
+      "uid": "usr-alice-100",
+      "accountId": "acc-cb7a4138-a2ec-4cb6-bd80-f68ff7c51ec1",
+      "createdAt": 1791691030958
+    },
+    "fields": [
+      "uid: STRING",
+      "accountId: STRING",
+      "createdAt: INTEGER"
+    ]
+  },
+  {
+    "path": "orinBonusWallets",
+    "docId": "usr-alice-100",
+    "sampleDoc": {
+      "uid": "usr-alice-100",
+      "accountId": "acc-cb7a4138-a2ec-4cb6-bd80-f68ff7c51ec1",
+      "firstDepositCents": 100000,
+      "configurationRevision": 1,
+      "qualifiedDepositCents": 100000,
+      "claimed": true,
+      "claimedAt": 1791691030958,
+      "expiresAt": 1794283030958,
+      "termsVersion": "v1.0",
+      "eligibleAssets": [
+        "BTCUSD",
+        "ETHUSD"
+      ],
+      "profitLimitCents": 20000,
+      "tradingTerms": "Trading terms",
+      "profitCents": 250,
+      "bonusCents": 10000,
+      "withdrawableProfitCents": 250,
+      "reservedBonusCents": 0
+    },
+    "fields": [
+      "uid: STRING",
+      "accountId: STRING",
+      "firstDepositCents: INTEGER",
+      "configurationRevision: INTEGER",
+      "qualifiedDepositCents: INTEGER",
+      "claimed: BOOLEAN",
+      "claimedAt: INTEGER",
+      "expiresAt: INTEGER",
+      "termsVersion: STRING",
+      "eligibleAssets: ARRAY",
+      "profitLimitCents: INTEGER",
+      "tradingTerms: STRING",
+      "profitCents: INTEGER",
+      "bonusCents: INTEGER",
+      "withdrawableProfitCents: INTEGER",
+      "reservedBonusCents: INTEGER"
+    ]
+  },
+  {
+    "path": "orinCodes",
+    "docId": "LAB-A6D51C5FE5",
+    "sampleDoc": {
+      "contractId": "3d885bfe-1a1a-4275-9e2c-127d551da7d6"
+    },
+    "fields": [
+      "contractId: STRING"
+    ]
+  },
+  {
+    "path": "orinConfiguration",
+    "docId": "markets",
+    "sampleDoc": {
+      "configuration": {
+        "defaultSymbol": "BTC-USD",
+        "enabledSymbols": [
+          "BTC-USD"
+        ]
+      },
+      "revision": 1,
+      "updatedAt": 1791691027082
+    },
+    "fields": [
+      "configuration: OBJECT",
+      "revision: INTEGER",
+      "updatedAt: INTEGER"
+    ]
+  },
+  {
+    "path": "orinContractCounts",
+    "docId": "3d885bfe-1a1a-4275-9e2c-127d551da7d6",
+    "sampleDoc": {
+      "count": 1
+    },
+    "fields": [
+      "count: INTEGER"
+    ]
+  },
+  {
+    "path": "orinContracts",
+    "docId": "3d885bfe-1a1a-4275-9e2c-127d551da7d6",
+    "sampleDoc": {
+      "id": "3d885bfe-1a1a-4275-9e2c-127d551da7d6",
+      "code": "LAB-A6D51C5FE5",
+      "title": "BTC 60s Contract",
+      "asset": "BTCUSD",
+      "direction": "BUY",
+      "duration_sec": 60,
+      "settlement_bps": 500,
+      "eligibility": "all",
+      "opens_at": 1791691027723,
+      "closes_at": 1791777427723,
+      "published_at": 1791691027723,
+      "admin_id": "admin-super-uid",
+      "canonical": "{\"version\":1,\"mode\":\"production\",\"id\":\"3d885bfe-1a1a-4275-9e2c-127d551da7d6\",\"code\":\"LAB-A6D51C5FE5\",\"title\":\"BTC 60s Contract\",\"asset\":\"BTCUSD\",\"direction\":\"BUY\",\"durationSec\":60,\"settlementBps\":500,\"eligibility\":\"all\",\"opensAt\":1791691027723,\"closesAt\":1791777427723,\"publishedAt\":1791691027723,\"adminId\":\"admin-super-uid\"}",
+      "hash": "0d3638ee4a2e794ee257c581b6a15b7648bc58cc58e4dc1b4af740a6511dd642",
+      "participants": 0
+    },
+    "fields": [
+      "id: STRING",
+      "code: STRING",
+      "title: STRING",
+      "asset: STRING",
+      "direction: STRING",
+      "duration_sec: INTEGER",
+      "settlement_bps: INTEGER",
+      "eligibility: STRING",
+      "opens_at: INTEGER",
+      "closes_at: INTEGER",
+      "published_at: INTEGER",
+      "admin_id: STRING",
+      "canonical: STRING",
+      "hash: STRING",
+      "participants: INTEGER"
+    ]
+  },
+  {
+    "path": "orinControlApprovals",
+    "docId": "req-fin-prop-credit-1",
+    "sampleDoc": {
+      "kind": "adjustment",
+      "uid": "usr-alice-100",
+      "accountId": "acc-cb7a4138-a2ec-4cb6-bd80-f68ff7c51ec1",
+      "deltaCents": 5000,
+      "beforeCents": 100500,
+      "afterCents": 105500,
+      "reason": "Promotional credit adjustment",
+      "reference": "ref-fin-credit-1",
+      "requestedBy": "staff-fin-maker-uid",
+      "createdAt": 1791691028460,
+      "reviewReason": "Confirmed promotional credit adjustment",
+      "approvedBy": "staff-fin-checker-uid",
+      "reviewedAt": 1791691028597,
+      "revision": 1,
+      "status": "completed"
+    },
+    "fields": [
+      "kind: STRING",
+      "uid: STRING",
+      "accountId: STRING",
+      "deltaCents: INTEGER",
+      "beforeCents: INTEGER",
+      "afterCents: INTEGER",
+      "reason: STRING",
+      "reference: STRING",
+      "requestedBy: STRING",
+      "createdAt: INTEGER",
+      "reviewReason: STRING",
+      "approvedBy: STRING",
+      "reviewedAt: INTEGER",
+      "revision: INTEGER",
+      "status: STRING"
+    ]
+  },
+  {
+    "path": "orinControlAudit",
+    "docId": "command-13e211e770f33540bc78b2160bf477a0dec566f84cbe10e4d1fce70b147f9754",
+    "sampleDoc": {
+      "adminId": "staff-fin-maker-uid",
+      "action": "finance.propose",
+      "target": "usr-alice-100",
+      "timestamp": 1791691028943,
+      "reason": "Fee adjustment debit",
+      "previous": null,
+      "next": {
+        "kind": "adjustment",
+        "uid": "usr-alice-100",
+        "accountId": "acc-cb7a4138-a2ec-4cb6-bd80-f68ff7c51ec1",
+        "deltaCents": -1000,
+        "beforeCents": 105500,
+        "afterCents": 104500,
+        "status": "pending",
+        "reason": "Fee adjustment debit",
+        "reference": "ref-fin-debit-1",
+        "requestedBy": "staff-fin-maker-uid",
+        "revision": 0,
+        "createdAt": 1791691028799
+      },
+      "requestId": "req-fin-prop-debit-1",
+      "referenceId": "req-fin-prop-debit-1",
+      "payloadHash": "65da9a54be06d83d23f2ea92604d3a998511bd2e16cbfd888fe6cf94bdabe402"
+    },
+    "fields": [
+      "adminId: STRING",
+      "action: STRING",
+      "target: STRING",
+      "timestamp: INTEGER",
+      "reason: STRING",
+      "previous: null",
+      "next: OBJECT",
+      "requestId: STRING",
+      "referenceId: STRING",
+      "payloadHash: STRING"
+    ]
+  },
+  {
+    "path": "orinControlCommands",
+    "docId": "13e211e770f33540bc78b2160bf477a0dec566f84cbe10e4d1fce70b147f9754",
+    "sampleDoc": {
+      "fingerprint": "6586909c6dc2cdf9366ce69f45fd14c0c7beaa4af00479cbebccf114b16adeed",
+      "result": {
+        "saved": true,
+        "approvalId": "req-fin-prop-debit-1"
+      },
+      "createdAt": 1791691028799
+    },
+    "fields": [
+      "fingerprint: STRING",
+      "result: OBJECT",
+      "createdAt: INTEGER"
+    ]
+  },
+  {
+    "path": "orinControlConfiguration",
+    "docId": "current",
+    "sampleDoc": {
+      "maintenance": false,
+      "tradingEnabled": true,
+      "depositsEnabled": true,
+      "withdrawalsEnabled": true,
+      "referralsEnabled": true,
+      "bonusEnabled": true,
+      "maxAdjustmentCents": 5000000,
+      "updatedAt": 1791691027072
+    },
+    "fields": [
+      "maintenance: BOOLEAN",
+      "tradingEnabled: BOOLEAN",
+      "depositsEnabled: BOOLEAN",
+      "withdrawalsEnabled: BOOLEAN",
+      "referralsEnabled: BOOLEAN",
+      "bonusEnabled: BOOLEAN",
+      "maxAdjustmentCents: INTEGER",
+      "updatedAt: INTEGER"
+    ]
+  },
+  {
+    "path": "orinControlContractStates",
+    "docId": "3d885bfe-1a1a-4275-9e2c-127d551da7d6",
+    "sampleDoc": {
+      "updatedBy": "admin-super-uid",
+      "revision": 0,
+      "status": "active",
+      "updatedAt": 1791691027723
+    },
+    "fields": [
+      "updatedBy: STRING",
+      "revision: INTEGER",
+      "status: STRING",
+      "updatedAt: INTEGER"
+    ]
+  },
+  {
+    "path": "orinControlFinancialReferences",
+    "docId": "06b7f512cbbb1b049f3b77d07ddaf6b865751515e518ca7a2d17e845f9c0115f",
+    "sampleDoc": {
+      "approvalId": "req-team-prop-1"
+    },
+    "fields": [
+      "approvalId: STRING"
+    ]
+  },
+  {
+    "path": "orinControlTickets",
+    "docId": "tkt-91448c06-3840-40d4-bbb8-39367ad5e519",
+    "sampleDoc": {
+      "id": "tkt-91448c06-3840-40d4-bbb8-39367ad5e519",
+      "uid": "usr-alice-100",
+      "title": "Withdrawal question",
+      "description": "Need help with withdrawal",
+      "category": "financial",
+      "priority": "normal",
+      "status": "open",
+      "assigneeId": "",
+      "revision": 1,
+      "noteCount": 1,
+      "createdBy": "usr-alice-100",
+      "updatedBy": "usr-alice-100",
+      "createdAt": 1791691031650,
+      "updatedAt": 1791691031650
+    },
+    "fields": [
+      "id: STRING",
+      "uid: STRING",
+      "title: STRING",
+      "description: STRING",
+      "category: STRING",
+      "priority: STRING",
+      "status: STRING",
+      "assigneeId: STRING",
+      "revision: INTEGER",
+      "noteCount: INTEGER",
+      "createdBy: STRING",
+      "updatedBy: STRING",
+      "createdAt: INTEGER",
+      "updatedAt: INTEGER"
+    ]
+  },
+  {
+    "path": "orinControlTickets/{id}/notes",
+    "docId": "note-1",
+    "sampleDoc": {
+      "id": "note-1",
+      "ticketId": "tkt-91448c06-3840-40d4-bbb8-39367ad5e519",
+      "authorId": "staff-fin-maker-uid",
+      "body": "Investigating customer transaction",
+      "createdAt": 1791691031657
+    },
+    "fields": [
+      "id: STRING",
+      "ticketId: STRING",
+      "authorId: STRING",
+      "body: STRING",
+      "createdAt: INTEGER"
+    ]
+  },
+  {
+    "path": "orinControlWithdrawals",
+    "docId": "wd-8a8990b1-6f52-4957-9b6b-7435014ca3cb",
+    "sampleDoc": {
+      "id": "wd-8a8990b1-6f52-4957-9b6b-7435014ca3cb",
+      "uid": "usr-alice-100",
+      "accountId": "acc-cb7a4138-a2ec-4cb6-bd80-f68ff7c51ec1",
+      "currency": "USD",
+      "cents": 15000,
+      "coin": "USDT",
+      "address": "TJ1234567890abcdef1234567890abcdef",
+      "status": "pending",
+      "providerReference": "",
+      "createdAt": 1791691031633,
+      "revision": 0
+    },
+    "fields": [
+      "id: STRING",
+      "uid: STRING",
+      "accountId: STRING",
+      "currency: STRING",
+      "cents: INTEGER",
+      "coin: STRING",
+      "address: STRING",
+      "status: STRING",
+      "providerReference: STRING",
+      "createdAt: INTEGER",
+      "revision: INTEGER"
+    ]
+  },
+  {
+    "path": "orinCustomerRegistry",
+    "docId": "e0719205862a4d00d72879f480e74e16c5bd4ca8f3a46afab62a3d4535ce1d82",
+    "sampleDoc": {
+      "uid": "usr-bob-200"
+    },
+    "fields": [
+      "uid: STRING"
+    ]
+  },
+  {
+    "path": "orinDemoWallets/{id}/accounts",
+    "docId": "demo-19622237-df5f-4923-8653-aded01db3e1c",
+    "sampleDoc": {
+      "ownerId": "usr-alice-100",
+      "accountId": "demo-19622237-df5f-4923-8653-aded01db3e1c",
+      "currency": "USD",
+      "futuresCents": 1000000,
+      "perpetualCents": 0,
+      "version": 1,
+      "lastOperationId": "op-init-1",
+      "updatedAt": 1791691031696
+    },
+    "fields": [
+      "ownerId: STRING",
+      "accountId: STRING",
+      "currency: STRING",
+      "futuresCents: INTEGER",
+      "perpetualCents: INTEGER",
+      "version: INTEGER",
+      "lastOperationId: STRING",
+      "updatedAt: INTEGER"
+    ]
+  },
+  {
+    "path": "orinDemoWallets/{id}/accounts/{id}/operations",
+    "docId": "op-init-1",
+    "sampleDoc": {
+      "ownerId": "usr-alice-100",
+      "accountId": "demo-19622237-df5f-4923-8653-aded01db3e1c",
+      "currency": "USD",
+      "kind": "reset",
+      "from": "reset",
+      "to": "futures",
+      "amountCents": 1000000,
+      "beforeFuturesCents": 0,
+      "beforePerpetualCents": 0,
+      "afterFuturesCents": 1000000,
+      "afterPerpetualCents": 0,
+      "version": 1,
+      "createdAt": 1791691031701
+    },
+    "fields": [
+      "ownerId: STRING",
+      "accountId: STRING",
+      "currency: STRING",
+      "kind: STRING",
+      "from: STRING",
+      "to: STRING",
+      "amountCents: INTEGER",
+      "beforeFuturesCents: INTEGER",
+      "beforePerpetualCents: INTEGER",
+      "afterFuturesCents: INTEGER",
+      "afterPerpetualCents: INTEGER",
+      "version: INTEGER",
+      "createdAt: INTEGER"
+    ]
+  },
+  {
+    "path": "orinDepositRateLimits",
+    "docId": "usr-alice-100",
+    "sampleDoc": {
+      "times": [
+        1791691027190
+      ]
+    },
+    "fields": [
+      "times: ARRAY"
+    ]
+  },
+  {
+    "path": "orinDeposits",
+    "docId": "np-59f6cc7c66be1ed4ce3b57a2336778602968a596ea0419570ce485e42c7e8f8f",
+    "sampleDoc": {
+      "id": "np-59f6cc7c66be1ed4ce3b57a2336778602968a596ea0419570ce485e42c7e8f8f",
+      "uid": "usr-bob-200",
+      "accountId": "acc-2c0ef306-9c03-4f4e-a94a-9c7123a13afc",
+      "amountCents": 100000,
+      "coin": "usdtbsc",
+      "fingerprint": "99fa18966eb5b5d70c3c1414766a6041d9612edb97a7f26892ad266625fb17be",
+      "createdAt": 1791691029798,
+      "address": "TTestAddress123456789012345678",
+      "payAmount": "1000",
+      "paymentId": "800002",
+      "extraId": null,
+      "status": "finished",
+      "creditedCents": 100000,
+      "credited": true,
+      "updatedAt": 1791691030150
+    },
+    "fields": [
+      "id: STRING",
+      "uid: STRING",
+      "accountId: STRING",
+      "amountCents: INTEGER",
+      "coin: STRING",
+      "fingerprint: STRING",
+      "createdAt: INTEGER",
+      "address: STRING",
+      "payAmount: STRING",
+      "paymentId: STRING",
+      "extraId: null",
+      "status: STRING",
+      "creditedCents: INTEGER",
+      "credited: BOOLEAN",
+      "updatedAt: INTEGER"
+    ]
+  },
+  {
+    "path": "orinEligibleRevenue",
+    "docId": "usr-alice-100_2026-10",
+    "sampleDoc": {
+      "id": "usr-alice-100_2026-10",
+      "uid": "usr-alice-100",
+      "periodId": "2026-10",
+      "netRevenueCents": 200000,
+      "direct": 5,
+      "activeTeam": 20,
+      "finalized": true,
+      "termsVersion": "v1.0",
+      "configurationRevision": 1,
+      "createdAt": 1791691030573,
+      "paidAt": 1791691030712,
+      "approvalId": "req-team-prop-1"
+    },
+    "fields": [
+      "id: STRING",
+      "uid: STRING",
+      "periodId: STRING",
+      "netRevenueCents: INTEGER",
+      "direct: INTEGER",
+      "activeTeam: INTEGER",
+      "finalized: BOOLEAN",
+      "termsVersion: STRING",
+      "configurationRevision: INTEGER",
+      "createdAt: INTEGER",
+      "paidAt: INTEGER",
+      "approvalId: STRING"
+    ]
+  },
+  {
+    "path": "orinJournals",
+    "docId": "allocate:c36a3e4da4990f4d4bd5952534a4ae3dbd3092edeab29db3ed3d19db20093824",
+    "sampleDoc": {
+      "id": "allocate:c36a3e4da4990f4d4bd5952534a4ae3dbd3092edeab29db3ed3d19db20093824",
+      "user_id": "usr-alice-100",
+      "kind": "allocation",
+      "reference": "c36a3e4da4990f4d4bd5952534a4ae3dbd3092edeab29db3ed3d19db20093824",
+      "effective_at": 1791691027723,
+      "created_at": 1791691027723,
+      "status": "posted",
+      "entries": [
+        {
+          "id": "allocate:c36a3e4da4990f4d4bd5952534a4ae3dbd3092edeab29db3ed3d19db20093824:0",
+          "journal_id": "allocate:c36a3e4da4990f4d4bd5952534a4ae3dbd3092edeab29db3ed3d19db20093824",
+          "account": "user:usr-alice-100:cash",
+          "amount_cents": -10000,
+          "kind": "allocation",
+          "effective_at": 1791691027723
+        },
+        {
+          "id": "allocate:c36a3e4da4990f4d4bd5952534a4ae3dbd3092edeab29db3ed3d19db20093824:1",
+          "journal_id": "allocate:c36a3e4da4990f4d4bd5952534a4ae3dbd3092edeab29db3ed3d19db20093824",
+          "account": "user:usr-alice-100:reserved",
+          "amount_cents": 10000,
+          "kind": "allocation",
+          "effective_at": 1791691027723
+        }
+      ]
+    },
+    "fields": [
+      "id: STRING",
+      "user_id: STRING",
+      "kind: STRING",
+      "reference: STRING",
+      "effective_at: INTEGER",
+      "created_at: INTEGER",
+      "status: STRING",
+      "entries: ARRAY"
+    ]
+  },
+  {
+    "path": "orinKycDocuments",
+    "docId": "doc-usr-alice-100",
+    "sampleDoc": {
+      "id": "doc-usr-alice-100",
+      "uid": "usr-alice-100",
+      "fileData": "sample-base64",
+      "contentType": "image/jpeg",
+      "createdAt": 1791691028333
+    },
+    "fields": [
+      "id: STRING",
+      "uid: STRING",
+      "fileData: STRING",
+      "contentType: STRING",
+      "createdAt: INTEGER"
+    ]
+  },
+  {
+    "path": "orinKycRequests",
+    "docId": "kyc-usr-alice-100",
+    "sampleDoc": {
+      "id": "kyc-usr-alice-100",
+      "uid": "usr-alice-100",
+      "fullName": "Alice User",
+      "documentType": "passport",
+      "idNumber": "P12345678",
+      "country": "SA",
+      "documentImage": "data:image/jpeg;base64,sample",
+      "documentIds": [
+        "doc-sample-1"
+      ],
+      "status": "review",
+      "reason": "",
+      "reviewedBy": "",
+      "userEmail": "alice@example.test",
+      "userDisplayName": "Alice User",
+      "revision": 0,
+      "createdAt": 1791691028325,
+      "updatedAt": 1791691028325
+    },
+    "fields": [
+      "id: STRING",
+      "uid: STRING",
+      "fullName: STRING",
+      "documentType: STRING",
+      "idNumber: STRING",
+      "country: STRING",
+      "documentImage: STRING",
+      "documentIds: ARRAY",
+      "status: STRING",
+      "reason: STRING",
+      "reviewedBy: STRING",
+      "userEmail: STRING",
+      "userDisplayName: STRING",
+      "revision: INTEGER",
+      "createdAt: INTEGER",
+      "updatedAt: INTEGER"
+    ]
+  },
+  {
+    "path": "orinNotices",
+    "docId": "end:b2cc6ba9166b9cc1689ec806d22236c35ae35445e65cee410463999d3a188563",
+    "sampleDoc": {
+      "id": "end:b2cc6ba9166b9cc1689ec806d22236c35ae35445e65cee410463999d3a188563",
+      "user_id": "usr-alice-100",
+      "title": "انتهت مدة العقد",
+      "message": "BTC 60s Bonus Contract · اكتملت مدة المشاركة",
+      "contract_id": "fd347634-5af8-4473-99ca-1227dbffba0d",
+      "created_at": 1791691091185,
+      "eligibility": "all",
+      "category": "",
+      "deep_link": "/contracts/fd347634-5af8-4473-99ca-1227dbffba0d",
+      "expires_at": null,
+      "image": null
+    },
+    "fields": [
+      "id: STRING",
+      "user_id: STRING",
+      "title: STRING",
+      "message: STRING",
+      "contract_id: STRING",
+      "created_at: INTEGER",
+      "eligibility: STRING",
+      "category: STRING",
+      "deep_link: STRING",
+      "expires_at: null",
+      "image: null"
+    ]
+  },
+  {
+    "path": "orinPaymentIds",
+    "docId": "800001",
+    "sampleDoc": {
+      "orderId": "np-b55a22a3581863efc3ba5983139e4da83d2e742d8d1f24c609a6bcc6ff6aebe1"
+    },
+    "fields": [
+      "orderId: STRING"
+    ]
+  },
+  {
+    "path": "orinPositions",
+    "docId": "b2cc6ba9166b9cc1689ec806d22236c35ae35445e65cee410463999d3a188563",
+    "sampleDoc": {
+      "id": "b2cc6ba9166b9cc1689ec806d22236c35ae35445e65cee410463999d3a188563",
+      "user_id": "usr-alice-100",
+      "contract_id": "fd347634-5af8-4473-99ca-1227dbffba0d",
+      "account_id": "acc-cb7a4138-a2ec-4cb6-bd80-f68ff7c51ec1",
+      "amount_cents": 5000,
+      "result_cents": 250,
+      "started_at": 1791691031185,
+      "ends_at": 1791691091185,
+      "contract": {
+        "id": "fd347634-5af8-4473-99ca-1227dbffba0d",
+        "code": "LAB-DDCAAE0E2A",
+        "title": "BTC 60s Bonus Contract",
+        "asset": "BTCUSD",
+        "direction": "BUY",
+        "duration_sec": 60,
+        "settlement_bps": 500,
+        "eligibility": "all",
+        "opens_at": 1791691031185,
+        "closes_at": 1791777431185,
+        "published_at": 1791691031185,
+        "admin_id": "admin-super-uid",
+        "canonical": "{\"version\":1,\"mode\":\"production\",\"id\":\"fd347634-5af8-4473-99ca-1227dbffba0d\",\"code\":\"LAB-DDCAAE0E2A\",\"title\":\"BTC 60s Bonus Contract\",\"asset\":\"BTCUSD\",\"direction\":\"BUY\",\"durationSec\":60,\"settlementBps\":500,\"eligibility\":\"all\",\"opensAt\":1791691031185,\"closesAt\":1791777431185,\"publishedAt\":1791691031185,\"adminId\":\"admin-super-uid\"}",
+        "hash": "9003978f4faee74de6b89024c21a432200adbfe45aca458d2df7af4941a5bb54",
+        "participants": 0
+      },
+      "is_bonus": true,
+      "settled_at": 1791691101185,
+      "status": "settled"
+    },
+    "fields": [
+      "id: STRING",
+      "user_id: STRING",
+      "contract_id: STRING",
+      "account_id: STRING",
+      "amount_cents: INTEGER",
+      "result_cents: INTEGER",
+      "started_at: INTEGER",
+      "ends_at: INTEGER",
+      "contract: OBJECT",
+      "is_bonus: BOOLEAN",
+      "settled_at: INTEGER",
+      "status: STRING"
+    ]
+  },
+  {
+    "path": "orinProgramCommands",
+    "docId": "30074cc2cd1f42306a500c93610cd6dec321cfbba82f9010fc113351d1e01ec2",
+    "sampleDoc": {
+      "fingerprint": "55245ae251ca6a6599ca88939bb535bf1a6cdc5519decb139da8e882c56b6642",
+      "uid": "usr-alice-100",
+      "action": "enroll",
+      "createdAt": 1791691029279
+    },
+    "fields": [
+      "fingerprint: STRING",
+      "uid: STRING",
+      "action: STRING",
+      "createdAt: INTEGER"
+    ]
+  },
+  {
+    "path": "orinProgramConfiguration",
+    "docId": "current",
+    "sampleDoc": {
+      "enabled": true,
+      "termsVersion": "v1.0",
+      "bonusAmountCents": 10000,
+      "referralAmountCents": 8000,
+      "firstDepositCents": 100000,
+      "requireKyc": true,
+      "bonusDurationDays": 30,
+      "bonusProfitLimitCents": 20000,
+      "eligibleAssets": [
+        "BTCUSD",
+        "ETHUSD"
+      ],
+      "referralCriteria": "Standard terms",
+      "activeTeamCriteria": "Active team terms",
+      "activityPeriod": "monthly",
+      "bonusTradingTerms": "Trading terms",
+      "agencyCriteria": "Agency terms",
+      "badgeCriteria": {},
+      "levels": [
+        {
+          "level": 1,
+          "direct": 3,
+          "active": 3,
+          "bps": 75,
+          "capCents": 2000
+        },
+        {
+          "level": 2,
+          "direct": 5,
+          "active": 15,
+          "bps": 125,
+          "capCents": 6000
+        },
+        {
+          "level": 3,
+          "direct": 8,
+          "active": 40,
+          "bps": 175,
+          "capCents": 15000
+        },
+        {
+          "level": 4,
+          "direct": 10,
+          "active": 120,
+          "bps": 225,
+          "capCents": 35000
+        },
+        {
+          "level": 5,
+          "direct": 15,
+          "active": 300,
+          "bps": 275,
+          "capCents": 75000
+        },
+        {
+          "level": 6,
+          "direct": 25,
+          "active": 700,
+          "bps": 325,
+          "capCents": 150000
+        }
+      ],
+      "revision": 1
+    },
+    "fields": [
+      "enabled: BOOLEAN",
+      "termsVersion: STRING",
+      "bonusAmountCents: INTEGER",
+      "referralAmountCents: INTEGER",
+      "firstDepositCents: INTEGER",
+      "requireKyc: BOOLEAN",
+      "bonusDurationDays: INTEGER",
+      "bonusProfitLimitCents: INTEGER",
+      "eligibleAssets: ARRAY",
+      "referralCriteria: STRING",
+      "activeTeamCriteria: STRING",
+      "activityPeriod: STRING",
+      "bonusTradingTerms: STRING",
+      "agencyCriteria: STRING",
+      "badgeCriteria: OBJECT",
+      "levels: ARRAY",
+      "revision: INTEGER"
+    ]
+  },
+  {
+    "path": "orinProgramConfigurationHistory",
+    "docId": "1",
+    "sampleDoc": {
+      "enabled": true,
+      "termsVersion": "v1.0",
+      "bonusAmountCents": 10000,
+      "referralAmountCents": 8000,
+      "firstDepositCents": 100000,
+      "requireKyc": true,
+      "bonusDurationDays": 30,
+      "bonusProfitLimitCents": 20000,
+      "eligibleAssets": [
+        "BTCUSD",
+        "ETHUSD"
+      ],
+      "referralCriteria": "Standard terms",
+      "activeTeamCriteria": "Active team terms",
+      "activityPeriod": "monthly",
+      "bonusTradingTerms": "Trading terms",
+      "agencyCriteria": "Agency terms",
+      "badgeCriteria": {},
+      "levels": [
+        {
+          "level": 1,
+          "direct": 3,
+          "active": 3,
+          "bps": 75,
+          "capCents": 2000
+        },
+        {
+          "level": 2,
+          "direct": 5,
+          "active": 15,
+          "bps": 125,
+          "capCents": 6000
+        },
+        {
+          "level": 3,
+          "direct": 8,
+          "active": 40,
+          "bps": 175,
+          "capCents": 15000
+        },
+        {
+          "level": 4,
+          "direct": 10,
+          "active": 120,
+          "bps": 225,
+          "capCents": 35000
+        },
+        {
+          "level": 5,
+          "direct": 15,
+          "active": 300,
+          "bps": 275,
+          "capCents": 75000
+        },
+        {
+          "level": 6,
+          "direct": 25,
+          "active": 700,
+          "bps": 325,
+          "capCents": 150000
+        }
+      ],
+      "revision": 1
+    },
+    "fields": [
+      "enabled: BOOLEAN",
+      "termsVersion: STRING",
+      "bonusAmountCents: INTEGER",
+      "referralAmountCents: INTEGER",
+      "firstDepositCents: INTEGER",
+      "requireKyc: BOOLEAN",
+      "bonusDurationDays: INTEGER",
+      "bonusProfitLimitCents: INTEGER",
+      "eligibleAssets: ARRAY",
+      "referralCriteria: STRING",
+      "activeTeamCriteria: STRING",
+      "activityPeriod: STRING",
+      "bonusTradingTerms: STRING",
+      "agencyCriteria: STRING",
+      "badgeCriteria: OBJECT",
+      "levels: ARRAY",
+      "revision: INTEGER"
+    ]
+  },
+  {
+    "path": "orinProgramEvidence",
+    "docId": "usr-bob-200",
+    "sampleDoc": {
+      "uid": "usr-bob-200",
+      "referrerId": "usr-alice-100",
+      "kind": "referral_qualified",
+      "termsVersion": "v1.0",
+      "revoked": false,
+      "depositCents": 100000,
+      "eventId": "nowpayments-800002",
+      "createdAt": 1791691030127
+    },
+    "fields": [
+      "uid: STRING",
+      "referrerId: STRING",
+      "kind: STRING",
+      "termsVersion: STRING",
+      "revoked: BOOLEAN",
+      "depositCents: INTEGER",
+      "eventId: STRING",
+      "createdAt: INTEGER"
+    ]
+  },
+  {
+    "path": "orinProgramLedger",
+    "docId": "bonus-allocate-b2cc6ba9166b9cc1689ec806d22236c35ae35445e65cee410463999d3a188563",
+    "sampleDoc": {
+      "uid": "usr-alice-100",
+      "accountId": "acc-cb7a4138-a2ec-4cb6-bd80-f68ff7c51ec1",
+      "kind": "bonus_allocation",
+      "entries": [
+        {
+          "account": "nonwithdrawable-bonus",
+          "cents": -5000
+        },
+        {
+          "account": "bonus-reserved",
+          "cents": 5000
+        }
+      ],
+      "createdAt": 1791691031185
+    },
+    "fields": [
+      "uid: STRING",
+      "accountId: STRING",
+      "kind: STRING",
+      "entries: ARRAY",
+      "createdAt: INTEGER"
+    ]
+  },
+  {
+    "path": "orinProgramMembers",
+    "docId": "usr-alice-100",
+    "sampleDoc": {
+      "uid": "usr-alice-100",
+      "referralId": "ORIN-4AC3A669E769",
+      "code": "ORIN-4AC3A669E769",
+      "parentUid": null,
+      "parentReferralId": null,
+      "ancestors": [],
+      "referralStatus": "pending",
+      "badges": [
+        "new_user"
+      ],
+      "agencyGranted": false,
+      "agencyId": null,
+      "createdAt": 1791691029279,
+      "termsVersion": "v1.0",
+      "directCount": 1,
+      "teamCount": 1,
+      "qualifiedCount": 1,
+      "activeTeamCount": 1,
+      "paidCents": 8000,
+      "pendingCents": 0,
+      "activityRewardCents": 2500
+    },
+    "fields": [
+      "uid: STRING",
+      "referralId: STRING",
+      "code: STRING",
+      "parentUid: null",
+      "parentReferralId: null",
+      "ancestors: ARRAY",
+      "referralStatus: STRING",
+      "badges: ARRAY",
+      "agencyGranted: BOOLEAN",
+      "agencyId: null",
+      "createdAt: INTEGER",
+      "termsVersion: STRING",
+      "directCount: INTEGER",
+      "teamCount: INTEGER",
+      "qualifiedCount: INTEGER",
+      "activeTeamCount: INTEGER",
+      "paidCents: INTEGER",
+      "pendingCents: INTEGER",
+      "activityRewardCents: INTEGER"
+    ]
+  },
+  {
+    "path": "orinPublicConfiguration",
+    "docId": "current",
+    "sampleDoc": {
+      "maintenance": false,
+      "updatedAt": 1791691031718
+    },
+    "fields": [
+      "maintenance: BOOLEAN",
+      "updatedAt: INTEGER"
+    ]
+  },
+  {
+    "path": "orinPublicContent",
+    "docId": "terms",
+    "sampleDoc": {
+      "slug": "terms",
+      "titleAr": "الشروط والأحكام",
+      "bodyAr": "شروط الخدمة",
+      "updatedAt": 1791691031723
+    },
+    "fields": [
+      "slug: STRING",
+      "titleAr: STRING",
+      "bodyAr: STRING",
+      "updatedAt: INTEGER"
+    ]
+  },
+  {
+    "path": "orinQualifiedDeposits",
+    "docId": "usr-alice-100",
+    "sampleDoc": {
+      "uid": "usr-alice-100",
+      "eventId": "nowpayments-800001",
+      "cents": 100000,
+      "accountId": "acc-cb7a4138-a2ec-4cb6-bd80-f68ff7c51ec1"
+    },
+    "fields": [
+      "uid: STRING",
+      "eventId: STRING",
+      "cents: INTEGER",
+      "accountId: STRING"
+    ]
+  },
+  {
+    "path": "orinReceipts",
+    "docId": "receipt:b2cc6ba9166b9cc1689ec806d22236c35ae35445e65cee410463999d3a188563",
+    "sampleDoc": {
+      "id": "receipt:b2cc6ba9166b9cc1689ec806d22236c35ae35445e65cee410463999d3a188563",
+      "position_id": "b2cc6ba9166b9cc1689ec806d22236c35ae35445e65cee410463999d3a188563",
+      "user_id": "usr-alice-100",
+      "payload": "{\"version\":1,\"mode\":\"production\",\"receiptId\":\"R-B2CC6BA9166B\",\"contractId\":\"fd347634-5af8-4473-99ca-1227dbffba0d\",\"contractCode\":\"LAB-DDCAAE0E2A\",\"contractHash\":\"9003978f4faee74de6b89024c21a432200adbfe45aca458d2df7af4941a5bb54\",\"positionId\":\"b2cc6ba9166b9cc1689ec806d22236c35ae35445e65cee410463999d3a188563\",\"asset\":\"BTCUSD\",\"direction\":\"BUY\",\"amountCents\":5000,\"durationSec\":60,\"lockedSettlementBps\":500,\"startedAt\":1791691031185,\"endsAt\":1791691091185,\"effectiveAt\":1791691091185,\"processedAt\":1791691101185,\"resultCents\":250,\"returnedCents\":5250,\"settlement\":\"executed-contract-settlement\"}",
+      "hash": "1795b1ab8d2b4f9772bf4ba697f784f03a10d2a74937b1bedbe8085040c50746",
+      "created_at": 1791691101185
+    },
+    "fields": [
+      "id: STRING",
+      "position_id: STRING",
+      "user_id: STRING",
+      "payload: STRING",
+      "hash: STRING",
+      "created_at: INTEGER"
+    ]
+  },
+  {
+    "path": "orinReferralAttributions",
+    "docId": "usr-bob-200",
+    "sampleDoc": {
+      "code": "ORIN-ABCDEF123456",
+      "status": "pending",
+      "createdAt": 1791691031713
+    },
+    "fields": [
+      "code: STRING",
+      "status: STRING",
+      "createdAt: INTEGER"
+    ]
+  },
+  {
+    "path": "orinReferralCodes",
+    "docId": "ORIN-02890E4D719E",
+    "sampleDoc": {
+      "uid": "usr-bob-200"
+    },
+    "fields": [
+      "uid: STRING"
+    ]
+  },
+  {
+    "path": "orinReferralIdentities",
+    "docId": "usr-alice-100",
+    "sampleDoc": {
+      "code": "ORIN-ABCDEF123456",
+      "createdAt": 1791691031707
+    },
+    "fields": [
+      "code: STRING",
+      "createdAt: INTEGER"
+    ]
+  },
+  {
+    "path": "orinReferralRewards",
+    "docId": "usr-bob-200",
+    "sampleDoc": {
+      "referrerId": "usr-alice-100",
+      "referredId": "usr-bob-200",
+      "amountCents": 8000,
+      "createdAt": 1791691029505,
+      "termsVersion": "v1.0",
+      "configurationRevision": 1,
+      "evidenceId": "usr-bob-200",
+      "qualifiedAt": 1791691030127,
+      "approvedAt": 1791691030127,
+      "updatedAt": 1791691030127,
+      "accountId": "acc-cb7a4138-a2ec-4cb6-bd80-f68ff7c51ec1",
+      "paidAt": 1791691030325,
+      "approvalId": "req-reward-prop-1",
+      "revision": 1,
+      "status": "paid"
+    },
+    "fields": [
+      "referrerId: STRING",
+      "referredId: STRING",
+      "amountCents: INTEGER",
+      "createdAt: INTEGER",
+      "termsVersion: STRING",
+      "configurationRevision: INTEGER",
+      "evidenceId: STRING",
+      "qualifiedAt: INTEGER",
+      "approvedAt: INTEGER",
+      "updatedAt: INTEGER",
+      "accountId: STRING",
+      "paidAt: INTEGER",
+      "approvalId: STRING",
+      "revision: INTEGER",
+      "status: STRING"
+    ]
+  },
+  {
+    "path": "orinSecuritySessions",
+    "docId": "sess-1",
+    "sampleDoc": {
+      "id": "sess-1",
+      "uid": "usr-alice-100",
+      "userAgent": "Mozilla/5.0 Chrome/120.0",
+      "ip": "127.0.0.1",
+      "revoked": false,
+      "createdAt": 1791691031744
+    },
+    "fields": [
+      "id: STRING",
+      "uid: STRING",
+      "userAgent: STRING",
+      "ip: STRING",
+      "revoked: BOOLEAN",
+      "createdAt: INTEGER"
+    ]
+  },
+  {
+    "path": "orinStaff",
+    "docId": "admin-super-uid",
+    "sampleDoc": {
+      "roles": [
+        "super_admin"
+      ],
+      "email": "khtaub7341@gmail.com",
+      "status": "active",
+      "validAfter": 0
+    },
+    "fields": [
+      "roles: ARRAY",
+      "email: STRING",
+      "status: STRING",
+      "validAfter: INTEGER"
+    ]
+  },
+  {
+    "path": "orinSupportConversations",
+    "docId": "usr-alice-100",
+    "sampleDoc": {
+      "uid": "usr-alice-100",
+      "updatedAt": 1791691031639
+    },
+    "fields": [
+      "uid: STRING",
+      "updatedAt: INTEGER"
+    ]
+  },
+  {
+    "path": "orinSupportConversations/{id}/messages",
+    "docId": "msg-768fdecc-422e-439c-be39-d8afa7fc370b",
+    "sampleDoc": {
+      "id": "msg-768fdecc-422e-439c-be39-d8afa7fc370b",
+      "senderId": "usr-alice-100",
+      "text": "Need help with withdrawal",
+      "kind": "user",
+      "createdAt": 1791691031645
+    },
+    "fields": [
+      "id: STRING",
+      "senderId: STRING",
+      "text: STRING",
+      "kind: STRING",
+      "createdAt: INTEGER"
+    ]
+  },
+  {
+    "path": "orinSupportEscalations",
+    "docId": "usr-alice-100",
+    "sampleDoc": {
+      "uid": "usr-alice-100",
+      "ticketId": "tkt-91448c06-3840-40d4-bbb8-39367ad5e519",
+      "createdAt": 1791691031663
+    },
+    "fields": [
+      "uid: STRING",
+      "ticketId: STRING",
+      "createdAt: INTEGER"
+    ]
+  },
+  {
+    "path": "orinTrustedDevices",
+    "docId": "dev-1",
+    "sampleDoc": {
+      "id": "dev-1",
+      "uid": "usr-alice-100",
+      "deviceId": "dev-1",
+      "platform": "web",
+      "createdAt": 1791691031750
+    },
+    "fields": [
+      "id: STRING",
+      "uid: STRING",
+      "deviceId: STRING",
+      "platform: STRING",
+      "createdAt: INTEGER"
+    ]
+  },
+  {
+    "path": "orinTrustedEvents",
+    "docId": "kyc-req-kyc-alice-1",
+    "sampleDoc": {
+      "fingerprint": "a5356e4f6fc3a8ab97b7dc7e14fec0ae412773f0ff781bda65475c29babdcb83",
+      "type": "verification",
+      "uid": "usr-alice-100"
+    },
+    "fields": [
+      "fingerprint: STRING",
+      "type: STRING",
+      "uid: STRING"
+    ]
+  },
+  {
+    "path": "orinVerifiedCustomers",
+    "docId": "usr-alice-100",
+    "sampleDoc": {
+      "uid": "usr-alice-100",
+      "customerKey": "f14a7e8179703d40e34dd6e046b49a677d6033bdb882ea19f1d2c4017f741a61",
+      "verified": true,
+      "revoked": false,
+      "eventId": "kyc-req-kyc-alice-1"
+    },
+    "fields": [
+      "uid: STRING",
+      "customerKey: STRING",
+      "verified: BOOLEAN",
+      "revoked: BOOLEAN",
+      "eventId: STRING"
+    ]
+  },
+  {
+    "path": "orinWithdrawalRequests",
+    "docId": "wd-8a8990b1-6f52-4957-9b6b-7435014ca3cb",
+    "sampleDoc": {
+      "id": "wd-8a8990b1-6f52-4957-9b6b-7435014ca3cb",
+      "uid": "usr-alice-100",
+      "userEmail": "alice@example.test",
+      "accountId": "acc-cb7a4138-a2ec-4cb6-bd80-f68ff7c51ec1",
+      "amountCents": 15000,
+      "currency": "USD",
+      "coin": "USDT",
+      "address": "TJ1234567890abcdef1234567890abcdef",
+      "status": "pending",
+      "createdAt": 1791691031626,
+      "updatedAt": 1791691031626,
+      "reviewedBy": null,
+      "reviewReason": null
+    },
+    "fields": [
+      "id: STRING",
+      "uid: STRING",
+      "userEmail: STRING",
+      "accountId: STRING",
+      "amountCents: INTEGER",
+      "currency: STRING",
+      "coin: STRING",
+      "address: STRING",
+      "status: STRING",
+      "createdAt: INTEGER",
+      "updatedAt: INTEGER",
+      "reviewedBy: null",
+      "reviewReason: null"
+    ]
+  },
+  {
+    "path": "sparkAccountNumbers",
+    "docId": "510144856660",
+    "sampleDoc": {
+      "ownerId": "usr-alice-100",
+      "accountId": "acc-cb7a4138-a2ec-4cb6-bd80-f68ff7c51ec1"
+    },
+    "fields": [
+      "ownerId: STRING",
+      "accountId: STRING"
+    ]
+  },
+  {
+    "path": "sparkAccountRequests",
+    "docId": "usr-alice-100",
+    "sampleDoc": {
+      "uid": "usr-alice-100",
+      "type": "deletion",
+      "status": "requested",
+      "createdAt": 1791691031691
+    },
+    "fields": [
+      "uid: STRING",
+      "type: STRING",
+      "status: STRING",
+      "createdAt: INTEGER"
+    ]
+  },
+  {
+    "path": "sparkAccountSelections",
+    "docId": "usr-alice-100",
+    "sampleDoc": {
+      "accountId": "acc-cb7a4138-a2ec-4cb6-bd80-f68ff7c51ec1",
+      "updatedAt": 1791691027093
+    },
+    "fields": [
+      "accountId: STRING",
+      "updatedAt: INTEGER"
+    ]
+  },
+  {
+    "path": "sparkAnnouncements",
+    "docId": "ann-1",
+    "sampleDoc": {
+      "id": "ann-1",
+      "title": "Welcome to ORIN",
+      "message": "Trading platform ready",
+      "image": "",
+      "deep_link": "/notifications",
+      "expires_at": 1791777431728,
+      "createdAt": 1791691031728
+    },
+    "fields": [
+      "id: STRING",
+      "title: STRING",
+      "message: STRING",
+      "image: STRING",
+      "deep_link: STRING",
+      "expires_at: INTEGER",
+      "createdAt: INTEGER"
+    ]
+  },
+  {
+    "path": "sparkAvatars",
+    "docId": "usr-alice-100",
+    "sampleDoc": {
+      "photo": "",
+      "updatedAt": 1791691031685
+    },
+    "fields": [
+      "photo: STRING",
+      "updatedAt: INTEGER"
+    ]
+  },
+  {
+    "path": "sparkCampaigns",
+    "docId": "camp-1",
+    "sampleDoc": {
+      "id": "camp-1",
+      "title": "Campaign 1",
+      "message": "Welcome Campaign",
+      "image": "",
+      "audience": "all",
+      "language": "ar",
+      "deep_link": "/notifications",
+      "starts_at": 1791691031733,
+      "expires_at": 1791777431733,
+      "status": "sent",
+      "revision": 1,
+      "createdAt": 1791691031733,
+      "sentAt": 1791691031733,
+      "recipient_count": 1,
+      "recipientIds": [
+        "usr-alice-100"
+      ]
+    },
+    "fields": [
+      "id: STRING",
+      "title: STRING",
+      "message: STRING",
+      "image: STRING",
+      "audience: STRING",
+      "language: STRING",
+      "deep_link: STRING",
+      "starts_at: INTEGER",
+      "expires_at: INTEGER",
+      "status: STRING",
+      "revision: INTEGER",
+      "createdAt: INTEGER",
+      "sentAt: INTEGER",
+      "recipient_count: INTEGER",
+      "recipientIds: ARRAY"
+    ]
+  },
+  {
+    "path": "sparkProfiles",
+    "docId": "usr-alice-100",
+    "sampleDoc": {
+      "uid": "usr-alice-100",
+      "profile": {
+        "displayName": "Alice User",
+        "phone": "+1234567890",
+        "country": "SA",
+        "closureStatus": "open"
+      },
+      "preferences": {
+        "hideBalance": false,
+        "notifications": true,
+        "reduceMotion": false,
+        "notificationSounds": true,
+        "opportunitySound": true,
+        "securitySound": true,
+        "vibration": true,
+        "marketingNotifications": true,
+        "chartLocale": "ar",
+        "theme": "dark",
+        "fontSize": "normal",
+        "numberFormat": "latin",
+        "referenceCurrency": "USD",
+        "timezone": "Asia/Riyadh",
+        "chartPair": "BTC-USD",
+        "chartInterval": "1",
+        "chartStyle": "1",
+        "grid": true,
+        "crosshair": true,
+        "priceLine": true,
+        "saveDrawings": false,
+        "indicators": [
+          "MA"
+        ],
+        "favorites": [
+          "BTC-USD"
+        ],
+        "notificationChannels": {
+          "push": false,
+          "email": false,
+          "sms": false
+        },
+        "notificationEvents": {
+          "opportunity": true,
+          "contract_started": true,
+          "contract_ended": true,
+          "settlement": true,
+          "deposit": true,
+          "withdrawal": true,
+          "referral": true,
+          "agent": true,
+          "support": true,
+          "security": true,
+          "announcement": true,
+          "reminder": true
+        }
+      },
+      "tier": "standard",
+      "acceptedAt": null,
+      "revision": 0,
+      "createdAt": 1791691031673,
+      "updatedAt": 1791691031673
+    },
+    "fields": [
+      "uid: STRING",
+      "profile: OBJECT",
+      "preferences: OBJECT",
+      "tier: STRING",
+      "acceptedAt: null",
+      "revision: INTEGER",
+      "createdAt: INTEGER",
+      "updatedAt: INTEGER"
+    ]
+  },
+  {
+    "path": "sparkProfiles/{id}/inbox",
+    "docId": "camp-1",
+    "sampleDoc": {
+      "campaignId": "camp-1",
+      "createdAt": 1791691031680,
+      "readAt": null
+    },
+    "fields": [
+      "campaignId: STRING",
+      "createdAt: INTEGER",
+      "readAt: null"
+    ]
+  },
+  {
+    "path": "sparkTradingAccounts/{id}/accounts",
+    "docId": "acc-cb7a4138-a2ec-4cb6-bd80-f68ff7c51ec1",
+    "sampleDoc": {
+      "id": "acc-cb7a4138-a2ec-4cb6-bd80-f68ff7c51ec1",
+      "ownerId": "usr-alice-100",
+      "accountNumber": "510144856660",
+      "type": "real",
+      "currency": "USD",
+      "bonusCents": 0,
+      "profitCents": 0,
+      "withdrawableProfitCents": 0,
+      "status": "active",
+      "revision": 1,
+      "createdAt": 1791691027093,
+      "reservedCents": 0,
+      "realizedCents": 750,
+      "balanceCents": 115250,
+      "updatedAt": 1791691031613
+    },
+    "fields": [
+      "id: STRING",
+      "ownerId: STRING",
+      "accountNumber: STRING",
+      "type: STRING",
+      "currency: STRING",
+      "bonusCents: INTEGER",
+      "profitCents: INTEGER",
+      "withdrawableProfitCents: INTEGER",
+      "status: STRING",
+      "revision: INTEGER",
+      "createdAt: INTEGER",
+      "reservedCents: INTEGER",
+      "realizedCents: INTEGER",
+      "balanceCents: INTEGER",
+      "updatedAt: INTEGER"
+    ]
+  },
+  {
+    "path": "system",
+    "docId": "account-security",
+    "sampleDoc": {
+      "enabled": true,
+      "rulesVersion": 160
+    },
+    "fields": [
+      "enabled: BOOLEAN",
+      "rulesVersion: INTEGER"
+    ]
+  },
+  {
+    "path": "users",
+    "docId": "admin-super-uid",
+    "sampleDoc": {
+      "uid": "admin-super-uid",
+      "email": "khtaub7341@gmail.com",
+      "displayName": "Super Admin",
+      "role": "admin",
+      "disabled": false,
+      "createdAt": 1791691026958,
+      "updatedAt": 1791691026958
+    },
+    "fields": [
+      "uid: STRING",
+      "email: STRING",
+      "displayName: STRING",
+      "role: STRING",
+      "disabled: BOOLEAN",
+      "createdAt: INTEGER",
+      "updatedAt: INTEGER"
+    ]
+  }
+]

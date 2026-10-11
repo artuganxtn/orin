@@ -15,7 +15,6 @@ import {createProgramTransport} from './program-transport';
 import React,{lazy,Suspense,useEffect,useState,useCallback} from 'react';
 import {createRoot} from 'react-dom/client';
 import {onAuthStateChanged,signOut,type User,connectAuthEmulator,getAuth,inMemoryPersistence,setPersistence,signInWithEmailAndPassword,signInWithCustomToken,EmailAuthProvider,reauthenticateWithCredential} from 'firebase/auth';
-import {doc,onSnapshot,connectFirestoreEmulator} from 'firebase/firestore';
 import {app,auth,db,ensureProfile,to,AuthForm,type Profile} from './account';
 import {configureFirebaseTransport,apiFetch} from '../lib/client-api';
 import {safeDestination} from '../lib/orin-routes';
@@ -51,13 +50,14 @@ import './release-157.css';
 import '../app/settings-refresh.css';
 const ADMIN_EMAILS = ['khtaub7341@gmail.com', 'khtaub99@gmail.com', 'mm@mm.mm'];
 const isOwnerEmail=(e?:string|null)=>{const em=e?.toLowerCase().trim()??'';return ADMIN_EMAILS.some(a=>a.toLowerCase()===em);};
-configurePayments({base:import.meta.env.VITE_ORIN_PAYMENTS_API_URL,token:async()=>{await auth.authStateReady();return auth.currentUser?.getIdToken()??null}});
-const chatService=supportTransport(db,()=>auth.currentUser?.uid??'',createProgramTransport(import.meta.env.VITE_ORIN_PROGRAM_API_URL,async()=>auth.currentUser?.getIdToken()??null)),referralService=referralTransport(db,createProgramTransport(import.meta.env.VITE_ORIN_PROGRAM_API_URL,async()=>auth.currentUser?.getIdToken()??null));
+const apiBase = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_ORIN_PROGRAM_API_URL || '';
+configurePayments({base:import.meta.env.VITE_ORIN_PAYMENTS_API_URL || apiBase,token:async()=>{await auth.authStateReady();return auth.currentUser?.getIdToken()??null}});
+const chatService=supportTransport(db,()=>auth.currentUser?.uid??'',createProgramTransport(apiBase || import.meta.env.VITE_ORIN_PROGRAM_API_URL,async()=>auth.currentUser?.getIdToken()??null)),referralService=referralTransport(db,createProgramTransport(apiBase || import.meta.env.VITE_ORIN_PROGRAM_API_URL,async()=>auth.currentUser?.getIdToken()??null));
 const loadWorkspace=()=>import('../app/trading-workspace');
 const loadDashboard=()=>import('./control-center').then(m=>({default:m.ControlCenter}));
 const OrinApp=lazy(loadWorkspace),Dashboard=lazy(loadDashboard);
-if((import.meta.env.DEV||import.meta.env.MODE==='android-qa')&&import.meta.env.VITE_FIREBASE_EMULATORS==='true'){connectAuthEmulator(auth,'http://127.0.0.1:9099',{disableWarnings:true});connectFirestoreEmulator(db,'127.0.0.1',8080)}
-configureFirebaseTransport({token:async(force=false)=>{await auth.authStateReady();if(!auth.currentUser)return null;try{return await auth.currentUser.getIdToken(force);}catch{return null;}},onUnauthorized:()=>{if(location.pathname.startsWith('/login')||location.pathname.startsWith('/register'))return;if(!auth.currentUser){const next=encodeURIComponent(location.pathname);to('/login?next='+next,true);}else{void auth.currentUser.getIdToken(true).catch(()=>{});}},...(import.meta.env.VITE_FIREBASE_SPARK==='true'?{request:createSparkApi(db,async()=>{await auth.authStateReady();return auth.currentUser},createProgramTransport(import.meta.env.VITE_ORIN_PROGRAM_API_URL,async()=>{await auth.authStateReady();return auth.currentUser?.getIdToken()??null}))}:{})});
+if((import.meta.env.DEV||import.meta.env.MODE==='android-qa')&&import.meta.env.VITE_FIREBASE_EMULATORS==='true'){connectAuthEmulator(auth,'http://127.0.0.1:9099',{disableWarnings:true});}
+configureFirebaseTransport({base:apiBase,token:async(force=false)=>{await auth.authStateReady();if(!auth.currentUser)return null;try{return await auth.currentUser.getIdToken(force);}catch{return null;}},onUnauthorized:()=>{if(location.pathname.startsWith('/login')||location.pathname.startsWith('/register'))return;if(!auth.currentUser){const next=encodeURIComponent(location.pathname);to('/login?next='+next,true);}else{void auth.currentUser.getIdToken(true).catch(()=>{});}},...(import.meta.env.VITE_FIREBASE_SPARK==='true'?{request:createSparkApi(db,async()=>{await auth.authStateReady();return auth.currentUser},createProgramTransport(apiBase || import.meta.env.VITE_ORIN_PROGRAM_API_URL,async()=>{await auth.authStateReady();return auth.currentUser?.getIdToken()??null}))}:{})});
 const proofApp=getApps().find(a=>a.name==='orin-security-proof')??initializeApp(app.options,'orin-security-proof');
 const proofAuth=getAuth(proofApp);
 if((import.meta.env.DEV||import.meta.env.MODE==='android-qa')&&import.meta.env.VITE_FIREBASE_EMULATORS==='true')connectAuthEmulator(proofAuth,'http://127.0.0.1:9099',{disableWarnings:true});

@@ -66,7 +66,7 @@ export function ReferenceHome({state,prefs,selectedPair,onPairChange,onHideBalan
       }
       onFunding('withdraw');
     }}><span><ArrowUpFromLine/></span>{t('سحب','Withdraw')}</button>
-    <button type="button" onClick={onTransfer}><span><ArrowLeftRight/></span>{t('تحويل','Transfer')}</button>
+    {/* Transfer button hidden as requested until implemented */}
     <button type="button" onClick={onInvite}><span><Users/></span>{t('دعوة صديق','Invite a friend')}</button>
   </div>
   {activePosition&&(

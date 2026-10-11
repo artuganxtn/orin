@@ -20,7 +20,7 @@ function getAdminApp() {
       console.warn("Could not parse FIREBASE_SERVICE_ACCOUNT JSON:", e);
     }
   }
-  return initializeApp({ projectId: "orin-99951" });
+  return initializeApp({ projectId: process.env.GCLOUD_PROJECT || process.env.FIREBASE_PROJECT || "demo-orin-auth" });
 }
 var adminApp = getAdminApp();
 var adminDb = getFirestore(adminApp);
@@ -98,9 +98,9 @@ function journal(tx, key5, uid, kind, reference, entries, effective, now) {
   if (entries.some(([, v]) => !Number.isSafeInteger(v)) || entries.reduce((s, [, v]) => s + v, 0) !== 0) throw new ApiError("\u062A\u0639\u0630\u0631 \u0627\u0644\u062A\u062D\u0642\u0642 \u0645\u0646 \u0642\u064A\u062F \u0627\u0644\u062D\u0633\u0627\u0628.", 409);
   tx.create(ref("orinJournals", key5), { id: key5, user_id: uid, kind, reference, effective_at: effective, created_at: now, status: "posted", entries: entries.filter(([, n]) => n !== 0).map(([account2, amount_cents], i) => ({ id: `${key5}:${i}`, journal_id: key5, account: account2, amount_cents, kind, effective_at: effective })) });
 }
-function audit(tx, key5, actor, action, reference, data, now) {
+function audit(tx, key5, actor, action2, reference, data, now) {
   const payload = JSON.stringify(data);
-  tx.create(ref("orinAudit", key5), { id: key5, actor_id: actor, action, reference, payload, payload_hash: hash(payload), created_at: now });
+  tx.create(ref("orinAudit", key5), { id: key5, actor_id: actor, action: action2, reference, payload, payload_hash: hash(payload), created_at: now });
 }
 function notice(tx, key5, uid, title, message, contractId, now, extra = {}) {
   tx.create(ref("orinNotices", key5), { id: key5, user_id: uid, title, message, contract_id: contractId, created_at: now, eligibility: "all", category: "", deep_link: contractId ? `/contracts/${contractId}` : "/notifications", expires_at: null, image: null, ...extra });
@@ -274,17 +274,36 @@ async function join(u, input, now = Date.now()) {
       return { id: key5, reused: true };
     }
     if (now < c.opens_at || now >= c.closes_at) throw new ApiError("\u0627\u0644\u0639\u0642\u062F \u062E\u0627\u0631\u062C \u0646\u0627\u0641\u0630\u0629 \u0627\u0644\u0645\u0634\u0627\u0631\u0643\u0629.", 409);
-    if (currentBalance < amount) throw new ApiError("\u0627\u0644\u0631\u0635\u064A\u062F \u0627\u0644\u0645\u062A\u0627\u062D \u063A\u064A\u0631 \u0643\u0627\u0641\u064D \u0644\u0647\u0630\u0627 \u0627\u0644\u0639\u0642\u062F. \u0627\u0644\u0631\u0635\u064A\u062F \u0627\u0644\u062D\u0627\u0644\u064A: " + (currentBalance / 100).toFixed(2) + " USD", 409);
+    const useBonus = input.useBonus === true;
+    let bWalletSnap = null;
+    let bWalletData = null;
+    if (useBonus) {
+      bWalletSnap = await tx.get(ref("orinBonusWallets", u.id));
+      if (!bWalletSnap.exists) throw new ApiError("\u0645\u062D\u0641\u0638\u0629 \u0627\u0644\u0628\u0648\u0646\u0635 \u063A\u064A\u0631 \u0645\u0648\u062C\u0648\u062F\u0629.", 404);
+      bWalletData = bWalletSnap.data();
+      if (!bWalletData.claimed) throw new ApiError("\u0627\u0644\u0628\u0648\u0646\u0635 \u063A\u064A\u0631 \u0645\u0641\u0639\u0644.", 409);
+      if (now > (bWalletData.expiresAt ?? 0)) throw new ApiError("\u0627\u0646\u062A\u0647\u062A \u0635\u0644\u0627\u062D\u064A\u0629 \u0627\u0644\u0628\u0648\u0646\u0635.", 409);
+      const eligible = Array.isArray(bWalletData.eligibleAssets) ? bWalletData.eligibleAssets : [];
+      if (!eligible.includes(c.asset)) throw new ApiError("\u0627\u0644\u0623\u0635\u0644 \u063A\u064A\u0631 \u0645\u0624\u0647\u0644 \u0644\u0644\u062A\u062F\u0627\u0648\u0644 \u0628\u0627\u0644\u0628\u0648\u0646\u0635.", 409);
+      if ((bWalletData.bonusCents ?? 0) < amount) throw new ApiError("\u0631\u0635\u064A\u062F \u0627\u0644\u0628\u0648\u0646\u0635 \u063A\u064A\u0631 \u0643\u0627\u0641\u064D \u0644\u0647\u0630\u0627 \u0627\u0644\u0639\u0642\u062F.", 409);
+    } else {
+      if (currentBalance < amount) throw new ApiError("\u0627\u0644\u0631\u0635\u064A\u062F \u0627\u0644\u0645\u062A\u0627\u062D \u063A\u064A\u0631 \u0643\u0627\u0641\u064D \u0644\u0647\u0630\u0627 \u0627\u0644\u0639\u0642\u062F. \u0627\u0644\u0631\u0635\u064A\u062F \u0627\u0644\u062D\u0627\u0644\u064A: " + (currentBalance / 100).toFixed(2) + " USD", 409);
+    }
     const counterRef = ref("orinContractCounts", c.id), count = (await tx.get(counterRef)).data()?.count ?? 0;
     const endsAt = now + c.duration_sec * 1e3, pnl = resultCents(amount, c.settlement_bps);
-    tx.create(ref("orinPositions", key5), { id: key5, user_id: u.id, contract_id: c.id, account_id: trading.id, amount_cents: amount, result_cents: pnl, started_at: now, ends_at: endsAt, status: "active", settled_at: null, contract: c });
-    tx.set(trading.ref, { balanceCents: currentBalance - amount, reservedCents: (tradingData.reservedCents ?? 0) + amount, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    tx.create(ref("orinPositions", key5), { id: key5, user_id: u.id, contract_id: c.id, account_id: trading.id, amount_cents: amount, result_cents: pnl, started_at: now, ends_at: endsAt, status: "active", settled_at: null, contract: c, is_bonus: useBonus });
+    if (useBonus) {
+      tx.update(bWalletSnap.ref, { bonusCents: (bWalletData.bonusCents ?? 0) - amount, reservedBonusCents: (bWalletData.reservedBonusCents ?? 0) + amount });
+      tx.create(ref("orinProgramLedger", "bonus-allocate-" + key5), { uid: u.id, accountId: trading.id, kind: "bonus_allocation", entries: [{ account: "nonwithdrawable-bonus", cents: -amount }, { account: "bonus-reserved", cents: amount }], createdAt: now });
+    } else {
+      tx.set(trading.ref, { balanceCents: currentBalance - amount, reservedCents: (tradingData.reservedCents ?? 0) + amount, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      journal(tx, `allocate:${key5}`, u.id, "allocation", key5, [[`user:${u.id}:cash`, -amount], [`user:${u.id}:reserved`, amount]], now, now);
+    }
     if (!a.accepted_at) {
       tx.set(account(u.id), { accepted_at: now }, { merge: true });
     }
     tx.set(counterRef, { count: count + 1 });
-    journal(tx, `allocate:${key5}`, u.id, "allocation", key5, [[`user:${u.id}:cash`, -amount], [`user:${u.id}:reserved`, amount]], now, now);
-    audit(tx, `join:${key5}`, u.id, "AMOUNT_ALLOCATED", key5, { contractId: c.id, contractHash: c.hash, amountCents: amount, startedAt: now, endsAt, accountId: trading.id }, now);
+    audit(tx, `join:${key5}`, u.id, "AMOUNT_ALLOCATED", key5, { contractId: c.id, contractHash: c.hash, amountCents: amount, startedAt: now, endsAt, accountId: trading.id, isBonus: useBonus }, now);
     notice(tx, `start:${key5}`, u.id, "\u0628\u062F\u0623 \u0627\u0644\u0639\u0642\u062F", `${c.title}`, c.id, now);
     return { id: key5, reused: false };
   });
@@ -303,11 +322,44 @@ async function settle(u, now = Date.now()) {
       if (!c) throw new ApiError("\u0627\u0644\u0639\u0642\u062F \u063A\u064A\u0631 \u0645\u062A\u0627\u062D.", 409);
       integrity(c);
       const expected = resultCents(p.amount_cents, c.settlement_bps);
-      if (expected !== p.result_cents || (a.reservedCents ?? 0) < p.amount_cents) throw new ApiError("\u062A\u0639\u0627\u0631\u0636 \u0641\u064A \u0628\u064A\u0627\u0646\u0627\u062A \u0627\u0644\u062A\u0633\u0648\u064A\u0629.", 409);
+      if (expected !== p.result_cents) throw new ApiError("\u062A\u0639\u0627\u0631\u0636 \u0641\u064A \u0628\u064A\u0627\u0646\u0627\u062A \u0627\u0644\u062A\u0633\u0648\u064A\u0629.", 409);
+      const bWalletSnap = p.is_bonus ? await tx.get(ref("orinBonusWallets", u.id)) : null;
       const receipt = { version: 1, mode: "production", receiptId: `R-${p.id.slice(0, 12).toUpperCase()}`, contractId: c.id, contractCode: c.code, contractHash: c.hash, positionId: p.id, asset: c.asset, direction: c.direction, amountCents: p.amount_cents, durationSec: c.duration_sec, lockedSettlementBps: c.settlement_bps, startedAt: p.started_at, endsAt: p.ends_at, effectiveAt: p.ends_at, processedAt: now, resultCents: expected, returnedCents: p.amount_cents + expected, settlement: "executed-contract-settlement" }, payload = JSON.stringify(receipt), digest2 = hash(payload), jid = `settle:${p.id}`;
-      tx.update(trading.ref, { balanceCents: (a.balanceCents ?? 0) + p.amount_cents + expected, reservedCents: (a.reservedCents ?? 0) - p.amount_cents, realizedCents: (a.realizedCents ?? 0) + expected, updatedAt: FieldValue.serverTimestamp() });
-      tx.update(row.ref, { status: "settled", settled_at: now });
-      journal(tx, jid, u.id, "settlement", p.id, [[`user:${u.id}:reserved`, -p.amount_cents], [`user:${u.id}:cash`, p.amount_cents + expected], ["system:trading-pnl", -expected]], p.ends_at, now);
+      if (p.is_bonus) {
+        if (bWalletSnap && bWalletSnap.exists) {
+          const bData = bWalletSnap.data();
+          const profitDelta = expected > 0 ? expected : 0;
+          const nextProfit = Math.min(bData.profitLimitCents ?? 2e4, (bData.profitCents ?? 0) + profitDelta);
+          const isQualified = (bData.qualifiedDepositCents ?? 0) >= (bData.firstDepositCents ?? 5e4);
+          const nextWithdrawable = isQualified ? nextProfit : bData.withdrawableProfitCents ?? 0;
+          tx.update(bWalletSnap.ref, {
+            bonusCents: (bData.bonusCents ?? 0) + p.amount_cents,
+            reservedBonusCents: Math.max(0, (bData.reservedBonusCents ?? 0) - p.amount_cents),
+            profitCents: nextProfit,
+            withdrawableProfitCents: nextWithdrawable
+          });
+          tx.create(ref("orinProgramLedger", "bonus-settle-" + p.id), {
+            uid: u.id,
+            accountId: p.account_id,
+            kind: "bonus_settlement",
+            entries: [
+              { account: "bonus-reserved", cents: -p.amount_cents },
+              { account: "nonwithdrawable-bonus", cents: p.amount_cents },
+              ...profitDelta > 0 ? [{ account: "bonus-profit", cents: profitDelta }, { account: "broker-clearing", cents: -profitDelta }] : []
+            ],
+            createdAt: now
+          });
+          if (isQualified && profitDelta > 0) {
+            tx.update(trading.ref, { balanceCents: (a.balanceCents ?? 0) + profitDelta, realizedCents: (a.realizedCents ?? 0) + profitDelta, updatedAt: FieldValue.serverTimestamp() });
+          }
+        }
+        tx.update(row.ref, { status: "settled", settled_at: now });
+      } else {
+        if ((a.reservedCents ?? 0) < p.amount_cents) throw new ApiError("\u062A\u0639\u0627\u0631\u0636 \u0641\u064A \u0628\u064A\u0627\u0646\u0627\u062A \u0627\u0644\u062A\u0633\u0648\u064A\u0629.", 409);
+        tx.update(trading.ref, { balanceCents: (a.balanceCents ?? 0) + p.amount_cents + expected, reservedCents: (a.reservedCents ?? 0) - p.amount_cents, realizedCents: (a.realizedCents ?? 0) + expected, updatedAt: FieldValue.serverTimestamp() });
+        tx.update(row.ref, { status: "settled", settled_at: now });
+        journal(tx, jid, u.id, "settlement", p.id, [[`user:${u.id}:reserved`, -p.amount_cents], [`user:${u.id}:cash`, p.amount_cents + expected], ["system:trading-pnl", -expected]], p.ends_at, now);
+      }
       tx.create(ref("orinReceipts", `receipt:${p.id}`), { id: `receipt:${p.id}`, position_id: p.id, user_id: u.id, payload, hash: digest2, created_at: now });
       audit(tx, jid, "settlement-engine", "CONTRACT_SETTLED", p.id, { contractId: c.id, contractHash: c.hash, resultCents: expected, effectiveAt: p.ends_at, processedAt: now, receiptHash: digest2 }, now);
       notice(tx, `end:${p.id}`, u.id, "\u0627\u0646\u062A\u0647\u062A \u0645\u062F\u0629 \u0627\u0644\u0639\u0642\u062F", `${c.title} \xB7 \u0627\u0643\u062A\u0645\u0644\u062A \u0645\u062F\u0629 \u0627\u0644\u0645\u0634\u0627\u0631\u0643\u0629`, c.id, p.ends_at);
@@ -337,6 +389,30 @@ async function state(u, now = Date.now()) {
   const audits = isAdmin ? (await adminDb.collection("orinAudit").orderBy("created_at", "desc").limit(100).get()).docs.map((d) => d.data()) : [];
   return { serverTime: now, user: { id: u.id, name: user.displayName, tier: data.tier, accepted_at: data.accepted_at, seen_at: data.seen_at }, isAdmin, balanceCents, reservedCents, realizedCents, contracts, positions, notifications: feed.items, receipts: rs.docs.map((d) => d.data()).sort((a2, b) => b.created_at - a2.created_at).slice(0, 100), ledger: js.docs.flatMap((d) => d.data().entries).sort((a2, b) => b.effective_at - a2.effective_at).slice(0, 300), audit: audits };
 }
+async function action(u, input, now = Date.now()) {
+  await bootstrap(u, now);
+  await settle(u, now);
+  let result = { ok: true };
+  if (input.action === "publish") result = await publish(u, input, now);
+  else if (input.action === "join") result = await join(u, input, now);
+  else if (input.action === "settle") {
+  } else if (["accept", "read", "tier"].includes(input.action)) await adminDb.runTransaction(async (tx) => {
+    await check(tx, u, input.action === "tier");
+    const a = (await tx.get(account(u.id))).data();
+    if (input.action === "accept" && !a.accepted_at) {
+      tx.update(account(u.id), { accepted_at: now });
+      audit(tx, `accept:${u.id}`, u.id, "TERMS_ACCEPTED", u.id, { version: 1 }, now);
+    }
+    if (input.action === "read") tx.update(account(u.id), { seen_at: now });
+    if (input.action === "tier") {
+      if (!["standard", "advanced"].includes(input.tier)) throw new ApiError("\u0641\u0626\u0629 \u063A\u064A\u0631 \u0635\u0627\u0644\u062D\u0629.");
+      tx.update(account(u.id), { tier: input.tier });
+      audit(tx, id(), u.id, "TIER_CHANGED", u.id, { tier: input.tier }, now);
+    }
+  });
+  else throw new ApiError("\u0639\u0645\u0644\u064A\u0629 \u063A\u064A\u0631 \u0645\u062F\u0639\u0648\u0645\u0629.");
+  return { result, state: await state(u, now) };
+}
 
 // src/program-ingestion.ts
 var key = (s) => {
@@ -344,14 +420,46 @@ var key = (s) => {
   return s;
 };
 var validMoney = (n) => Number.isSafeInteger(n) && n >= 0 && n <= Number.MAX_SAFE_INTEGER / 4;
+async function recordVerifiedCustomer(uid, customerKey, eventId, idNumberLast4) {
+  key(uid);
+  key(eventId);
+  if (!/^[a-f0-9]{64}$/.test(customerKey)) throw new ApiError("Use an irreversible provider customer fingerprint");
+  await adminDb.runTransaction(async (tx) => {
+    const event = ref("orinTrustedEvents", eventId), v = ref("orinVerifiedCustomers", uid), unique = ref("orinCustomerRegistry", customerKey), member2 = ref("orinProgramMembers", uid);
+    const [old, owner2, m] = await Promise.all([tx.get(event), tx.get(unique), tx.get(member2)]);
+    const fingerprint = hash(JSON.stringify({ uid, customerKey }));
+    if (old.exists) {
+      if (old.data().fingerprint !== fingerprint) throw new ApiError("Event conflict", 409);
+      return;
+    }
+    if (owner2.exists && owner2.data().uid !== uid) throw new ApiError("Duplicate customer", 409);
+    const existing = await tx.get(v);
+    if (existing.exists && existing.data().customerKey !== customerKey) throw new ApiError("Verification identity changed; review required", 409);
+    tx.set(unique, { uid });
+    tx.set(v, { uid, customerKey, idNumberLast4: idNumberLast4 ?? null, verified: true, revoked: false, eventId });
+    if (m.exists) tx.update(member2, { badges: [.../* @__PURE__ */ new Set([...m.data().badges ?? [], "verified"])] });
+    tx.create(event, { fingerprint, type: "verification", uid });
+    audit(tx, "trusted-" + eventId, "provider", "CUSTOMER_VERIFIED", uid, { eventId }, Date.now());
+  });
+}
 async function recordConfirmedDeposit(e) {
   key(e.eventId);
   key(e.uid);
   key(e.accountId);
   if (e.currency !== "USD" || !validMoney(e.cents) || e.cents === 0 || typeof e.eligible !== "boolean") throw new ApiError("Invalid confirmed deposit");
   await adminDb.runTransaction(async (tx) => {
-    const event = ref("orinTrustedEvents", e.eventId), a = adminDb.doc(`sparkTradingAccounts/${e.uid}/accounts/${e.accountId}`), b = ref("orinBonusWallets", e.uid), fund = ref("orinQualifiedDeposits", e.uid), m = ref("orinProgramMembers", e.uid);
-    const [old, acc, bonus, first, member2, profile, access] = await Promise.all([tx.get(event), tx.get(a), tx.get(b), tx.get(fund), tx.get(m), tx.get(ref("users", e.uid)), tx.get(ref("orinControlAccess", e.uid))]);
+    const event = ref("orinTrustedEvents", e.eventId), a = adminDb.doc(`sparkTradingAccounts/${e.uid}/accounts/${e.accountId}`), b = ref("orinBonusWallets", e.uid), fund = ref("orinQualifiedDeposits", e.uid), m = ref("orinProgramMembers", e.uid), cfgDoc = ref("orinProgramConfiguration", "current"), rew = ref("orinReferralRewards", e.uid);
+    const [old, acc, bonus, first, member2, profile, access, cfgSnap, rewSnap] = await Promise.all([
+      tx.get(event),
+      tx.get(a),
+      tx.get(b),
+      tx.get(fund),
+      tx.get(m),
+      tx.get(ref("users", e.uid)),
+      tx.get(ref("orinControlAccess", e.uid)),
+      tx.get(cfgDoc),
+      tx.get(rew)
+    ]);
     const fingerprint = hash(JSON.stringify(e));
     if (old.exists) {
       if (old.data().fingerprint !== fingerprint) throw new ApiError("Event conflict", 409);
@@ -360,10 +468,105 @@ async function recordConfirmedDeposit(e) {
     if (!profile.exists || profile.data().disabled || access.data()?.status === "suspended") throw new ApiError("Funding account restricted", 409);
     const data = acc.data();
     if (!data || data.ownerId !== e.uid || data.type !== "real" || data.currency !== "USD" || !validMoney(data.balanceCents + e.cents)) throw new ApiError("Invalid funding account", 409);
-    tx.update(a, { balanceCents: data.balanceCents + e.cents });
+    const cfg = cfgSnap.data();
+    const firstDepositCents = cfg?.firstDepositCents ?? 1e5;
+    let refKyc = null;
+    let referredKyc = null;
+    let evSnap = null;
+    let refMemSnap = null;
+    let ancSnaps = [];
+    const rData = rewSnap.exists ? rewSnap.data() : null;
+    const isReferralEligible = Boolean(e.eligible && e.cents >= firstDepositCents && rData && rData.status === "pending");
+    if (isReferralEligible && rData.referrerId !== e.uid) {
+      const ancestors = member2.data()?.ancestors ?? [];
+      const [rk, rfk, ev, rm, ...ancs] = await Promise.all([
+        tx.get(ref("orinVerifiedCustomers", rData.referrerId)),
+        tx.get(ref("orinVerifiedCustomers", e.uid)),
+        tx.get(ref("orinProgramEvidence", e.uid)),
+        tx.get(ref("orinProgramMembers", rData.referrerId)),
+        ...ancestors.map((ancId) => tx.get(ref("orinProgramMembers", ancId)))
+      ]);
+      refKyc = rk;
+      referredKyc = rfk;
+      evSnap = ev;
+      refMemSnap = rm;
+      ancSnaps = ancs;
+    }
+    let newCash = data.balanceCents + e.cents;
     if (e.eligible && (!first.exists || e.cents > first.data().cents)) {
       tx.set(fund, { uid: e.uid, eventId: e.eventId, cents: e.cents, accountId: e.accountId });
-      if (bonus.exists) tx.update(b, { qualifiedDepositCents: e.cents, withdrawableProfitCents: e.cents >= (bonus.data().firstDepositCents ?? 5e4) ? bonus.data().profitCents : 0 });
+      if (bonus.exists) {
+        const bData = bonus.data();
+        const reqDeposit = bData.firstDepositCents ?? firstDepositCents;
+        if (e.cents >= reqDeposit) {
+          const withdrawableProfit = Math.min(bData.profitLimitCents ?? 2e4, bData.profitCents ?? 0);
+          tx.update(b, { qualifiedDepositCents: e.cents, withdrawableProfitCents: withdrawableProfit });
+          if (withdrawableProfit > 0) {
+            newCash += withdrawableProfit;
+            tx.create(ref("orinProgramLedger", "profit-unlock-" + e.eventId), {
+              uid: e.uid,
+              accountId: e.accountId,
+              kind: "bonus_profit_unlock",
+              entries: [{ account: "cash", cents: withdrawableProfit }, { account: "bonus-profit", cents: -withdrawableProfit }],
+              createdAt: Date.now()
+            });
+          }
+        } else {
+          tx.update(b, { qualifiedDepositCents: e.cents });
+        }
+      }
+    }
+    tx.update(a, { balanceCents: newCash });
+    if (isReferralEligible) {
+      if (rData.referrerId === e.uid) {
+        tx.update(rew, { status: "rejected", reason: "Self-referral rejected", updatedAt: Date.now() });
+      } else {
+        if (refKyc?.data()?.customerKey && referredKyc?.data()?.customerKey && refKyc.data().customerKey === referredKyc.data().customerKey) {
+          tx.update(rew, { status: "rejected", reason: "Same customerKey detected", updatedAt: Date.now() });
+        } else {
+          if (!evSnap?.exists) {
+            tx.create(ref("orinProgramEvidence", e.uid), {
+              uid: e.uid,
+              referrerId: rData.referrerId,
+              kind: "referral_qualified",
+              termsVersion: rData.termsVersion ?? cfg?.termsVersion ?? "v1.0",
+              revoked: false,
+              depositCents: e.cents,
+              eventId: e.eventId,
+              createdAt: Date.now()
+            });
+            tx.update(rew, {
+              status: "approved",
+              evidenceId: e.uid,
+              qualifiedAt: Date.now(),
+              approvedAt: Date.now(),
+              updatedAt: Date.now()
+            });
+            if (member2.exists) {
+              tx.update(m, { referralStatus: "approved" });
+            }
+            if (refMemSnap?.exists) {
+              const rmData = refMemSnap.data();
+              tx.update(ref("orinProgramMembers", rData.referrerId), {
+                qualifiedCount: (rmData.qualifiedCount ?? 0) + 1,
+                pendingCents: (rmData.pendingCents ?? 0) + (rData.amountCents ?? 8e3)
+              });
+            }
+            const mData = member2.data();
+            const ancestors = mData?.ancestors ?? [];
+            const parentUid = mData?.parentUid ?? rData.referrerId;
+            ancSnaps.forEach((ancSnap, idx) => {
+              if (ancSnap.exists) {
+                const ancData = ancSnap.data();
+                const ancId = ancestors[idx];
+                tx.update(ancSnap.ref, {
+                  activeTeamCount: (ancData.activeTeamCount ?? 0) + 1
+                });
+              }
+            });
+          }
+        }
+      }
     }
     if (member2.exists) tx.update(m, { badges: [.../* @__PURE__ */ new Set([...member2.data().badges ?? [], "first_deposit"])] });
     tx.create(event, { ...e, fingerprint, type: "deposit", status: "confirmed" });
@@ -426,8 +629,34 @@ function permissionsFor(roles) {
     return [];
   return [...new Set(roles.flatMap((r) => ROLES[r].permissions))];
 }
+var CONTROL_MODULES = [
+  ["dashboard", "\u0646\u0638\u0631\u0629 \u0639\u0627\u0645\u0629", "Dashboard", "dashboard.read"],
+  ["users", "\u0627\u0644\u0645\u0633\u062A\u062E\u062F\u0645\u0648\u0646", "Users", "users.read"],
+  ["kyc", "\u0627\u0644\u062A\u062D\u0642\u0642 \u0645\u0646 \u0627\u0644\u0647\u0648\u064A\u0629", "KYC", "kyc.read"],
+  ["accounts", "\u0627\u0644\u062D\u0633\u0627\u0628\u0627\u062A", "Accounts", "accounts.read"],
+  ["wallets", "\u0627\u0644\u0623\u0631\u0635\u062F\u0629", "Wallets", "wallet.read"],
+  ["deposits", "\u0627\u0644\u0625\u064A\u062F\u0627\u0639\u0627\u062A", "Deposits", "finance.read"],
+  ["withdrawals", "\u0627\u0644\u0633\u062D\u0648\u0628\u0627\u062A", "Withdrawals", "finance.read"],
+  ["approvals", "\u0627\u0644\u0645\u0648\u0627\u0641\u0642\u0627\u062A \u0627\u0644\u0645\u0627\u0644\u064A\u0629", "Approvals", "finance.read"],
+  ["trading", "\u0627\u0644\u062A\u062F\u0627\u0648\u0644", "Trading", "trading.read"],
+  ["markets", "\u0627\u0644\u0623\u0633\u0648\u0627\u0642 \u0648\u0627\u0644\u0623\u0635\u0648\u0644", "Markets & assets", "markets.manage"],
+  ["bonus", "\u0627\u0644\u0628\u0648\u0646\u0635 \u0627\u0644\u062A\u0631\u062D\u064A\u0628\u064A", "Welcome bonus", "programs.read"],
+  ["referrals", "\u0627\u0644\u0625\u062D\u0627\u0644\u0627\u062A", "Referrals", "programs.read"],
+  ["team", "\u0645\u0633\u062A\u0648\u064A\u0627\u062A \u0627\u0644\u0641\u0631\u064A\u0642", "Team levels", "programs.read"],
+  ["agencies", "\u0627\u0644\u0648\u0643\u0644\u0627\u0621", "Agencies", "programs.read"],
+  ["badges", "\u0627\u0644\u0634\u0627\u0631\u0627\u062A", "Badges", "programs.read"],
+  ["notifications", "\u0627\u0644\u0625\u0634\u0639\u0627\u0631\u0627\u062A", "Notifications", "notifications.manage"],
+  ["content", "\u0627\u0644\u0645\u062D\u062A\u0648\u0649", "Content", "content.manage"],
+  ["configuration", "\u0625\u0639\u062F\u0627\u062F\u0627\u062A \u0627\u0644\u062A\u0637\u0628\u064A\u0642", "Configuration", "configuration.manage"],
+  ["security", "\u0627\u0644\u0623\u0645\u0627\u0646", "Security", "security.read"],
+  ["staff", "\u0627\u0644\u0645\u0648\u0638\u0641\u0648\u0646 \u0648\u0627\u0644\u0635\u0644\u0627\u062D\u064A\u0627\u062A", "Staff & roles", "staff.manage"],
+  ["audit", "\u0633\u062C\u0644 \u0627\u0644\u062A\u062F\u0642\u064A\u0642", "Audit log", "audit.read"],
+  ["tickets", "\u0645\u0631\u0643\u0632 \u0627\u0644\u062F\u0639\u0645", "Support desk", "tickets.read"],
+  ["codes", "\u0623\u0643\u0648\u0627\u062F \u0627\u0644\u0639\u0642\u0648\u062F", "Contract codes", "trading.read"],
+  ["support-ai", "\u0627\u0644\u062F\u0639\u0645 \u0627\u0644\u0630\u0643\u064A", "AI Support", "support.ai.read"]
+];
 var CONTROL_DEFAULTS = { maintenance: false, messageAr: "\u0635\u064A\u0627\u0646\u0629 \u0645\u0624\u0642\u062A\u0629\u060C \u064A\u0631\u062C\u0649 \u0627\u0644\u0645\u062D\u0627\u0648\u0644\u0629 \u0644\u0627\u062D\u0642\u064B\u0627.", messageEn: "Scheduled maintenance. Please try again later.", minimumVersionCode: 1, supportEmail: "", supportUrl: "", tradingEnabled: false, depositsEnabled: false, withdrawalsEnabled: false, referralsEnabled: false, bonusEnabled: false, maxAdjustmentCents: null };
-var ACTION_PERMISSIONS = { "contract.create": "contracts.manage", "contract.revoke": "contracts.manage", "ticket.create": "tickets.manage", "ticket.update": "tickets.manage", "ticket.note": "tickets.manage", "user.status": "users.manage", "kyc.review": "kyc.review", "account.create": "accounts.manage", "account.status": "accounts.manage", "reward.propose": "finance.propose", "finance.propose": "finance.propose", "finance.approve": "finance.approve", "finance.reject": "finance.approve", "payment.review": "finance.propose", "referral.review": "referrals.review", "agency.set": "agencies.manage", "badge.grant": "badges.grant", "content.save": "content.manage", "content.publish": "content.publish", "notification.save": "notifications.manage", "notification.publish": "notifications.manage", "market.save": "markets.manage", "configuration.save": "configuration.manage", "program.configure": "programs.configure", "staff.set": "staff.manage", "staff.invite": "staff.manage", "security.revoke": "security.revoke" };
+var ACTION_PERMISSIONS = { "contract.create": "contracts.manage", "contract.revoke": "contracts.manage", "ticket.create": "tickets.manage", "ticket.update": "tickets.manage", "ticket.note": "tickets.manage", "user.status": "users.manage", "kyc.review": "kyc.review", "account.create": "accounts.manage", "account.status": "accounts.manage", "reward.propose": "finance.propose", "finance.propose": "finance.propose", "finance.approve": "finance.approve", "finance.reject": "finance.approve", "payment.review": "finance.propose", "referral.review": "referrals.review", "agency.set": "agencies.manage", "badge.grant": "badges.grant", "content.save": "content.manage", "content.publish": "content.publish", "notification.save": "notifications.manage", "notification.publish": "notifications.manage", "market.save": "markets.manage", "configuration.save": "configuration.manage", "program.configure": "programs.configure", "staff.set": "staff.manage", "staff.invite": "staff.manage", "security.revoke": "security.revoke", "customer.verify": "finance.propose", "customer.revoke": "finance.propose", "period.close": "finance.propose", "bonus.expire": "finance.propose" };
 
 // src/control-auth.ts
 var controlRef = (kind, id2) => ref("orinControl" + kind, id2);
@@ -442,8 +671,8 @@ async function requirePermission(u, permission, tx, recent = false) {
     throw new ApiError("Admin session revoked", 401);
   return staffData;
 }
-function controlAudit(tx, id2, u, action, target, reason, before, after, referenceId) {
-  tx.create(controlRef("Audit", id2), { adminId: u.id, action, target, timestamp: Date.now(), reason, previous: before ?? null, next: after ?? null, requestId: referenceId, referenceId, payloadHash: hash(JSON.stringify({ action, target, before, after, referenceId })) });
+function controlAudit(tx, id2, u, action2, target, reason, before, after, referenceId) {
+  tx.create(controlRef("Audit", id2), { adminId: u.id, action: action2, target, timestamp: Date.now(), reason, previous: before ?? null, next: after ?? null, requestId: referenceId, referenceId, payloadHash: hash(JSON.stringify({ action: action2, target, before, after, referenceId })) });
 }
 async function controlAccess(u, financial = false, tx) {
   const read = (r) => tx ? tx.get(r) : r.get();
@@ -536,8 +765,8 @@ function paymentService(provider, ipnSecret) {
       await check(tx, u);
       await controlAccess(u, true, tx);
       await controlAccount(u.id, accountId, tx);
-      const configuration = (await tx.get(ref("orinControlConfiguration", "current"))).data();
-      if (configuration && configuration.depositsEnabled !== true) throw new ApiError("Deposit service disabled", 409);
+      const configuration2 = (await tx.get(ref("orinControlConfiguration", "current"))).data();
+      if (configuration2 && configuration2.depositsEnabled !== true) throw new ApiError("Deposit service disabled", 409);
       const [old, account2, access, rate] = await Promise.all([tx.get(r), tx.get(adminDb.doc(`sparkTradingAccounts/${u.id}/accounts/${accountId}`)), tx.get(ref("orinControlAccess", u.id)), tx.get(ref("orinDepositRateLimits", u.id))]);
       if (access.data()?.status === "suspended") throw new ApiError("\u0627\u0644\u062D\u0633\u0627\u0628 \u0645\u0648\u0642\u0648\u0641.", 403);
       const a = account2.data();
@@ -592,16 +821,16 @@ function paymentService(provider, ipnSecret) {
     if (allowCredit && status === "finished") {
       const [profile, access] = await Promise.all([ref("users", d.uid).get(), ref("orinControlAccess", d.uid).get()]);
       const expected = units(payment.pay_amount);
-      let paid;
+      let paid = null;
       try {
-        paid = payment.actually_paid != null ? units(payment.actually_paid) : payment.amount_received != null ? units(payment.amount_received) : expected;
+        const raw = payment.actually_paid != null ? payment.actually_paid : payment.amount_received;
+        if (raw != null) paid = units(raw);
       } catch {
-        paid = expected;
       }
-      if (paid * 1000n < expected * 995n || profile.data()?.disabled || access.data()?.status === "suspended") {
+      if (paid === null || paid * 1000n < expected * 995n || profile.data()?.disabled || access.data()?.status === "suspended") {
         await adminDb.runTransaction(async (tx) => {
           const fresh = (await tx.get(r)).data();
-          if (!fresh.credited) tx.update(r, { status: "review", reviewReason: paid * 1000n < expected * 995n ? "amount_mismatch" : "account_restricted" });
+          if (!fresh.credited) tx.update(r, { status: "review", reviewReason: paid === null || paid * 1000n < expected * 995n ? "amount_mismatch" : "account_restricted" });
         });
         return;
       }
@@ -624,7 +853,7 @@ function paymentService(provider, ipnSecret) {
     }
     return depositView((await r.get()).data());
   }
-  async function list(u, accountId) {
+  async function list2(u, accountId) {
     safeId(accountId);
     const account2 = (await adminDb.doc(`sparkTradingAccounts/${u.id}/accounts/${accountId}`).get()).data();
     if (!account2 || account2.ownerId !== u.id) throw new ApiError("\u0627\u0644\u062D\u0633\u0627\u0628 \u063A\u064A\u0631 \u0645\u062A\u0627\u062D.", 404);
@@ -640,7 +869,7 @@ function paymentService(provider, ipnSecret) {
     await reconcile(id2, current);
     return { ok: true };
   }
-  return { create, get, list, webhook };
+  return { create, get, list: list2, webhook };
 }
 
 // src/support-admin.ts
@@ -680,6 +909,9 @@ var SUPPORT_KNOWLEDGE = [
   { id: "referral", title: "Invitations", content: "\u062F\u0639\u0648\u0629 \u0635\u062F\u064A\u0642 opens the referral page with the user\u2019s own code/link and actual recorded referral activity when available. A referral code can be supplied in the optional registration field. A code or invitation does not guarantee a reward; reward eligibility and amounts depend on the published program terms and verified backend records. Do not fabricate invited-user counts or reward balances." },
   { id: "support", title: "Messages and human assistance", content: "Support messages are saved to the signed-in user\u2019s own conversation. The conversation menu offers \u0637\u0644\u0628 \u0645\u062A\u0627\u0628\u0639\u0629 \u0645\u0646 \u0645\u0648\u0638\u0641. A requested handoff does not mean a person is online or that a response time is guaranteed. Adam is ORIN\u2019s automated support assistant, presented as Adam from ORIN support. He answers transparently about being automated when asked and never pretends to be a human. A reply exists only after a real model answers successfully. If the model is unavailable, the original user message remains saved and the conversation can be handed to the team." }
 ];
+function redactSupportInput(value) {
+  return value.slice(0, 2e3).replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[email omitted]").replace(/(?:https?:\/\/|otpauth:\/\/|file:\/\/|data:)[^\s]+/gi, "[link omitted]").replace(/\b(?:[a-f0-9]{6}-){3}[a-f0-9]{6}\b|\b[a-f0-9]{24}\b/gi, "[recovery code omitted]").replace(/(?:password|passwd|secret|recovery\s*code|pin|otp|رمز\s*(?:التحقق|الاسترداد)|كلمة\s*(?:المرور|السر))\s*(?:[:=]|is|هو|هي)\s*\S+/gi, "[credential omitted]").replace(/\b(?:sk-|eyJ)[A-Za-z0-9_.-]{12,}\b/g, "[credential omitted]").replace(/[A-Za-z0-9_+\/=.-]{32,}/g, "[long identifier omitted]").replace(/[0-9٠-٩۰-۹]{4,}/g, "[number omitted]");
+}
 
 // src/support-assistant-provider.ts
 var SupportModelError = class extends Error {
@@ -713,6 +945,38 @@ function outputSchema(ids) {
   return { type: "object", additionalProperties: false, required: ["text", "handoff", "scope", "citationIds"], properties: { text: { type: "string", maxLength: 2e3 }, handoff: { type: "boolean" }, scope: { type: "string", enum: ["application", "outside"] }, citationIds: { type: "array", maxItems: 12, items: { type: "string", enum: ids } } } };
 }
 var ASSISTANT_OUTPUT_SCHEMA = outputSchema(SUPPORT_KNOWLEDGE.map((d) => d.id));
+async function boundedJson(response) {
+  if (!response.ok) throw new SupportModelError(response.status === 429 ? "model_rate_limited" : "model_http_error");
+  if (Number(response.headers.get("content-length") ?? 0) > 65536) throw new SupportModelError("model_response_too_large");
+  const reader = response.body?.getReader();
+  if (!reader) throw new SupportModelError("model_empty_response");
+  const chunks = [];
+  let size = 0;
+  try {
+    for (; ; ) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > 65536) throw new SupportModelError("model_response_too_large");
+      chunks.push(value);
+    }
+  } finally {
+    await reader.cancel().catch(() => {
+    });
+  }
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  } catch {
+    throw new SupportModelError("model_invalid_json");
+  }
+}
+async function modelReady(config, request = fetch) {
+  const url = new URL(config.endpoint);
+  if (config.provider !== "gemini") url.pathname = url.pathname.replace(/chat\/completions$/, "models");
+  const headers = config.provider === "gemini" ? { "x-goog-api-key": config.token } : config.token ? { Authorization: "Bearer " + config.token } : {};
+  const value = await boundedJson(await request(url.href, { method: "GET", headers, redirect: "error", signal: AbortSignal.timeout(15e3) }));
+  return config.provider === "gemini" ? value.name === "models/" + config.model && value.supportedGenerationMethods?.includes("generateContent") : Array.isArray(value.data) && value.data.some((v) => !!v && typeof v === "object" && v.id === config.model);
+}
 
 // src/support-admin.ts
 function validateSupportConfiguration(raw) {
@@ -742,6 +1006,7 @@ var only = (d, fields) => {
 };
 var safe = (value) => value?.toMillis ? value.toMillis() : Array.isArray(value) ? value.map(safe) : value && typeof value === "object" ? Object.fromEntries(Object.entries(value).map(([k, v]) => [k, safe(v)])) : value;
 var pick = (d, fields) => Object.fromEntries(fields.filter((k) => d[k] !== void 0).map((k) => [k, safe(d[k])]));
+var configuration = (d = {}) => ({ ...SUPPORT_AI_DEFAULTS, ...pick(d, SUPPORT_AI_CONFIG_FIELDS) });
 var summary = (d) => d ? { revision: d.revision, status: d.status, reviewed: d.reviewed, title: d.title, contentHash: typeof d.content === "string" ? hash(d.content) : null } : null;
 var configSummary = (d) => ({ ...pick(d, ["enabled", "provider", "model", "maxTokensPerReply", "dailyTokenBudget", "revision"]), guidanceHash: hash(d.systemInstructions ?? "") });
 function runtimePresence(c) {
@@ -753,17 +1018,112 @@ function runtimePresence(c) {
     return { operatorEnabled: process.env.ORIN_SUPPORT_AI_ENABLED === "true", credentialPresent: false, configurationValid: false, status: "invalid-configuration" };
   }
 }
+var health = /* @__PURE__ */ new Map();
+async function runtimeStatus(c) {
+  const presence = runtimePresence(c);
+  if (!c.enabled || !presence.configurationValid) return { ...presence, checkedAt: null };
+  const config = assistantConfiguration({ ...process.env, ORIN_SUPPORT_AI_PROVIDER: c.provider, ORIN_SUPPORT_AI_MODEL: c.model });
+  if (!config) return { ...presence, checkedAt: null };
+  const key5 = hash(JSON.stringify(config)), now = Date.now();
+  let cached = health.get(key5);
+  if (!cached || cached.until < now) {
+    let ready = false;
+    try {
+      ready = await modelReady(config);
+    } catch {
+    }
+    cached = { until: now + 3e4, ready };
+    health.clear();
+    health.set(key5, cached);
+  }
+  return { ...presence, status: cached.ready ? "ready" : "unreachable", checkedAt: cached.until - 3e4 };
+}
+function cursor(raw, section) {
+  if (!raw) return null;
+  try {
+    if (typeof raw !== "string" || raw.length > 1e3 || !/^[\w-]+$/.test(raw)) throw new Error();
+    const v = JSON.parse(Buffer.from(raw, "base64url").toString("utf8"));
+    if (v.section !== section || typeof v.id !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(v.id)) throw new Error();
+    return v.id;
+  } catch {
+    throw new ApiError("Invalid support page cursor");
+  }
+}
+async function list(collection, section, q, fields, filter) {
+  let query = adminDb.collection(collection);
+  if (filter) query = filter(query);
+  query = query.orderBy(FieldPath.documentId());
+  const start = cursor(q.cursor, section);
+  if (start) query = query.startAfter(start);
+  const page = await query.limit(51).get(), docs = page.docs.slice(0, 50), last = docs.at(-1);
+  return { rows: docs.map((d) => ({ id: d.id, ...pick(d.data(), fields) })), nextCursor: page.size > 50 && last ? Buffer.from(JSON.stringify({ section, id: last.id })).toString("base64url") : null };
+}
+async function readSupportAdmin(u, q = {}) {
+  const staff = await adminDb.runTransaction(async (tx) => {
+    await check(tx, u);
+    return requirePermission(u, "support.ai.read", tx);
+  });
+  const section = typeof q.section === "string" ? q.section : "overview";
+  if (section === "knowledge") return { ...await list("orinSupportKnowledge", section, q, ["title", "content", "status", "reviewed", "revision", "updatedAt", "updatedBy"]), section };
+  if (section === "conversations") {
+    await requirePermission(u, "tickets.read");
+    if (q.thread) {
+      const id2 = key2(q.thread), thread = await ref("orinSupportConversations", id2).get();
+      if (!thread.exists) throw new ApiError("Conversation not found", 404);
+      let query = thread.ref.collection("messages").orderBy("createdAt", "desc").orderBy(FieldPath.documentId(), "desc");
+      if (q.messagesCursor) {
+        try {
+          const c = JSON.parse(Buffer.from(String(q.messagesCursor), "base64url").toString("utf8"));
+          if (c.thread !== id2 || !Number.isSafeInteger(c.at) || c.at < 0) throw new Error();
+          query = query.startAfter(Timestamp.fromMillis(c.at), key2(c.id));
+        } catch {
+          throw new ApiError("Invalid conversation cursor");
+        }
+      }
+      const page = await query.limit(81).get(), docs = page.docs.slice(0, 80), last = docs.at(-1), nextMessagesCursor = page.size > 80 && last ? Buffer.from(JSON.stringify({ thread: id2, id: last.id, at: safe(last.data().createdAt) })).toString("base64url") : null;
+      const requestId = randomUUID2();
+      await adminDb.runTransaction(async (tx) => {
+        await check(tx, u);
+        await requirePermission(u, "tickets.read", tx);
+        controlAudit(tx, requestId, u, "support.ai.conversation.read", id2, "Authorized support conversation view", null, { messages: docs.length }, requestId);
+      });
+      return { section, thread: { id: id2, ...pick(thread.data(), ["ownerId", "updatedAt", "handoffRequested", "lastMessageId"]) }, rows: docs.reverse().map((d) => ({ id: d.id, ...pick(d.data(), ["kind", "createdAt", "senderId", "assistant"]), text: redactSupportInput(String(d.data().text ?? "")) })), nextMessagesCursor, nextCursor: null };
+    }
+    return { ...await list("orinSupportConversations", section, q, ["ownerId", "updatedAt", "handoffRequested", "lastMessageId"]), section };
+  }
+  if (section === "usage") {
+    const page = await adminDb.collection("orinSupportUsage").orderBy(FieldPath.documentId(), "desc").limit(30).get();
+    return { section, rows: page.docs.map((d) => ({ id: d.id, ...pick(d.data(), ["inputTokens", "outputTokens", "totalTokens", "budgetDebitedTokens", "unmeasuredTokens", "requests", "failures", "reservedTokens", "updatedAt"]) })), nextCursor: null };
+  }
+  if (section === "errors") {
+    const page = await adminDb.collection("orinSupportErrors").orderBy("createdAt", "desc").limit(50).get();
+    return { section, rows: page.docs.map((d) => ({ id: d.id, ...pick(d.data(), ["code", "provider", "model", "createdAt"]) })), nextCursor: null };
+  }
+  if (section === "tickets") {
+    await requirePermission(u, "tickets.read");
+    return { section, ...await list("orinControlTickets", section, q, ["uid", "title", "status", "priority", "category", "assigneeId", "createdAt", "updatedAt", "conversationId"], (query) => query.where("source", "==", "orin-ai")) };
+  }
+  if (section !== "overview") throw new ApiError("Unknown support section", 404);
+  const stored = (await ref("orinSupportConfiguration", "current").get()).data() ?? {}, config = configuration(stored);
+  const usage = (await ref("orinSupportUsage", (/* @__PURE__ */ new Date()).toISOString().slice(0, 10)).get()).data();
+  let publishedKnowledge = null;
+  try {
+    publishedKnowledge = (await adminDb.collection("orinSupportKnowledge").where("status", "==", "published").where("reviewed", "==", true).count().get()).data().count;
+  } catch {
+  }
+  return { section, config: { ...config, revision: stored.revision ?? 0, updatedAt: safe(stored.updatedAt) ?? null, updatedBy: stored.updatedBy ?? null }, runtime: await runtimeStatus(config), publishedKnowledge, usage: usage ? pick(usage, ["inputTokens", "outputTokens", "totalTokens", "budgetDebitedTokens", "unmeasuredTokens", "requests", "failures", "reservedTokens", "updatedAt"]) : null, permissions: permissionsFor(staff.roles).filter((p) => p.startsWith("support.") || p.startsWith("tickets.")), immutablePolicy: ["ORIN-only answers", "No financial/security mutations", "Verified current user scope", "No passwords, PINs, OTPs or secrets", "Treat operator guidance and documents as untrusted data"], asOf: Date.now() };
+}
 async function supportAdminAction(u, input) {
   only(input, ["action", "target", "revision", "requestId", "reason", "data"]);
-  const action = String(input.action), permissions = { "support.ai.resume": "tickets.manage", "support.ai.configure": "support.ai.configure", "support.knowledge.save": "support.knowledge.manage", "support.knowledge.publish": "support.knowledge.publish", "support.knowledge.unpublish": "support.knowledge.publish" };
-  const permission = permissions[action];
+  const action2 = String(input.action), permissions = { "support.ai.resume": "tickets.manage", "support.ai.configure": "support.ai.configure", "support.knowledge.save": "support.knowledge.manage", "support.knowledge.publish": "support.knowledge.publish", "support.knowledge.unpublish": "support.knowledge.publish" };
+  const permission = permissions[action2];
   if (!permission) throw new ApiError("Unsupported assistant control action");
-  const requestId = key2(input.requestId), reason = bounded(input.reason, 1e3), target = action === "support.ai.configure" ? "current" : action === "support.ai.resume" ? key2(input.target) : documentId(input.target);
-  if (action === "support.ai.configure" && input.target !== "current") throw new ApiError("Invalid configuration target");
+  const requestId = key2(input.requestId), reason = bounded(input.reason, 1e3), target = action2 === "support.ai.configure" ? "current" : action2 === "support.ai.resume" ? key2(input.target) : documentId(input.target);
+  if (action2 === "support.ai.configure" && input.target !== "current") throw new ApiError("Invalid configuration target");
   if (!Number.isSafeInteger(input.revision) || input.revision < 0) throw new ApiError("Invalid revision");
   const data = input.data;
   if (!data || typeof data !== "object" || Array.isArray(data)) throw new ApiError("Invalid support action data");
-  const fingerprint = hash(JSON.stringify(input)), command = controlRef("Commands", hash(u.id + ":" + requestId)), record = ref(action === "support.ai.configure" ? "orinSupportConfiguration" : action === "support.ai.resume" ? "orinSupportConversations" : "orinSupportKnowledge", target);
+  const fingerprint = hash(JSON.stringify(input)), command = controlRef("Commands", hash(u.id + ":" + requestId)), record = ref(action2 === "support.ai.configure" ? "orinSupportConfiguration" : action2 === "support.ai.resume" ? "orinSupportConversations" : "orinSupportKnowledge", target);
   let output = {};
   await adminDb.runTransaction(async (tx) => {
     await check(tx, u);
@@ -778,7 +1138,7 @@ async function supportAdminAction(u, input) {
     if (input.revision !== (before?.revision ?? 0)) throw new ApiError("Support record changed; reload before saving.", 409);
     const now = Date.now();
     let after;
-    if (action === "support.ai.resume") {
+    if (action2 === "support.ai.resume") {
       only(data, []);
       if (!before) throw new ApiError("Conversation not found", 404);
       const mapping = (await tx.get(ref("orinSupportEscalations", target))).data();
@@ -788,36 +1148,36 @@ async function supportAdminAction(u, input) {
       const actingStaff = (await tx.get(ref("orinStaff", u.id))).data();
       if (ticket.assigneeId && ticket.assigneeId !== u.id && !permissionsFor(actingStaff?.roles).includes("tickets.assign")) throw new ApiError("Only the assigned agent or supervisor may resume this conversation.", 403);
       after = { ...before, handoffRequested: false };
-    } else if (action === "support.ai.configure") {
+    } else if (action2 === "support.ai.configure") {
       const next = validateSupportConfiguration(data);
       const presence = runtimePresence(next);
       if (next.enabled && (!presence.operatorEnabled || !presence.configurationValid)) throw new ApiError("Server provider configuration is not ready. The secret and approved endpoint must be configured on the server.", 409);
       after = { ...next, revision: (before?.revision ?? 0) + 1, updatedAt: now, updatedBy: u.id };
-    } else if (action === "support.knowledge.save") {
+    } else if (action2 === "support.knowledge.save") {
       only(data, ["title", "content"]);
       after = { title: bounded(data.title, 120), content: bounded(data.content, 4e3), status: "draft", reviewed: false, revision: (before?.revision ?? 0) + 1, updatedAt: now, updatedBy: u.id };
     } else {
       only(data, ["previewRevision", "reviewed"]);
       if (!before) throw new ApiError("Knowledge document not found", 404);
       if (data.previewRevision !== before.revision) throw new ApiError("Review the current document revision first.", 409);
-      if (action === "support.knowledge.publish" && data.reviewed !== true) throw new ApiError("Explicit reviewed confirmation is required.");
-      after = { ...before, status: action === "support.knowledge.publish" ? "published" : "draft", reviewed: action === "support.knowledge.publish", revision: before.revision + 1, updatedAt: now, updatedBy: u.id };
+      if (action2 === "support.knowledge.publish" && data.reviewed !== true) throw new ApiError("Explicit reviewed confirmation is required.");
+      after = { ...before, status: action2 === "support.knowledge.publish" ? "published" : "draft", reviewed: action2 === "support.knowledge.publish", revision: before.revision + 1, updatedAt: now, updatedBy: u.id };
     }
-    if (action === "support.ai.resume") tx.update(record, { handoffRequested: false, updatedAt: Timestamp.fromMillis(now) });
+    if (action2 === "support.ai.resume") tx.update(record, { handoffRequested: false, updatedAt: Timestamp.fromMillis(now) });
     else tx.set(record, after);
     output = { saved: true, target, revision: after.revision ?? 0 };
-    const auditBefore = action === "support.ai.configure" ? before ? configSummary(before) : null : action === "support.ai.resume" ? { handoffRequested: before?.handoffRequested } : summary(before), auditAfter = action === "support.ai.configure" ? configSummary(after) : action === "support.ai.resume" ? { handoffRequested: false } : summary(after);
-    controlAudit(tx, randomUUID2(), u, action, target, reason, auditBefore, auditAfter, requestId);
-    tx.create(command, { adminId: u.id, action, fingerprint, result: output, createdAt: now });
+    const auditBefore = action2 === "support.ai.configure" ? before ? configSummary(before) : null : action2 === "support.ai.resume" ? { handoffRequested: before?.handoffRequested } : summary(before), auditAfter = action2 === "support.ai.configure" ? configSummary(after) : action2 === "support.ai.resume" ? { handoffRequested: false } : summary(after);
+    controlAudit(tx, randomUUID2(), u, action2, target, reason, auditBefore, auditAfter, requestId);
+    tx.create(command, { adminId: u.id, action: action2, fingerprint, result: output, createdAt: now });
   });
   return output;
 }
 
 // src/control-contracts.ts
-async function applyContractAction(tx, u, action, target, payload, revision, now) {
+async function applyContractAction(tx, u, action2, target, payload, revision, now) {
   const r = ref("orinContracts", target), stateRef = ref("orinControlContractStates", target);
   const [existing, status] = await Promise.all([tx.get(r), tx.get(stateRef)]);
-  if (action === "contract.revoke") {
+  if (action2 === "contract.revoke") {
     if (!existing.exists) throw new ApiError("Contract not found", 404);
     const before = status.data() ?? { status: "active", revision: 0 };
     if (before.revision !== revision || before.status !== "active") throw new ApiError("Contract changed", 409);
@@ -845,6 +1205,7 @@ async function applyContractAction(tx, u, action, target, payload, revision, now
 
 // src/control-operations.ts
 import { FieldPath as FieldPath2 } from "firebase-admin/firestore";
+import { randomUUID as randomUUID3 } from "node:crypto";
 
 // ../lib/control-workflow.ts
 var TICKET_STATUSES = {
@@ -863,6 +1224,7 @@ var TICKET_TRANSITIONS = {
   resolved: ["open", "closed"],
   closed: ["open"]
 };
+var ACTIVE_TICKET_STATUSES = ["open", "in_progress", "waiting"];
 
 // src/control-operations.ts
 var identifier = (v) => {
@@ -886,12 +1248,117 @@ var only2 = (data, fields) => {
   if (Object.keys(data).some((k) => !fields.includes(k))) throw new ApiError("Unsupported ticket field");
 };
 var summary2 = (d) => d ? Object.fromEntries(["uid", "status", "priority", "category", "assigneeId", "dueAt", "revision", "noteCount"].map((k) => [k, d[k] ?? null])) : null;
-async function applyTicketAction(tx, u, action, target, payload, revision, now, requestId) {
+var ticketFields = ["uid", "title", "description", "status", "priority", "category", "assigneeId", "dueAt", "createdAt", "updatedAt", "createdBy", "updatedBy", "resolvedAt", "closedAt", "revision", "noteCount"];
+var project = (d, fields) => Object.fromEntries(fields.filter((k) => d[k] !== void 0).map((k) => [k, d[k]]));
+function applyCursor(query, raw, scope) {
+  if (!raw) return query;
+  try {
+    if (typeof raw !== "string" || raw.length > 1e3 || !/^[\w-]+$/.test(raw)) throw new Error();
+    const c = JSON.parse(Buffer.from(raw, "base64url").toString("utf8"));
+    if (c.scope !== scope || !Number.isSafeInteger(c.at) || c.at < 0) throw new Error();
+    return query.startAfter(c.at, identifier(c.id));
+  } catch {
+    throw new ApiError("Invalid or mismatched page cursor");
+  }
+}
+function pageResult(page, timeField, scope, fields) {
+  const docs = page.docs.slice(0, 50), last = docs.at(-1);
+  return {
+    rows: docs.map((d) => ({ id: d.id, ...project(d.data(), fields) })),
+    nextCursor: page.size > 50 && last ? Buffer.from(JSON.stringify({ scope, at: last.data()[timeField], id: last.id })).toString("base64url") : null,
+    asOf: Date.now()
+  };
+}
+async function recordExport(u, module, result, filters) {
+  await adminDb.runTransaction(async (tx) => {
+    await requirePermission(u, module === "tickets" ? "tickets.read" : "audit.read", tx);
+    await requirePermission(u, "reports.export", tx, true);
+    const requestId = randomUUID3();
+    controlAudit(tx, requestId, u, "report.export", module, "Filtered administrative page export", null, { rows: result.rows.length, filters }, requestId);
+  });
+}
+async function readTickets(u, q) {
+  await requirePermission(u, "tickets.read");
+  if (q.ticket) {
+    if (q.export === "true") throw new ApiError("Export the ticket list instead");
+    const id2 = identifier(q.ticket), ticket = await controlRef("Tickets", id2).get();
+    if (!ticket.exists) throw new ApiError("Ticket not found", 404);
+    const scope2 = hash("ticket-notes:" + id2);
+    const query2 = controlRef("Tickets", id2).collection("notes").orderBy("createdAt", "desc").orderBy(FieldPath2.documentId(), "desc");
+    const page = pageResult(await applyCursor(query2, q.notesCursor, scope2).limit(51).get(), "createdAt", scope2, ["body", "authorId", "createdAt"]);
+    return { ticket: { id: id2, ...project(ticket.data(), ticketFields) }, notes: page.rows, nextNotesCursor: page.nextCursor };
+  }
+  let query = adminDb.collection("orinControlTickets");
+  const filters = {};
+  if (q.status && q.status !== "all") filters.status = q.status === "active" ? "active" : enumValue(q.status, TICKET_STATUSES);
+  if (q.priority && q.priority !== "all") filters.priority = enumValue(q.priority, TICKET_PRIORITIES);
+  if (q.assignee && q.assignee !== "all") {
+    if (!["mine", "unassigned"].includes(q.assignee)) throw new ApiError("Invalid assignee filter");
+    filters.assigneeId = q.assignee === "mine" ? u.id : "";
+  }
+  for (const [k, v] of Object.entries(filters)) query = k === "status" && v === "active" ? query.where(k, "in", ACTIVE_TICKET_STATUSES) : query.where(k, "==", v);
+  const scope = hash(JSON.stringify(["tickets", filters]));
+  query = query.orderBy("updatedAt", "desc").orderBy(FieldPath2.documentId(), "desc");
+  const result = pageResult(await applyCursor(query, q.cursor, scope).limit(51).get(), "updatedAt", scope, ticketFields.filter((k) => k !== "description"));
+  if (q.export === "true") await recordExport(u, "tickets", result, filters);
+  return result;
+}
+async function readAudit(u, q) {
+  await requirePermission(u, "audit.read");
+  let query = adminDb.collection("orinControlAudit");
+  const filters = {};
+  for (const field of ["adminId", "action", "target"]) if (q[field]) {
+    const value = bounded2(q[field], field === "action" ? 100 : 128);
+    if (!/^[-A-Za-z0-9_.:]+$/.test(value)) throw new ApiError("Invalid audit filter");
+    filters[field] = value;
+    query = query.where(field, "==", value);
+  }
+  for (const [name, op] of [["from", ">="], ["to", "<="]]) if (q[name] !== void 0 && q[name] !== "") {
+    if (typeof q[name] !== "string" || !/^\d{1,16}$/.test(q[name])) throw new ApiError("Invalid date boundary");
+    const value = Number(q[name]);
+    if (!Number.isSafeInteger(value) || value > 864e13) throw new ApiError("Invalid date boundary");
+    filters[name] = value;
+    query = query.where("timestamp", op, value);
+  }
+  if (filters.from !== void 0 && filters.to !== void 0 && filters.from > filters.to) throw new ApiError("Start date must not follow end date");
+  const scope = hash(JSON.stringify(["audit", filters]));
+  query = query.orderBy("timestamp", "desc").orderBy(FieldPath2.documentId(), "desc");
+  const result = pageResult(await applyCursor(query, q.cursor, scope).limit(51).get(), "timestamp", scope, ["adminId", "action", "target", "timestamp", "reason", "previous", "next", "requestId", "referenceId"]);
+  if (q.export === "true") await recordExport(u, "audit", result, filters);
+  return result;
+}
+async function operationQueues(u, roles) {
+  const permissions = permissionsFor(roles), queues = [];
+  const definitions = [
+    ["kyc", "\u0637\u0644\u0628\u0627\u062A \u0647\u0648\u064A\u0629 \u062A\u0646\u062A\u0638\u0631 \u0627\u0644\u0645\u0631\u0627\u062C\u0639\u0629", "orinKycRequests", "kyc.read", ["pending", "review", "more_information"]],
+    ["approvals", "\u0645\u0648\u0627\u0641\u0642\u0627\u062A \u0645\u0627\u0644\u064A\u0629 \u0645\u0639\u0644\u0651\u0642\u0629", "orinControlApprovals", "finance.read", ["pending"]],
+    ["withdrawals", "\u0633\u062D\u0648\u0628\u0627\u062A \u062A\u0646\u062A\u0638\u0631 \u0627\u0644\u0645\u0631\u0627\u062C\u0639\u0629", "orinControlWithdrawals", "finance.read", ["pending"]],
+    ["tickets", "\u062A\u0630\u0627\u0643\u0631 \u062F\u0639\u0645 \u0645\u0641\u062A\u0648\u062D\u0629", "orinControlTickets", "tickets.read", ACTIVE_TICKET_STATUSES]
+  ];
+  for (const [module, label, collection, permission, states2] of definitions) {
+    if (!permissions.includes(permission)) continue;
+    const count = async (query2) => {
+      try {
+        return (await query2.count().get()).data().count;
+      } catch {
+        return null;
+      }
+    };
+    const query = adminDb.collection(collection).where("status", "in", [...states2]);
+    queues.push({ id: module, module, label, count: await count(query) });
+    if (module === "tickets") {
+      queues.push({ id: "tickets_mine", module, label: "\u062A\u0630\u0627\u0643\u0631\u064A \u0627\u0644\u0645\u0641\u062A\u0648\u062D\u0629", assignee: "mine", count: await count(query.where("assigneeId", "==", u.id)) });
+      queues.push({ id: "tickets_overdue", module, label: "\u062A\u0630\u0627\u0643\u0631 \u0645\u062A\u0623\u062E\u0631\u0629 \u0639\u0646 \u0627\u0644\u0645\u0648\u0639\u062F", count: await count(query.where("dueAt", ">", 0).where("dueAt", "<", Date.now())) });
+    }
+  }
+  return queues;
+}
+async function applyTicketAction(tx, u, action2, target, payload, revision, now, requestId) {
   const staff = await requirePermission(u, "tickets.manage", tx), canAssign = permissionsFor(staff.roles).includes("tickets.assign");
   const ticketRef = controlRef("Tickets", target), snapshot = await tx.get(ticketRef), before = snapshot.data();
   if (!Number.isSafeInteger(revision) || revision !== (before?.revision ?? 0)) throw new ApiError("Ticket changed; reload before saving", 409);
   let after;
-  if (action === "ticket.create") {
+  if (action2 === "ticket.create") {
     only2(payload, ["uid", "title", "description", "category", "priority", "dueAt"]);
     if (before) throw new ApiError("Ticket already exists", 409);
     const uid = identifier(payload.uid);
@@ -900,12 +1367,12 @@ async function applyTicketAction(tx, u, action, target, payload, revision, now, 
     tx.create(ticketRef, after);
   } else {
     if (!before) throw new ApiError("Ticket not found", 404);
-    if (action === "ticket.note") {
+    if (action2 === "ticket.note") {
       only2(payload, ["body"]);
       const body = bounded2(payload.body, 4e3);
       after = { ...before, revision: before.revision + 1, noteCount: before.noteCount + 1, updatedAt: now, updatedBy: u.id };
       tx.create(ticketRef.collection("notes").doc(requestId), { body, authorId: u.id, createdAt: now });
-    } else if (action === "ticket.update") {
+    } else if (action2 === "ticket.update") {
       only2(payload, ["status", "priority", "assigneeId", "dueAt"]);
       if (!canAssign && before.assigneeId && before.assigneeId !== u.id) throw new ApiError("Only the assigned agent or a supervisor may update this ticket", 403);
       const status = enumValue(payload.status, TICKET_STATUSES), priority = enumValue(payload.priority, TICKET_PRIORITIES);
@@ -922,7 +1389,7 @@ async function applyTicketAction(tx, u, action, target, payload, revision, now, 
     } else throw new ApiError("Unsupported ticket action");
     tx.set(ticketRef, after);
   }
-  return { before: summary2(before), after: { ...summary2(after), ...action === "ticket.note" ? { noteId: requestId } : {} }, output: { saved: true, ticketId: target, revision: after.revision } };
+  return { before: summary2(before), after: { ...summary2(after), ...action2 === "ticket.note" ? { noteId: requestId } : {} }, output: { saved: true, ticketId: target, revision: after.revision } };
 }
 
 // src/control-rewards.ts
@@ -991,7 +1458,7 @@ async function settleReward(tx, before, approvalId, approver, now) {
 }
 
 // src/control-center.ts
-import { randomBytes, randomUUID as randomUUID3 } from "node:crypto";
+import { createHmac as createHmac2, randomBytes, randomUUID as randomUUID4 } from "node:crypto";
 import { FieldPath as FieldPath3, FieldValue as FieldValue2 } from "firebase-admin/firestore";
 
 // ../lib/programs.ts
@@ -1017,6 +1484,23 @@ var BADGES = [
 var DEFAULT_PROGRAM_CONFIG = { bonusAmountCents: 1e4, referralAmountCents: 8e3, firstDepositCents: 1e5, requireKyc: true, levels: TEAM_LEVELS.map((l) => ({ ...l })), enabled: false, termsVersion: null, referralCriteria: null, activeTeamCriteria: null, activityPeriod: null, bonusDurationDays: null, eligibleAssets: null, bonusProfitLimitCents: null, bonusTradingTerms: null, agencyCriteria: null, badgeCriteria: {}, revision: 0 };
 
 // src/control-center.ts
+function computeCustomerKey(country, documentType, idNumber) {
+  const normCountry = String(country ?? "").trim().toUpperCase();
+  const normType = String(documentType ?? "").trim().toLowerCase();
+  const normIdNumber = String(idNumber ?? "").replace(/[\s\-\.]+/g, "").toUpperCase();
+  if (!normCountry || !normType || !normIdNumber) {
+    throw new ApiError("Missing or incomplete KYC fields (country, documentType, idNumber) for customerKey generation", 400);
+  }
+  const secret2 = process.env.KYC_HMAC_SECRET;
+  if (!secret2) {
+    throw new ApiError("KYC_HMAC_SECRET configuration required", 500);
+  }
+  return createHmac2("sha256", secret2).update(`${normCountry}:${normType}:${normIdNumber}`).digest("hex");
+}
+function idLast4(idNumber) {
+  const normIdNumber = String(idNumber ?? "").replace(/[\s\-\.]+/g, "").toUpperCase();
+  return normIdNumber.slice(-4);
+}
 var key4 = (v) => {
   if (typeof v !== "string" || !/^[-A-Za-z0-9_]{1,128}$/.test(v))
     throw new ApiError("Invalid identifier");
@@ -1034,6 +1518,167 @@ var integer = (v, min = 0) => {
 };
 var safe2 = (v) => v?.toMillis ? v.toMillis() : Array.isArray(v) ? v.map(safe2) : v && typeof v === "object" ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, safe2(x)])) : v;
 var pick2 = (data, fields) => Object.fromEntries(fields.filter((k) => data[k] !== void 0).map((k) => [k, safe2(data[k])]));
+var sources = {
+  codes: ["orinContracts", ["code", "title", "asset", "direction", "duration_sec", "settlement_bps", "eligibility", "opens_at", "closes_at", "published_at", "hash", "admin_id"]],
+  users: ["users", ["uid", "displayName", "email", "disabled", "createdAt"]],
+  kyc: ["orinKycRequests", ["uid", "status", "createdAt", "updatedAt", "reviewedBy", "reason", "revision", "documentIds"]],
+  wallets: ["orinBonusWallets", ["uid", "accountId", "bonusCents", "profitCents", "withdrawableProfitCents", "claimed", "expiresAt"]],
+  deposits: ["orinDeposits", ["uid", "accountId", "amountCents", "coin", "status", "paymentId", "credited", "createdAt", "updatedAt", "reviewReason"]],
+  withdrawals: ["orinControlWithdrawals", ["uid", "accountId", "currency", "cents", "status", "providerReference", "createdAt", "revision"]],
+  approvals: ["orinControlApprovals", ["kind", "uid", "accountId", "deltaCents", "status", "reason", "reference", "requestedBy", "approvedBy", "beforeCents", "afterCents", "createdAt", "revision"]],
+  trading: ["orinExecutedTrades", ["user_id", "accountId", "contract_id", "status", "amount_cents", "result_cents", "started_at", "settled_at"]],
+  markets: ["orinControlMarkets", ["pair", "name", "category", "enabled", "order", "source", "revision"]],
+  bonus: ["orinBonusWallets", ["uid", "accountId", "bonusCents", "profitCents", "withdrawableProfitCents", "claimed", "expiresAt", "termsVersion"]],
+  referrals: ["orinReferralRewards", ["referrerId", "referredId", "status", "amountCents", "createdAt", "termsVersion", "revision"]],
+  agencies: ["orinProgramMembers", ["uid", "referralId", "agencyId", "agencyGranted", "directCount", "activeTeamCount", "teamCount", "activityRewardCents", "revision"]],
+  badges: ["orinProgramMembers", ["uid", "badges", "referralId", "revision"]],
+  notifications: ["orinControlNotifications", ["title", "message", "audience", "targetUid", "segment", "status", "startsAt", "expiresAt", "revision", "delivered", "createdAt"]],
+  content: ["orinControlContent", ["slug", "titleAr", "titleEn", "bodyAr", "bodyEn", "status", "revision", "updatedAt"]],
+  security: ["orinControlSecurity", ["uid", "event", "status", "createdAt", "adminId"]],
+  staff: ["orinStaff", ["email", "roles", "status", "validAfter", "revision", "createdAt"]],
+  audit: ["orinControlAudit", ["adminId", "action", "target", "timestamp", "reason", "previous", "next", "requestId", "referenceId"]]
+};
+async function controlSession(u) {
+  const staff = await requirePermission(u, "dashboard.read"), integration = (await controlRef("Integrations", "current").get()).data() ?? {};
+  return { available: true, uid: u.id, roles: staff.roles, permissions: permissionsFor(staff.roles), reauthSeconds: 300, capabilities: { payments: integration.payments === true, execution: integration.execution === true, kycDocuments: !!process.env.ORIN_KYC_BUCKET, push: false, scheduler: integration.scheduler === true } };
+}
+async function requireModule(u, module, exporting = false) {
+  const m = CONTROL_MODULES.find((x) => x[0] === module);
+  if (!m)
+    throw new ApiError("Unknown module", 404);
+  const staff = await requirePermission(u, m[3]);
+  if (exporting)
+    await requirePermission(u, "reports.export");
+  return staff;
+}
+async function controlRead(u, module, q = {}) {
+  if (module === "session")
+    return controlSession(u);
+  const staff = await requireModule(u, module, q.export === "true");
+  if (module === "support-ai") return readSupportAdmin(u, q);
+  if (module === "tickets") return readTickets(u, q);
+  if (module === "audit") return readAudit(u, q);
+  if (module === "dashboard") {
+    const stats = [];
+    for (const [id2, collection, permission] of [["users", "users", "users.read"], ["kyc", "orinKycRequests", "kyc.read"], ["deposits", "orinDeposits", "finance.read"], ["withdrawals", "orinControlWithdrawals", "finance.read"], ["referrals", "orinReferralRewards", "programs.read"], ["bonus", "orinBonusWallets", "programs.read"]]) {
+      if (!permissionsFor(staff.roles).includes(permission))
+        continue;
+      try {
+        stats.push({ id: id2, count: (await adminDb.collection(collection).count().get()).data().count });
+      } catch {
+        stats.push({ id: id2, count: null });
+      }
+    }
+    if (permissionsFor(staff.roles).includes("accounts.read"))
+      for (const type of ["real", "demo"]) {
+        try {
+          stats.push({ id: "accounts_" + type, count: (await adminDb.collectionGroup("accounts").where("type", "==", type).count().get()).data().count });
+        } catch {
+          stats.push({ id: "accounts_" + type, count: null });
+        }
+      }
+    const activity = permissionsFor(staff.roles).includes("audit.read") ? (await controlRef("Audit", "_").parent.orderBy("timestamp", "desc").limit(12).get()).docs.map((d) => ({ id: d.id, ...d.data() })) : [];
+    return { stats, activity, queues: await operationQueues(u, staff.roles), asOf: Date.now(), capabilities: (await controlSession(u)).capabilities };
+  }
+  if (module === "configuration")
+    return { rows: [{ id: "current", ...CONTROL_DEFAULTS, ...(await controlRef("Configuration", "current").get()).data() }], nextCursor: null };
+  if (module === "markets") {
+    const [stored, current] = await Promise.all([adminDb.collection("orinControlMarkets").get(), ref("sparkConfiguration", "markets").get()]);
+    const config = { ...DEFAULT_CONFIGURATION, ...current.data()?.configuration };
+    const byPair = new Map(stored.docs.map((d) => [d.id, d.data()]));
+    const rows2 = MARKET_SYMBOLS.map((s, i) => ({ id: s.pair, pair: s.pair, name: s.name, category: s.category, source: s.tv, revision: 0, ...byPair.get(s.pair), enabled: config.enabledSymbols.includes(s.pair), order: config.enabledSymbols.indexOf(s.pair) >= 0 ? config.enabledSymbols.indexOf(s.pair) : i }));
+    if (q.export === "true")
+      await adminDb.runTransaction(async (tx) => {
+        await requirePermission(u, "reports.export", tx, true);
+        controlAudit(tx, randomUUID4(), u, "report.export", "markets", "Administrative market export", null, { rows: rows2.length }, randomUUID4());
+      });
+    return { rows: rows2, nextCursor: null };
+  }
+  if (module === "team")
+    return { rows: ((await ref("orinProgramConfiguration", "current").get()).data()?.levels ?? TEAM_LEVELS).map((v) => ({ id: "L" + v.level, ...v })), configuration: { ...DEFAULT_PROGRAM_CONFIG, ...(await ref("orinProgramConfiguration", "current").get()).data() }, nextCursor: null };
+  if (module === "users" && q.search) {
+    const term = text(q.search, 320), found = /* @__PURE__ */ new Map();
+    const exact = await ref("users", /^[A-Za-z0-9_-]{1,128}$/.test(term) ? term : "__no_match__").get();
+    if (exact.exists)
+      found.set(exact.id, pick2(exact.data(), sources.users[1]));
+    if (/^\d{12}$/.test(term)) {
+      const n = (await ref("sparkAccountNumbers", term).get()).data();
+      if (n) {
+        const s = await ref("users", n.ownerId).get();
+        if (s.exists)
+          found.set(s.id, pick2(s.data(), sources.users[1]));
+      }
+    }
+    for (const field of ["email", "displayName"]) {
+      const rows2 = await adminDb.collection("users").where(field, "==", term).limit(30).get();
+      rows2.forEach((d) => found.set(d.id, pick2(d.data(), sources.users[1])));
+    }
+    const results = [];
+    for (const [id2, d] of found) {
+      const access = (await controlRef("Access", id2).get()).data();
+      results.push({ id: id2, ...d, status: access?.status ?? (d.disabled ? "suspended" : "active"), revision: access?.revision ?? 0 });
+    }
+    if (q.export === "true")
+      await adminDb.runTransaction(async (tx) => {
+        await requirePermission(u, "reports.export", tx, true);
+        controlAudit(tx, randomUUID4(), u, "report.export", "users", "Administrative search export", null, { rows: results.length }, randomUUID4());
+      });
+    return { rows: results, nextCursor: null, searchMode: "exact" };
+  }
+  let query = ["accounts", "wallets"].includes(module) ? adminDb.collectionGroup("accounts") : adminDb.collection(sources[module][0]);
+  if (q.status && q.status !== "all" && !["users", "accounts", "codes"].includes(module))
+    query = query.where("status", "==", text(q.status, 30));
+  query = query.orderBy(FieldPath3.documentId());
+  if (q.cursor) {
+    if (["accounts", "wallets"].includes(module)) {
+      if (typeof q.cursor !== "string" || !/^sparkTradingAccounts\/[-A-Za-z0-9_]+\/accounts\/[-A-Za-z0-9_]+$/.test(q.cursor))
+        throw new ApiError("Invalid cursor");
+      query = query.startAfter(adminDb.doc(q.cursor));
+    } else
+      query = query.startAfter(key4(q.cursor));
+  }
+  const page = await query.limit(51).get(), rows = page.docs.slice(0, 50).filter((d) => !["accounts", "wallets"].includes(module) || d.ref.path.startsWith("sparkTradingAccounts/")).map((d) => ({ id: d.id, ...["accounts", "wallets"].includes(module) ? pick2(d.data(), ["ownerId", "accountNumber", "type", "currency", "balanceCents", "reservedCents", "realizedCents", "createdAt"]) : pick2(d.data(), sources[module][1]) }));
+  if (module === "deposits") for (const row of rows) Object.assign(row, { cents: row.amountCents, currency: "USD", providerReference: row.paymentId ?? null, provider: "nowpayments" });
+  if (module === "codes") for (const row of rows) {
+    const state2 = (await ref("orinControlContractStates", row.id).get()).data();
+    Object.assign(row, { mode: row.mode ?? "production", status: state2?.status ?? "active", revision: state2?.revision ?? 0 });
+  }
+  if (module === "users")
+    for (const row of rows) {
+      const access = (await controlRef("Access", row.id).get()).data();
+      Object.assign(row, { status: access?.status ?? (row.disabled ? "suspended" : "active"), revision: access?.revision ?? 0 });
+    }
+  if (module === "accounts" && !permissionsFor(staff.roles).includes("wallet.read"))
+    for (const row of rows) {
+      delete row.balanceCents;
+      delete row.reservedCents;
+      delete row.realizedCents;
+    }
+  if (module === "accounts")
+    for (const row of rows) {
+      const access = (await controlRef("AccountStates", hash(row.ownerId + ":" + row.id)).get()).data();
+      Object.assign(row, { status: access?.status ?? "active", revision: access?.revision ?? 0 });
+    }
+  if (module === "wallets")
+    for (const row of rows) {
+      const bonus = (await ref("orinBonusWallets", row.ownerId).get()).data(), b = bonus?.accountId === row.id ? bonus : null;
+      row.uid = row.ownerId;
+      row.accountId = row.id;
+      row.cashCents = row.balanceCents;
+      row.bonusCents = b?.bonusCents ?? 0;
+      row.profitCents = b?.profitCents ?? 0;
+      row.withdrawableProfitCents = b?.withdrawableProfitCents ?? 0;
+      row.lockedProfitCents = row.profitCents - row.withdrawableProfitCents;
+      row.withdrawableCashCents = null;
+      row.withdrawalEligibility = "provider_required";
+    }
+  if (q.export === "true")
+    await adminDb.runTransaction(async (tx) => {
+      await requirePermission(u, "reports.export", tx, true);
+      controlAudit(tx, randomUUID4(), u, "report.export", module, "Administrative report export", null, { rows: rows.length, cursor: q.cursor ?? null }, randomUUID4());
+    });
+  return { rows, nextCursor: page.size > 50 ? ["accounts", "wallets"].includes(module) ? page.docs[49].ref.path : page.docs[49].id : null, asOf: Date.now() };
+}
 function validateConfig(raw) {
   if (Object.keys(raw).some((k) => !Object.hasOwn(CONTROL_DEFAULTS, k)))
     throw new ApiError("Only public operational settings are allowed");
@@ -1054,12 +1699,105 @@ function validateConfig(raw) {
 }
 async function controlAction(u, input) {
   if (typeof input?.action === "string" && (input.action.startsWith("support.ai.") || input.action.startsWith("support.knowledge."))) return supportAdminAction(u, input);
-  const action = String(input.action), permission = ACTION_PERMISSIONS[action];
+  const action2 = String(input.action), permission = ACTION_PERMISSIONS[action2];
   if (!permission)
     throw new ApiError("Unsupported control action");
   const requestId = key4(input.requestId), reason = text(input.reason, 1e3), target = key4(input.target ?? u.id), fingerprint = hash(JSON.stringify(input)), command = controlRef("Commands", hash(u.id + ":" + requestId)), now = Date.now();
   let output = { saved: true };
-  const recent = ["user.", "account.", "contract.", "reward.", "finance.", "payment.", "staff.", "security.", "configuration.", "program.", "kyc."].some((p) => action.startsWith(p));
+  const recent = ["user.", "account.", "contract.", "reward.", "finance.", "payment.", "staff.", "security.", "configuration.", "program.", "kyc.", "customer.", "period.", "bonus."].some((p) => action2.startsWith(p));
+  if (action2 === "customer.verify") {
+    const staff = await requirePermission(u, permission, void 0, recent);
+    if (!staff.roles.some((r) => ["finance", "super_admin"].includes(r)))
+      throw new ApiError("finance or super_admin role required", 403);
+    const used = await command.get();
+    if (used.exists) {
+      if (used.data().fingerprint !== fingerprint) throw new ApiError("Request ID conflict", 409);
+      return used.data().result;
+    }
+    const payload = input.data ?? {};
+    let country = payload.country;
+    let documentType = payload.documentType;
+    let idNumber = payload.idNumber;
+    if (!country || !documentType || !idNumber) {
+      const kycDoc = (await ref("orinKycRequests", "kyc-" + target).get()).data() || (await ref("orinKycRequests", target).get()).data();
+      if (kycDoc) {
+        country = country || kycDoc.country;
+        documentType = documentType || kycDoc.documentType;
+        idNumber = idNumber || kycDoc.idNumber;
+      }
+    }
+    const customerKey = computeCustomerKey(country, documentType, idNumber);
+    const last4 = idLast4(idNumber);
+    await recordVerifiedCustomer(target, customerKey, "kyc-" + requestId, last4);
+    await adminDb.runTransaction(async (tx) => {
+      tx.create(command, { fingerprint, action: action2, target, result: { saved: true, customerKey, idNumberLast4: last4 }, createdAt: now });
+      controlAudit(tx, "customer-verify-" + requestId, u, action2, target, reason, null, { verified: true, customerKey, idNumberLast4: last4 }, requestId);
+    });
+    return { saved: true, customerKey, idNumberLast4: last4 };
+  }
+  if (action2 === "period.close") {
+    const staff = await requirePermission(u, permission, void 0, recent);
+    if (!staff.roles.some((r) => ["finance", "super_admin"].includes(r)))
+      throw new ApiError("finance or super_admin role required", 403);
+    const used = await command.get();
+    if (used.exists) {
+      if (used.data().fingerprint !== fingerprint) throw new ApiError("Request ID conflict", 409);
+      return used.data().result;
+    }
+    const payload = input.data ?? {};
+    const periodId = key4(payload.periodId ?? target);
+    const cfgDoc = await ref("orinProgramConfiguration", "current").get();
+    const cfg = cfgDoc.data() ?? DEFAULT_PROGRAM_CONFIG;
+    const firstDepositCents = cfg.firstDepositCents ?? 1e5;
+    const membersSnap = await adminDb.collection("orinProgramMembers").get();
+    const qualSnap = await adminDb.collection("orinQualifiedDeposits").get();
+    const activeUsers = /* @__PURE__ */ new Set();
+    const userDepositMap = /* @__PURE__ */ new Map();
+    qualSnap.docs.forEach((d) => {
+      const data = d.data();
+      if ((data.cents ?? 0) >= firstDepositCents) {
+        activeUsers.add(d.id);
+        userDepositMap.set(d.id, data.cents);
+      }
+    });
+    const writes = [];
+    for (const mDoc of membersSnap.docs) {
+      const uid = mDoc.id;
+      let direct = 0;
+      let activeTeam = 0;
+      let netRevenueCents = 0;
+      for (const otherDoc of membersSnap.docs) {
+        const oData = otherDoc.data();
+        if (oData.parentUid === uid && activeUsers.has(otherDoc.id)) {
+          direct++;
+        }
+        if (Array.isArray(oData.ancestors) && oData.ancestors.includes(uid) && activeUsers.has(otherDoc.id)) {
+          activeTeam++;
+          netRevenueCents += userDepositMap.get(otherDoc.id) ?? 0;
+        }
+      }
+      const revRef = ref("orinEligibleRevenue", `${uid}_${periodId}`);
+      writes.push(revRef.set({
+        uid,
+        periodId,
+        finalized: true,
+        netRevenueCents,
+        direct,
+        activeTeam,
+        configurationRevision: cfg.revision ?? 1,
+        termsVersion: cfg.termsVersion ?? "v1.0",
+        createdAt: now,
+        closedAt: now,
+        closedBy: u.id
+      }, { merge: true }));
+    }
+    await Promise.all(writes);
+    await adminDb.runTransaction(async (tx) => {
+      tx.create(command, { fingerprint, action: action2, target, result: { saved: true, periodId }, createdAt: now });
+      controlAudit(tx, "period-close-" + requestId, u, action2, periodId, reason, null, { periodId, closed: true }, requestId);
+    });
+    return { saved: true, periodId };
+  }
   await adminDb.runTransaction(async (tx) => {
     const staff = await requirePermission(u, permission, tx, recent), used = await tx.get(command);
     if (used.exists) {
@@ -1072,17 +1810,17 @@ async function controlAction(u, input) {
     const payload = input.data ?? {};
     if (!payload || typeof payload !== "object" || Array.isArray(payload))
       throw new ApiError("Invalid payload");
-    if (action.startsWith("contract.")) {
-      const result = await applyContractAction(tx, u, action, target, payload, input.revision, now);
+    if (action2.startsWith("contract.")) {
+      const result = await applyContractAction(tx, u, action2, target, payload, input.revision, now);
       before = result.before;
       after = result.after;
       output = result.output;
-    } else if (action.startsWith("ticket.")) {
-      const result = await applyTicketAction(tx, u, action, target, payload, input.revision, now, requestId);
+    } else if (action2.startsWith("ticket.")) {
+      const result = await applyTicketAction(tx, u, action2, target, payload, input.revision, now, requestId);
       before = result.before;
       after = result.after;
       output = result.output;
-    } else if (action === "user.status") {
+    } else if (action2 === "user.status") {
       if (target === u.id || !["active", "restricted", "suspended"].includes(payload.status))
         throw new ApiError("Invalid status change");
       const [p, s, a] = await Promise.all([tx.get(ref("users", target)), tx.get(ref("orinStaff", target)), tx.get(controlRef("Access", target))]);
@@ -1094,7 +1832,7 @@ async function controlAction(u, input) {
       after = { status: payload.status, reason, revision: before.revision + 1, updatedAt: now };
       tx.set(controlRef("Access", target), after);
       tx.update(ref("users", target), { disabled: payload.status === "suspended", updatedAt: FieldValue2.serverTimestamp() });
-    } else if (action === "account.create") {
+    } else if (action2 === "account.create") {
       const user = await tx.get(ref("users", target));
       if (!user.exists || user.data().disabled || !["real", "demo"].includes(payload.type))
         throw new ApiError("Invalid owner/account type");
@@ -1115,7 +1853,7 @@ async function controlAction(u, input) {
       tx.create(ref("sparkAccountNumbers", number), { ownerId: target, accountId, createdAt: FieldValue2.serverTimestamp() });
       output = { saved: true, accountId, accountNumber: number };
       after = { ...after, createdAt: now };
-    } else if (action === "account.status") {
+    } else if (action2 === "account.status") {
       const uid = key4(payload.uid), a = await tx.get(adminDb.doc(`sparkTradingAccounts/${uid}/accounts/${target}`));
       if (!a.exists || !["active", "restricted"].includes(payload.status))
         throw new ApiError("Invalid account");
@@ -1125,7 +1863,7 @@ async function controlAction(u, input) {
         throw new ApiError("Record changed", 409);
       after = { uid, accountId: target, status: payload.status, reason, revision: before.revision + 1 };
       tx.set(r, after);
-    } else if (action === "kyc.review") {
+    } else if (action2 === "kyc.review") {
       const r = ref("orinKycRequests", target);
       before = (await tx.get(r)).data();
       if (!before || before.revision !== input.revision)
@@ -1139,7 +1877,7 @@ async function controlAction(u, input) {
       tx.update(r, { status: after.status, reason, reviewedBy: u.id, reviewedAt: now, revision: after.revision });
       before = pick2(before, ["uid", "status", "revision"]);
       after = pick2(after, ["uid", "status", "revision", "reason", "reviewedBy"]);
-    } else if (action === "reward.propose") {
+    } else if (action2 === "reward.propose") {
       const s = await rewardSnapshot(tx, payload), reference = text(payload.reference, 128), unique = controlRef("FinancialReferences", hash(reference));
       if ((await tx.get(unique)).exists)
         throw new ApiError("Financial reference already used", 409);
@@ -1147,7 +1885,7 @@ async function controlAction(u, input) {
       tx.create(controlRef("Approvals", requestId), after);
       tx.create(unique, { approvalId: requestId });
       output = { saved: true, approvalId: requestId };
-    } else if (action === "finance.propose") {
+    } else if (action2 === "finance.propose") {
       const cfg = (await tx.get(controlRef("Configuration", "current"))).data();
       if (!cfg?.maxAdjustmentCents || cfg.maintenance)
         throw new ApiError("Approve a finance limit before adjustments", 409);
@@ -1159,6 +1897,13 @@ async function controlAction(u, input) {
       const a = (await tx.get(adminDb.doc(`sparkTradingAccounts/${uid}/accounts/${accountId}`))).data();
       if (!a || a.ownerId !== uid || a.type !== "real" || a.currency !== "USD")
         throw new ApiError("Real USD account required");
+      if (delta < 0) {
+        const bWallet = (await tx.get(ref("orinBonusWallets", uid))).data();
+        const lockedProfit = bWallet ? Math.max(0, (bWallet.profitCents ?? 0) - (bWallet.withdrawableProfitCents ?? 0)) : 0;
+        const withdrawableCash = Math.max(0, (a.balanceCents ?? 0) - (a.reservedCents ?? 0) - lockedProfit);
+        if (Math.abs(delta) > withdrawableCash)
+          throw new ApiError("Requested debit exceeds withdrawable cash", 409);
+      }
       integer(a.balanceCents + delta, Math.max(0, a.reservedCents ?? 0));
       const reference = text(payload.reference, 128), unique = controlRef("FinancialReferences", hash(reference));
       if ((await tx.get(unique)).exists)
@@ -1167,17 +1912,55 @@ async function controlAction(u, input) {
       tx.create(controlRef("Approvals", requestId), after);
       tx.create(unique, { approvalId: requestId });
       output = { saved: true, approvalId: requestId };
-    } else if (action === "finance.approve" || action === "finance.reject") {
+    } else if (action2 === "customer.revoke") {
+      if (!staff.roles.some((r) => ["finance", "super_admin"].includes(r)))
+        throw new ApiError("finance or super_admin role required", 403);
+      const vRef = ref("orinVerifiedCustomers", target);
+      const mRef = ref("orinProgramMembers", target);
+      const [vSnap, mSnap] = await Promise.all([tx.get(vRef), tx.get(mRef)]);
+      if (!vSnap.exists) throw new ApiError("Customer not verified", 404);
+      const beforeData = vSnap.data();
+      if (beforeData.revoked) throw new ApiError("Customer already revoked", 409);
+      after = { ...beforeData, verified: false, revoked: true, revokeReason: reason, revokedAt: now, revokedBy: u.id };
+      tx.update(vRef, { verified: false, revoked: true, revokeReason: reason, revokedAt: now, revokedBy: u.id });
+      if (mSnap.exists) {
+        const badges = (mSnap.data().badges ?? []).filter((b) => b !== "verified");
+        tx.update(mRef, { badges });
+      }
+      output = { saved: true, revoked: true };
+    } else if (action2 === "bonus.expire") {
+      if (!staff.roles.some((r) => ["finance", "super_admin"].includes(r)))
+        throw new ApiError("finance or super_admin role required", 403);
+      const bRef = ref("orinBonusWallets", target);
+      const bSnap = await tx.get(bRef);
+      if (!bSnap.exists) throw new ApiError("Bonus wallet not found", 404);
+      const bData = bSnap.data();
+      const unused = bData.bonusCents ?? 0;
+      if (unused > 0) {
+        tx.update(bRef, { bonusCents: 0, expired: true, expiredAt: now });
+        tx.create(ref("orinProgramLedger", "bonus-expired-" + hash(target + ":" + requestId)), {
+          uid: target,
+          accountId: bData.accountId,
+          kind: "bonus_expired",
+          entries: [
+            { account: `customer:${target}:${bData.accountId}`, cents: -unused },
+            { account: "program:bonus_expired", cents: unused }
+          ],
+          createdAt: now
+        });
+      }
+      output = { saved: true, expired: true, unusedCents: unused };
+    } else if (action2 === "finance.approve" || action2 === "finance.reject") {
       const r = controlRef("Approvals", target);
       before = (await tx.get(r)).data();
-      if (!before || before.status !== "pending" || before.requestedBy === u.id || before.revision !== input.revision)
+      if (!before || before.status !== "pending" || before.requestedBy === u.id || input.revision !== void 0 && before.revision !== input.revision)
         throw new ApiError("Requires a different reviewer and a pending unchanged request", 409);
       const maker = (await tx.get(ref("orinStaff", before.requestedBy))).data();
       const makerProfile = (await tx.get(ref("users", before.requestedBy))).data();
       if (makerProfile?.disabled || maker?.validAfter > before.createdAt || maker?.status !== "active" || !permissionsFor(maker.roles).includes("finance.propose"))
         throw new ApiError("Requester no longer authorized", 403);
-      after = { ...before, status: action === "finance.reject" ? "rejected" : "approved", approvedBy: u.id, reviewReason: reason, reviewedAt: now, revision: before.revision + 1 };
-      if (action === "finance.approve") {
+      after = { ...before, status: action2 === "finance.reject" ? "rejected" : "approved", approvedBy: u.id, reviewReason: reason, reviewedAt: now, revision: before.revision + 1 };
+      if (action2 === "finance.approve") {
         const cfg = (await tx.get(controlRef("Configuration", "current"))).data();
         if (cfg?.maintenance)
           throw new ApiError("Maintenance", 503);
@@ -1193,6 +1976,21 @@ async function controlAction(u, input) {
             throw new ApiError("Insufficient balance for adjustment", 409);
           if (data.balanceCents !== before.beforeCents)
             throw new ApiError("Balance changed; submit a new request", 409);
+          if (before.deltaCents < 0) {
+            const bWallet = (await tx.get(ref("orinBonusWallets", before.uid))).data();
+            const lockedProfit = bWallet ? Math.max(0, (bWallet.profitCents ?? 0) - (bWallet.withdrawableProfitCents ?? 0)) : 0;
+            const withdrawableCash = Math.max(0, (data.balanceCents ?? 0) - (data.reservedCents ?? 0) - lockedProfit);
+            if (Math.abs(before.deltaCents) > withdrawableCash)
+              throw new ApiError("Requested debit exceeds withdrawable cash", 409);
+            const isBonusProfitWithdrawal = before.reference && /profit/i.test(before.reference) || bWallet && bWallet.withdrawableProfitCents >= Math.abs(before.deltaCents);
+            if (!isBonusProfitWithdrawal) {
+              const depositSnap = await tx.get(adminDb.collection("orinProgramLedger").where("uid", "==", before.uid));
+              const deposits = depositSnap.docs.map((d) => d.data()).filter((d) => d.kind === "deposit" && typeof d.createdAt === "number");
+              const earliestCreatedAt = deposits.length > 0 ? Math.min(...deposits.map((d) => d.createdAt)) : null;
+              if (earliestCreatedAt === null || now - earliestCreatedAt < 20 * 864e5)
+                throw new ApiError("Debit adjustment requires earliest deposit to be at least 20 days old", 409);
+            }
+          }
           integer(data.balanceCents + before.deltaCents, Math.max(0, data.reservedCents ?? 0));
           tx.update(a, { balanceCents: data.balanceCents + before.deltaCents });
           tx.create(ref("orinProgramLedger", "control-" + target), { uid: before.uid, accountId: before.accountId, kind: "adjustment", entries: [{ account: "cash", cents: before.deltaCents }, { account: "adjustment-clearing", cents: -before.deltaCents }], createdAt: now, reference: before.reference, requestedBy: before.requestedBy, approvedBy: u.id });
@@ -1212,7 +2010,7 @@ async function controlAction(u, input) {
           throw new ApiError("Unknown financial operation");
       }
       tx.update(r, after);
-    } else if (action === "payment.review") {
+    } else if (action2 === "payment.review") {
       if (!["deposits", "withdrawals"].includes(payload.module) || !["approve", "reject", "cancel"].includes(payload.decision))
         throw new ApiError("Invalid payment decision");
       const r = controlRef(payload.module === "deposits" ? "Deposits" : "Withdrawals", target);
@@ -1222,7 +2020,7 @@ async function controlAction(u, input) {
       after = { kind: "payment", paymentId: target, module: payload.module, decision: payload.decision, uid: p.uid, accountId: p.accountId, paymentRevision: p.revision, status: "pending", requestedBy: u.id, reason, revision: 0, createdAt: now };
       tx.create(controlRef("Approvals", requestId), after);
       output = { saved: true, approvalId: requestId };
-    } else if (action === "staff.set" || action === "staff.invite") {
+    } else if (action2 === "staff.set" || action2 === "staff.invite") {
       if (!Array.isArray(payload.roles) || !payload.roles.length || !permissionsFor(payload.roles).length || payload.roles.some((x) => !Object.hasOwn(ROLES, x)))
         throw new ApiError("Invalid role");
       if (payload.roles.length !== 1)
@@ -1230,7 +2028,7 @@ async function controlAction(u, input) {
       const gate = await tx.get(ref("system", "control-center"));
       if (!gate.exists)
         throw new ApiError("Bootstrap required", 409);
-      if (action === "staff.invite") {
+      if (action2 === "staff.invite") {
         const email = text(payload.email, 320).toLowerCase();
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || payload.roles.includes("super_admin"))
           throw new ApiError("Invite a non-super role; promote a verified existing staff member separately");
@@ -1254,7 +2052,7 @@ async function controlAction(u, input) {
         tx.set(ref("orinStaff", target), after);
         tx.update(gate.ref, { superAdminCount: count });
       }
-    } else if (action === "configuration.save") {
+    } else if (action2 === "configuration.save") {
       const r = controlRef("Configuration", "current");
       before = (await tx.get(r)).data() ?? { revision: 0 };
       if (input.revision !== before.revision)
@@ -1267,8 +2065,8 @@ async function controlAction(u, input) {
       tx.set(r, after);
       const { maxAdjustmentCents, ...publicConfig } = after;
       tx.set(ref("orinPublicConfiguration", "current"), publicConfig);
-    } else if (action === "content.save" || action === "notification.save") {
-      const notification = action.startsWith("notification"), r = controlRef(notification ? "Notifications" : "Content", target);
+    } else if (action2 === "content.save" || action2 === "notification.save") {
+      const notification = action2.startsWith("notification"), r = controlRef(notification ? "Notifications" : "Content", target);
       before = (await tx.get(r)).data() ?? { revision: 0 };
       if (input.revision !== before.revision)
         throw new ApiError("Draft changed", 409);
@@ -1282,8 +2080,8 @@ async function controlAction(u, input) {
         after = { slug: target, titleAr: text(payload.titleAr, 100), titleEn: text(payload.titleEn, 100), bodyAr: text(payload.bodyAr, 2e4), bodyEn: text(payload.bodyEn, 2e4) };
       after = { ...after, status: "draft", revision: before.revision + 1, updatedAt: now, updatedBy: u.id };
       tx.set(r, after);
-    } else if (action === "content.publish" || action === "notification.publish") {
-      const notification = action.startsWith("notification"), r = controlRef(notification ? "Notifications" : "Content", target);
+    } else if (action2 === "content.publish" || action2 === "notification.publish") {
+      const notification = action2.startsWith("notification"), r = controlRef(notification ? "Notifications" : "Content", target);
       before = (await tx.get(r)).data();
       if (!before || before.status !== "draft" || before.revision !== input.revision || payload.previewRevision !== before.revision)
         throw new ApiError("Preview the current draft before publishing", 409);
@@ -1298,7 +2096,7 @@ async function controlAction(u, input) {
         tx.create(controlRef("ContentHistory", target + "_" + after.revision), after);
       }
       tx.update(r, after);
-    } else if (action === "market.save") {
+    } else if (action2 === "market.save") {
       const pair = String(payload.pair), symbol = MARKET_SYMBOLS.find((s) => s.pair === pair);
       if (!symbol || typeof payload.enabled !== "boolean")
         throw new ApiError("A connected supported symbol is required");
@@ -1317,17 +2115,17 @@ async function controlAction(u, input) {
         throw new ApiError("At least one market must remain enabled");
       after = { pair, name: symbol.name, category: symbol.category, source: symbol.tv, enabled: payload.enabled, order: payload.order, revision: before.revision + 1 };
       tx.set(r, after);
-      const configuration = { ...config, enabledSymbols: enabled2, defaultSymbol: enabled2.includes(config.defaultSymbol) ? config.defaultSymbol : enabled2[0] };
-      tx.set(ref("sparkConfiguration", "markets"), { configuration, revision: (previous?.revision ?? 0) + 1, updatedAt: FieldValue2.serverTimestamp() });
-      tx.set(ref("orinConfiguration", "markets"), { configuration, revision: (previous?.revision ?? 0) + 1, updated_at: now });
-    } else if (action === "agency.set" || action === "badge.grant") {
+      const configuration2 = { ...config, enabledSymbols: enabled2, defaultSymbol: enabled2.includes(config.defaultSymbol) ? config.defaultSymbol : enabled2[0] };
+      tx.set(ref("sparkConfiguration", "markets"), { configuration: configuration2, revision: (previous?.revision ?? 0) + 1, updatedAt: FieldValue2.serverTimestamp() });
+      tx.set(ref("orinConfiguration", "markets"), { configuration: configuration2, revision: (previous?.revision ?? 0) + 1, updated_at: now });
+    } else if (action2 === "agency.set" || action2 === "badge.grant") {
       const r = ref("orinProgramMembers", target);
       before = (await tx.get(r)).data();
       if (!before)
         throw new ApiError("Program member required", 404);
       if ((before.revision ?? 0) !== input.revision)
         throw new ApiError("Member changed", 409);
-      if (action === "agency.set") {
+      if (action2 === "agency.set") {
         if (typeof payload.granted !== "boolean")
           throw new ApiError("Invalid agency state");
         after = { agencyGranted: payload.granted, agencyId: before.agencyId ?? "AG-" + randomBytes(6).toString("hex").toUpperCase(), agencyReason: reason, agencyGrantedBy: u.id, revision: (before.revision ?? 0) + 1 };
@@ -1340,7 +2138,7 @@ async function controlAction(u, input) {
       }
       tx.update(r, after);
       before = pick2(before, ["agencyGranted", "agencyId", "badges", "revision"]);
-    } else if (action === "referral.review") {
+    } else if (action2 === "referral.review") {
       const r = ref("orinReferralRewards", target);
       before = (await tx.get(r)).data();
       if (!before || (before.revision ?? 0) !== input.revision)
@@ -1363,7 +2161,7 @@ async function controlAction(u, input) {
         tx.update(parent, { qualifiedCount: (parentData.qualifiedCount ?? 0) + 1, pendingCents: (parentData.pendingCents ?? 0) + before.amountCents });
       if (["qualified", "approved"].includes(before.status) && payload.status === "rejected")
         tx.update(parent, { qualifiedCount: Math.max(0, (parentData.qualifiedCount ?? 0) - 1), pendingCents: Math.max(0, (parentData.pendingCents ?? 0) - before.amountCents) });
-    } else if (action === "security.revoke") {
+    } else if (action2 === "security.revoke") {
       if (target === u.id)
         throw new ApiError("Use sign out for your own session");
       const p = await tx.get(ref("users", target));
@@ -1379,14 +2177,14 @@ async function controlAction(u, input) {
       if (isStaff.exists)
         tx.update(isStaff.ref, { validAfter: now });
       tx.create(controlRef("Security", requestId), { uid: target, event: "sessions_revoked", status: "revoked_at_api", adminId: u.id, createdAt: now });
-    } else if (action === "program.configure")
+    } else if (action2 === "program.configure")
       throw new ApiError("Use versioned program configuration endpoint", 409);
     else
       throw new ApiError("Action unavailable", 409);
-    controlAudit(tx, "command-" + command.id, u, action, target, reason, before, after, requestId);
+    controlAudit(tx, "command-" + command.id, u, action2, target, reason, before, after, requestId);
     tx.create(command, { fingerprint, result: output, createdAt: now });
   });
-  if (action === "security.revoke") {
+  if (action2 === "security.revoke") {
     try {
       await adminAuth.revokeRefreshTokens(target);
     } catch {
@@ -1432,6 +2230,74 @@ function requireReal(a, uid) {
 function ledger(tx, key5, uid, accountId, kind, cents, now) {
   if (!Number.isSafeInteger(cents)) throw new ApiError("Invalid ledger amount");
   tx.create(ref("orinProgramLedger", key5), { uid, accountId, kind, entries: [{ account: `customer:${uid}:${accountId}`, cents }, { account: `program:${kind}`, cents: -cents }], createdAt: now });
+}
+async function programSummary(u) {
+  const [config, m, b, children, rewards] = await Promise.all([configRef().get(), member(u.id).get(), ref("orinBonusWallets", u.id).get(), adminDb.collection("orinProgramMembers").where("ancestors", "array-contains", u.id).limit(101).get(), adminDb.collection("orinReferralRewards").where("referrerId", "==", u.id).limit(100).get()]);
+  const c = validConfig(config.data() ?? {}), d = m.data(), wallet = b.data();
+  const accounts = wallet ? await accountRef(u.id, wallet.accountId).get() : null;
+  const rows = children.docs.slice(0, 100).map((x) => ({ uid: x.id, ...x.data() })).sort((a, b2) => a.ancestors.length - b2.ancestors.length || a.referralId.localeCompare(b2.referralId));
+  return { available: true, config: c, member: d ? { referralId: d.referralId, code: d.code, agencyId: d.agencyId ?? null, agencyGranted: d.agencyGranted === true, badges: d.badges ?? [], direct: d.directCount ?? 0, activeTeam: d.activeTeamCount ?? 0, team: d.teamCount ?? 0, qualified: d.qualifiedCount ?? 0, paidCents: d.paidCents ?? 0, pendingCents: d.pendingCents ?? 0, activityRewardCents: d.activityRewardCents ?? 0 } : null, bonus: wallet ? { firstDepositCents: wallet.firstDepositCents ?? 1e5, termsVersion: wallet.termsVersion, accountId: wallet.accountId, cashCents: accounts?.data()?.balanceCents ?? 0, bonusCents: wallet.bonusCents, profitCents: wallet.profitCents, withdrawableProfitCents: wallet.withdrawableProfitCents, qualifiedDepositCents: wallet.qualifiedDepositCents, claimed: wallet.claimed, eligible: true } : null, tree: rows.map((x) => ({ id: x.referralId, parentId: x.parentReferralId ?? null, depth: x.ancestors.length - x.ancestors.indexOf(u.id), status: x.referralStatus ?? "pending" })), rewards: rewards.docs.map((x) => ({ id: x.id, status: x.data().status, amountCents: x.data().amountCents })), truncated: children.size > 100 };
+}
+async function programAction(u, input) {
+  const action2 = input.action, requestId = cleanKey(input.requestId), now = Date.now();
+  if (!["enroll", "claim_bonus"].includes(action2)) throw new ApiError("Invalid program action");
+  const request = ref("orinProgramCommands", hash(u.id + ":" + requestId)), fingerprint = hash(JSON.stringify(input));
+  const generatedCode = "ORIN-" + randomBytes2(6).toString("hex").toUpperCase();
+  await adminDb.runTransaction(async (tx) => {
+    await check(tx, u);
+    await controlAccess(u, true, tx);
+    const operational = (await tx.get(ref("orinControlConfiguration", "current"))).data();
+    if (operational && (action2 === "enroll" && !operational.referralsEnabled || action2 === "claim_bonus" && !operational.bonusEnabled)) throw new ApiError("Program feature is disabled", 409);
+    const old = await tx.get(request);
+    if (old.exists) {
+      if (old.data().fingerprint !== fingerprint) throw new ApiError("Request already used", 409);
+      return;
+    }
+    const c = enabled((await tx.get(configRef())).data()), m = await tx.get(member(u.id));
+    if (action2 === "enroll") {
+      if (m.exists) throw new ApiError("\u0639\u0636\u0648\u064A\u062A\u0643 \u0645\u0648\u062C\u0648\u062F\u0629 \u0628\u0627\u0644\u0641\u0639\u0644. / Already enrolled.", 409);
+      const identity = await tx.get(ref("orinReferralIdentities", u.id)), code = identity.data()?.code ?? generatedCode;
+      const codeDoc = ref("orinReferralCodes", code), claim = await tx.get(codeDoc);
+      if (claim.exists && claim.data()?.uid !== u.id) throw new ApiError("Retry enrollment", 409);
+      const attribution = (await tx.get(ref("orinReferralAttributions", u.id))).data();
+      if (attribution?.code && input.referralCode && input.referralCode !== attribution.code) throw new ApiError("Referral attribution is already recorded", 409);
+      const referralCode = attribution?.code ?? input.referralCode;
+      let parent, parentUid = null;
+      let ancestors = [];
+      if (referralCode) {
+        if (typeof referralCode !== "string" || !/^ORIN-[A-F0-9]{12}$/.test(referralCode)) throw new ApiError("Invalid referral code");
+        const sponsor = (await tx.get(ref("orinReferralCodes", referralCode))).data();
+        if (!sponsor || sponsor.uid === u.id) throw new ApiError("Self referral or unknown code", 409);
+        parentUid = sponsor.uid;
+        parent = (await tx.get(member(parentUid))).data();
+        if (!parent || parent.ancestors.includes(u.id) || parent.ancestors.length >= 32) throw new ApiError("Invalid referral path");
+        const [uKyc, parentKyc] = await Promise.all([tx.get(ref("orinVerifiedCustomers", u.id)), tx.get(ref("orinVerifiedCustomers", parentUid))]);
+        if (uKyc.data()?.customerKey && parentKyc.data()?.customerKey && uKyc.data().customerKey === parentKyc.data().customerKey) throw new ApiError("Same customer key referral rejected", 409);
+        ancestors = [...parent.ancestors, parentUid];
+      }
+      const parentDocs = await Promise.all(ancestors.map((id2) => tx.get(member(id2))));
+      tx.create(member(u.id), { uid: u.id, referralId: code, code, parentUid, parentReferralId: parent?.referralId ?? null, ancestors, referralStatus: "pending", badges: ["new_user"], agencyGranted: false, agencyId: null, directCount: 0, teamCount: 0, activeTeamCount: 0, qualifiedCount: 0, paidCents: 0, pendingCents: 0, activityRewardCents: 0, createdAt: now, termsVersion: c.termsVersion });
+      if (!claim.exists) tx.create(codeDoc, { uid: u.id });
+      parentDocs.forEach((p) => tx.update(p.ref, { teamCount: (p.data().teamCount ?? 0) + 1, ...p.id === parentUid ? { directCount: (p.data().directCount ?? 0) + 1 } : {} }));
+      if (parentUid) tx.create(ref("orinReferralRewards", u.id), { referrerId: parentUid, referredId: u.id, status: "pending", amountCents: c.referralAmountCents, createdAt: now, termsVersion: c.termsVersion, configurationRevision: c.revision });
+    } else {
+      if (!m.exists) throw new ApiError("Enroll first", 409);
+      const id2 = cleanKey(input.accountId);
+      await controlAccess(u, true, tx);
+      await controlAccount(u.id, id2, tx);
+      const a = requireReal((await tx.get(accountRef(u.id, id2))).data(), u.id), v = (await tx.get(ref("orinVerifiedCustomers", u.id))).data();
+      if (!v?.verified || v.revoked || !v.customerKey) throw new ApiError("\u0627\u0644\u062A\u062D\u0642\u0642 \u0627\u0644\u0645\u0637\u0644\u0648\u0628 \u063A\u064A\u0631 \u0645\u0643\u062A\u0645\u0644. / Required verification is incomplete.", 409);
+      const claim = ref("orinBonusClaims", v.customerKey), wallet = ref("orinBonusWallets", u.id);
+      if ((await tx.get(claim)).exists || (await tx.get(wallet)).exists) throw new ApiError("\u0627\u0644\u0628\u0648\u0646\u0635 \u0645\u0631\u0629 \u0648\u0627\u062D\u062F\u0629 \u0644\u0643\u0644 \u0639\u0645\u064A\u0644. / Bonus already claimed.", 409);
+      const funding = (await tx.get(ref("orinQualifiedDeposits", u.id))).data();
+      tx.create(claim, { uid: u.id, accountId: id2, createdAt: now });
+      tx.create(wallet, { uid: u.id, accountId: id2, bonusCents: c.bonusAmountCents, firstDepositCents: c.firstDepositCents, configurationRevision: c.revision, profitCents: 0, withdrawableProfitCents: 0, qualifiedDepositCents: (funding?.cents ?? 0) >= c.firstDepositCents ? funding?.cents : 0, claimed: true, claimedAt: now, expiresAt: now + c.bonusDurationDays * 864e5, termsVersion: c.termsVersion, eligibleAssets: c.eligibleAssets, profitLimitCents: c.bonusProfitLimitCents, tradingTerms: c.bonusTradingTerms });
+      ledger(tx, "bonus-" + hash(u.id), u.id, id2, "nonwithdrawable_bonus", c.bonusAmountCents, now);
+    }
+    tx.create(request, { fingerprint, uid: u.id, action: action2, createdAt: now });
+    audit(tx, "program-" + request.id, u.id, action2, u.id, { requestId, termsVersion: c.termsVersion }, now);
+  });
+  return programSummary(u);
 }
 async function adminPrograms(u, input) {
   if (!input) {
@@ -1483,7 +2349,7 @@ async function adminPrograms(u, input) {
           tx.update(rr, { status: "rejected", reason: input.reason, updatedAt: now });
           tx.update(member(target), { referralStatus: "rejected" });
           if (r.status === "qualified") tx.update(parent, { qualifiedCount: p.qualifiedCount - 1, pendingCents: p.pendingCents - (r.amountCents ?? 8e3) });
-        } else if (input.status === "paid" && r.status === "qualified") {
+        } else if (input.status === "paid" && ["qualified", "approved"].includes(r.status)) {
           const id2 = cleanKey(input.accountId), a = accountRef(r.referrerId, id2), data = requireReal((await tx.get(a)).data(), r.referrerId), pv = (await tx.get(ref("orinVerifiedCustomers", r.referrerId))).data(), cv = (await tx.get(ref("orinVerifiedCustomers", target))).data(), e = (await tx.get(ref("orinProgramEvidence", r.evidenceId))).data();
           if (!pv?.verified || pv.revoked || !cv?.verified || cv.revoked || !e || e.revoked || e.termsVersion !== c.termsVersion) throw new ApiError("Eligibility changed; review again", 409);
           if (!money(data.balanceCents + (r.amountCents ?? 8e3))) throw new ApiError("Invalid balance");
@@ -1515,16 +2381,22 @@ async function adminPrograms(u, input) {
 }
 export {
   NowPayments,
+  action,
   adminPrograms,
   bootstrap,
   canonical,
+  computeCustomerKey,
   controlAction,
+  controlRead,
   adminDb as db,
   hash,
+  idLast4,
   join,
   paymentService,
+  programAction,
   publish,
   recordConfirmedDeposit,
+  recordVerifiedCustomer,
   ref,
   settle,
   state,

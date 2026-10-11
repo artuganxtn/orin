@@ -1,0 +1,236 @@
+{
+  "account": {
+    "id": "create-acc-usr-alice-100",
+    "ownerId": "usr-alice-100",
+    "accountNumber": "323684678464",
+    "type": "real",
+    "currency": "USD",
+    "createdAt": {
+      "_seconds": 1791692013,
+      "_nanoseconds": 730000000
+    },
+    "reservedCents": 0,
+    "realizedCents": 750,
+    "balanceCents": 115250,
+    "updatedAt": {
+      "_seconds": 1791692019,
+      "_nanoseconds": 43000000
+    }
+  },
+  "journals": [
+    {
+      "id": "allocate:3aca7abac53dd2b1eb30d261ca0789109a1ba67ef16ad40e9e4b0e76614caf6c",
+      "user_id": "usr-alice-100",
+      "kind": "allocation",
+      "reference": "3aca7abac53dd2b1eb30d261ca0789109a1ba67ef16ad40e9e4b0e76614caf6c",
+      "effective_at": 1791692014828,
+      "created_at": 1791692014828,
+      "status": "posted",
+      "entries": [
+        {
+          "id": "allocate:3aca7abac53dd2b1eb30d261ca0789109a1ba67ef16ad40e9e4b0e76614caf6c:0",
+          "journal_id": "allocate:3aca7abac53dd2b1eb30d261ca0789109a1ba67ef16ad40e9e4b0e76614caf6c",
+          "account": "user:usr-alice-100:cash",
+          "amount_cents": -10000,
+          "kind": "allocation",
+          "effective_at": 1791692014828
+        },
+        {
+          "id": "allocate:3aca7abac53dd2b1eb30d261ca0789109a1ba67ef16ad40e9e4b0e76614caf6c:1",
+          "journal_id": "allocate:3aca7abac53dd2b1eb30d261ca0789109a1ba67ef16ad40e9e4b0e76614caf6c",
+          "account": "user:usr-alice-100:reserved",
+          "amount_cents": 10000,
+          "kind": "allocation",
+          "effective_at": 1791692014828
+        }
+      ]
+    },
+    {
+      "id": "settle:3aca7abac53dd2b1eb30d261ca0789109a1ba67ef16ad40e9e4b0e76614caf6c",
+      "user_id": "usr-alice-100",
+      "kind": "settlement",
+      "reference": "3aca7abac53dd2b1eb30d261ca0789109a1ba67ef16ad40e9e4b0e76614caf6c",
+      "effective_at": 1791692074828,
+      "created_at": 1791692084828,
+      "status": "posted",
+      "entries": [
+        {
+          "id": "settle:3aca7abac53dd2b1eb30d261ca0789109a1ba67ef16ad40e9e4b0e76614caf6c:0",
+          "journal_id": "settle:3aca7abac53dd2b1eb30d261ca0789109a1ba67ef16ad40e9e4b0e76614caf6c",
+          "account": "user:usr-alice-100:reserved",
+          "amount_cents": -10000,
+          "kind": "settlement",
+          "effective_at": 1791692074828
+        },
+        {
+          "id": "settle:3aca7abac53dd2b1eb30d261ca0789109a1ba67ef16ad40e9e4b0e76614caf6c:1",
+          "journal_id": "settle:3aca7abac53dd2b1eb30d261ca0789109a1ba67ef16ad40e9e4b0e76614caf6c",
+          "account": "user:usr-alice-100:cash",
+          "amount_cents": 10500,
+          "kind": "settlement",
+          "effective_at": 1791692074828
+        },
+        {
+          "id": "settle:3aca7abac53dd2b1eb30d261ca0789109a1ba67ef16ad40e9e4b0e76614caf6c:2",
+          "journal_id": "settle:3aca7abac53dd2b1eb30d261ca0789109a1ba67ef16ad40e9e4b0e76614caf6c",
+          "account": "system:trading-pnl",
+          "amount_cents": -500,
+          "kind": "settlement",
+          "effective_at": 1791692074828
+        }
+      ]
+    }
+  ],
+  "ledger": [
+    {
+      "uid": "usr-alice-100",
+      "accountId": "create-acc-usr-alice-100",
+      "kind": "bonus_allocation",
+      "entries": [
+        {
+          "account": "nonwithdrawable-bonus",
+          "cents": -5000
+        },
+        {
+          "account": "bonus-reserved",
+          "cents": 5000
+        }
+      ],
+      "createdAt": 1791692018606
+    },
+    {
+      "uid": "usr-alice-100",
+      "accountId": "create-acc-usr-alice-100",
+      "kind": "nonwithdrawable_bonus",
+      "entries": [
+        {
+          "account": "customer:usr-alice-100:create-acc-usr-alice-100",
+          "cents": 10000
+        },
+        {
+          "account": "program:nonwithdrawable_bonus",
+          "cents": -10000
+        }
+      ],
+      "createdAt": 1791692018345
+    },
+    {
+      "uid": "usr-alice-100",
+      "accountId": "create-acc-usr-alice-100",
+      "kind": "bonus_settlement",
+      "entries": [
+        {
+          "account": "bonus-reserved",
+          "cents": -5000
+        },
+        {
+          "account": "nonwithdrawable-bonus",
+          "cents": 5000
+        },
+        {
+          "account": "bonus-profit",
+          "cents": 250
+        },
+        {
+          "account": "broker-clearing",
+          "cents": -250
+        }
+      ],
+      "createdAt": 1791692088606
+    },
+    {
+      "uid": "usr-alice-100",
+      "accountId": "create-acc-usr-alice-100",
+      "kind": "adjustment",
+      "entries": [
+        {
+          "account": "cash",
+          "cents": 5000
+        },
+        {
+          "account": "adjustment-clearing",
+          "cents": -5000
+        }
+      ],
+      "createdAt": 1791692015924,
+      "reference": "ref-fin-credit-1",
+      "requestedBy": "admin-maker-uid",
+      "approvedBy": "admin-checker-uid"
+    },
+    {
+      "uid": "usr-alice-100",
+      "accountId": "create-acc-usr-alice-100",
+      "kind": "adjustment",
+      "entries": [
+        {
+          "account": "cash",
+          "cents": -1000
+        },
+        {
+          "account": "adjustment-clearing",
+          "cents": 1000
+        }
+      ],
+      "createdAt": 1791692016304,
+      "reference": "ref-fin-debit-1",
+      "requestedBy": "admin-maker-uid",
+      "approvedBy": "admin-checker-uid"
+    },
+    {
+      "uid": "usr-alice-100",
+      "accountId": "create-acc-usr-alice-100",
+      "kind": "referral_reward",
+      "entries": [
+        {
+          "account": "cash",
+          "cents": 8000
+        },
+        {
+          "account": "program-expense",
+          "cents": -8000
+        }
+      ],
+      "createdAt": 1791692017596,
+      "requestedBy": "admin-maker-uid",
+      "approvedBy": "admin-checker-uid",
+      "reference": "ref-reward-usr-bob-200",
+      "rewardId": "usr-bob-200"
+    },
+    {
+      "uid": "usr-alice-100",
+      "accountId": "create-acc-usr-alice-100",
+      "kind": "team_activity",
+      "entries": [
+        {
+          "account": "cash",
+          "cents": 2500
+        },
+        {
+          "account": "program-expense",
+          "cents": -2500
+        }
+      ],
+      "createdAt": 1791692018055,
+      "requestedBy": "admin-maker-uid",
+      "approvedBy": "admin-checker-uid",
+      "reference": "ref-team-usr-alice-100",
+      "rewardId": "usr-alice-100_2026-10"
+    },
+    {
+      "uid": "usr-alice-100",
+      "accountId": "create-acc-usr-alice-100",
+      "kind": "deposit",
+      "entries": [
+        {
+          "account": "cash",
+          "cents": 100000
+        },
+        {
+          "account": "payment-clearing",
+          "cents": -100000
+        }
+      ],
+      "createdAt": 1789532016111
+    }
+  ]
+}

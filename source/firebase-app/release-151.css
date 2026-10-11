@@ -22,3 +22,24 @@ body:has(.chart-stage.is-fullscreen) .orin-support-fab{display:none}
 @media(min-width:900px){.orin-support-fab{inset-inline-end:28px;bottom:26px}}@media(max-height:740px){.orin-onboarding-v2{padding-top:15px}.intro-steps{margin-top:15px}.intro-visual{height:225px}.intro-market-orbit{top:0;height:125px}.intro-market-orbit img{width:78px;height:78px}.intro-glass-chart{bottom:10px}.intro-glass-chart>svg{height:64px}.intro-chip{top:64px}.intro-connect-ring{width:150px;height:150px}.intro-connect-ring>img{width:86px}.intro-contact-card{bottom:37px;padding:14px}.intro-account-card{height:145px;top:27%}.intro-copy h1{font-size:30px;margin:10px 0}.intro-feature{margin:10px 0 4px}.intro-copy p{font-size:12px}.intro-footer{padding-top:13px!important}.intro-login{padding-top:12px}}
 @media(prefers-reduced-motion:reduce){.intro-scene,.orin-support-fab{animation:none;transition:none}}[data-reduce-motion=true] .intro-scene,[data-reduce-motion=true] .orin-support-fab{animation:none;transition:none}
 .referral-summary-status{display:flex;align-items:center;gap:12px;padding:13px 15px;border:1px solid #81bed54d;border-radius:14px;margin:15px 0;background:#0c8dac08}.referral-summary-status p{font-size:12px;line-height:1.8;margin:0}.referral-summary-status button{display:flex;gap:5px;align-items:center;flex:none;color:#168ccf;font-size:12px}.referral-page .message.error{display:flex;flex-wrap:wrap;gap:12px;align-items:center}.referral-page .message.error button{display:inline-flex;gap:5px;align-items:center;text-decoration:underline;font-size:12px}
+.intro-download-slot{margin-top:16px;display:flex}.intro-download-chip{display:inline-flex;align-items:center;gap:9px;background:rgba(0,210,255,0.08);border:1px solid rgba(0,210,255,0.35);color:#7eedff;padding:9px 18px;border-radius:30px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 4px 18px rgba(0,210,255,0.15);transition:all .2s ease}.intro-download-chip:hover,.intro-download-chip:active{background:rgba(0,210,255,0.18);border-color:#00d2ff;transform:translateY(-1px);box-shadow:0 6px 24px rgba(0,210,255,0.25)}
+.intro-modal-backdrop{position:fixed;inset:0;background:rgba(2,6,17,0.85);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);z-index:99999;display:flex;align-items:center;justify-content:center;padding:18px;animation:orin-intro-in .25s ease}
+.intro-modal-card{width:100%;max-width:440px;background:linear-gradient(180deg,#0a1424 0%,#060c18 100%);border:1px solid rgba(0,210,255,0.25);border-radius:24px;box-shadow:0 25px 60px rgba(0,0,0,0.85),0 0 30px rgba(0,180,255,0.12);overflow:hidden}
+.intro-modal-header{padding:18px 22px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,0.07)}
+.intro-modal-title{display:flex;align-items:center;gap:12px}.intro-modal-title strong{display:block;font-size:16px;font-weight:750;color:#fff}.intro-modal-title small{display:block;font-size:11px;color:#94a3b8;margin-top:2px}
+.intro-modal-close{background:none;border:0;color:#94a3b8;cursor:pointer;padding:6px;border-radius:8px;display:grid;place-items:center;transition:color .15s}.intro-modal-close:hover{color:#fff}
+.intro-modal-body{padding:20px;display:flex;flex-direction:column;gap:16px}
+.intro-app-option{background:rgba(15,23,42,0.65);border:1px solid rgba(255,255,255,0.08);border-radius:18px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;position:relative}
+.intro-option-badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:750;padding:3px 10px;border-radius:12px;align-self:flex-start}
+.intro-option-badge.android{background:rgba(34,197,94,0.15);color:#4ade80;border:1px solid rgba(34,197,94,0.3)}
+.intro-option-badge.apple{background:rgba(56,189,248,0.15);color:#38bdf8;border:1px solid rgba(56,189,248,0.3)}
+.intro-option-info b{display:block;font-size:14px;color:#fff;margin-bottom:4px}
+.intro-option-info p{font-size:11px;color:#94a3b8;line-height:1.6;margin:0}
+.intro-ios-steps{margin:8px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px;font-size:11px;color:#cbd5e1}
+.intro-ios-steps li{display:flex;align-items:center;gap:8px}
+.intro-ios-steps span{display:grid;place-items:center;width:18px;height:18px;background:rgba(56,189,248,0.2);color:#38bdf8;border-radius:50%;font-size:10px;font-weight:750;flex:none}
+.intro-option-btn{display:flex;align-items:center;justify-content:center;gap:8px;padding:12px 18px;border-radius:14px;font-size:13px;font-weight:750;text-decoration:none;transition:all .15s}
+.intro-option-btn.primary{background:linear-gradient(135deg,#00d2ff 0%,#0077ff 100%);color:#030712;box-shadow:0 6px 20px rgba(0,210,255,0.3)}
+.intro-option-btn.secondary{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);color:#f1f5f9}
+.intro-option-btn:hover{filter:brightness(1.08);transform:translateY(-1px)}
+

@@ -1,0 +1,1 @@
+C:/Users/dipnr/Downloads/ORIN-1.6.2-Full-Developer-Package/source/firebase-functions/node_modules/@embedded-postgres/windows-x64/native/bin/postgres.exe "-D" "./.pgdata" "-p" "5433"

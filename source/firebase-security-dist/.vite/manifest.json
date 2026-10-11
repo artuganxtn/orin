@@ -1,25 +1,25 @@
 {
   "../app/program-pages.tsx": {
-    "file": "assets/program-pages-Cud9bQio.js",
+    "file": "assets/program-pages-C_j7M2wu.js",
     "name": "program-pages",
     "src": "../app/program-pages.tsx",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_star-B7MmRKgY.js"
+      "_star-FOxyV85k.js"
     ]
   },
   "../app/trading-workspace.tsx": {
-    "file": "assets/trading-workspace-BQUZmXfP.js",
+    "file": "assets/trading-workspace-GxEowWyK.js",
     "name": "trading-workspace",
     "src": "../app/trading-workspace.tsx",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_chart-boundary-DtjgCYOZ.js",
-      "_account-transactions-CjK35p0c.js",
-      "_sliders-horizontal-Beykj6NV.js",
-      "_star-B7MmRKgY.js"
+      "_chart-boundary-BSl6X-Xk.js",
+      "_account-transactions-CEhIwd6x.js",
+      "_sliders-horizontal-gjI5Plk5.js",
+      "_star-FOxyV85k.js"
     ],
     "dynamicImports": [
       "../lib/statement-pdf.ts",
@@ -31,23 +31,23 @@
     ]
   },
   "../app/tradingview-widget.tsx": {
-    "file": "assets/tradingview-widget-BLYbaigj.js",
+    "file": "assets/tradingview-widget-CR9fr70s.js",
     "name": "tradingview-widget",
     "src": "../app/tradingview-widget.tsx",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_chart-boundary-DtjgCYOZ.js"
+      "_chart-boundary-BSl6X-Xk.js"
     ]
   },
   "../lib/statement-pdf.ts": {
-    "file": "assets/statement-pdf-By0c1jJ0.js",
+    "file": "assets/statement-pdf-bt5Gs2c_.js",
     "name": "statement-pdf",
     "src": "../lib/statement-pdf.ts",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_account-transactions-CjK35p0c.js",
+      "_account-transactions-CEhIwd6x.js",
       "_typeof-Dtizcwqq.js"
     ],
     "dynamicImports": [
@@ -57,7 +57,7 @@
     ]
   },
   "../node_modules/canvg/lib/index.es.js": {
-    "file": "assets/index.es-Gphts1Yp.js",
+    "file": "assets/index.es-CT-D0TDR.js",
     "name": "index.es",
     "src": "../node_modules/canvg/lib/index.es.js",
     "isDynamicEntry": true,
@@ -73,7 +73,7 @@
     "isDynamicEntry": true
   },
   "../node_modules/html2canvas/dist/html2canvas.js": {
-    "file": "assets/html2canvas-DflnPWXn.js",
+    "file": "assets/html2canvas-5h2jS_1a.js",
     "name": "html2canvas",
     "src": "../node_modules/html2canvas/dist/html2canvas.js",
     "isDynamicEntry": true,
@@ -81,29 +81,29 @@
       "index.html"
     ]
   },
-  "_account-transactions-CjK35p0c.js": {
-    "file": "assets/account-transactions-CjK35p0c.js",
+  "_account-transactions-CEhIwd6x.js": {
+    "file": "assets/account-transactions-CEhIwd6x.js",
     "name": "account-transactions",
     "imports": [
       "index.html"
     ]
   },
-  "_chart-boundary-DtjgCYOZ.js": {
-    "file": "assets/chart-boundary-DtjgCYOZ.js",
+  "_chart-boundary-BSl6X-Xk.js": {
+    "file": "assets/chart-boundary-BSl6X-Xk.js",
     "name": "chart-boundary",
     "imports": [
       "index.html"
     ]
   },
-  "_sliders-horizontal-Beykj6NV.js": {
-    "file": "assets/sliders-horizontal-Beykj6NV.js",
+  "_sliders-horizontal-gjI5Plk5.js": {
+    "file": "assets/sliders-horizontal-gjI5Plk5.js",
     "name": "sliders-horizontal",
     "imports": [
       "index.html"
     ]
   },
-  "_star-B7MmRKgY.js": {
-    "file": "assets/star-B7MmRKgY.js",
+  "_star-FOxyV85k.js": {
+    "file": "assets/star-FOxyV85k.js",
     "name": "star",
     "imports": [
       "index.html"
@@ -114,20 +114,20 @@
     "name": "typeof"
   },
   "control-center.tsx": {
-    "file": "assets/control-center-C3gZaPnl.js",
+    "file": "assets/control-center-DpgLM-Dg.js",
     "name": "control-center",
     "src": "control-center.tsx",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_sliders-horizontal-Beykj6NV.js"
+      "_sliders-horizontal-gjI5Plk5.js"
     ],
     "css": [
       "assets/control-center-KfcPfWuI.css"
     ]
   },
   "index.html": {
-    "file": "assets/index-PN8fSxHS.js",
+    "file": "assets/index-BCkNH_Hz.js",
     "name": "index",
     "src": "index.html",
     "isEntry": true,
@@ -136,7 +136,7 @@
       "control-center.tsx"
     ],
     "css": [
-      "assets/index-Dr2WuDPb.css"
+      "assets/index-Be9Kyou1.css"
     ]
   }
 }

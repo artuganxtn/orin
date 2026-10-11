@@ -1,6 +1,5 @@
-import {initializeApp, getApps, cert, type App} from 'firebase-admin/app';
-import {getFirestore, type Firestore} from 'firebase-admin/firestore';
-import {getAuth, type Auth} from 'firebase-admin/auth';
+import { initializeApp, getApps, cert, type App } from 'firebase-admin/app';
+import { getAuth, type Auth } from 'firebase-admin/auth';
 
 export function getAdminApp(): App {
   if (getApps().length > 0) return getApps()[0];
@@ -16,9 +15,8 @@ export function getAdminApp(): App {
       console.warn('Could not parse FIREBASE_SERVICE_ACCOUNT JSON:', e);
     }
   }
-  return initializeApp({ projectId: 'orin-99951' });
+  return initializeApp({ projectId: process.env.GCLOUD_PROJECT || process.env.FIREBASE_PROJECT || 'orin-99951' });
 }
 
 export const adminApp: App = getAdminApp();
-export const adminDb: Firestore = getFirestore(adminApp);
 export const adminAuth: Auth = getAuth(adminApp);

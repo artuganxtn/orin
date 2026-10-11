@@ -447,6 +447,8 @@ body{background:#edf4ff;color:#101d4b}.reference-shell{max-width:480px;margin:0 
   z-index: 45;
   direction: rtl;
   box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.03);
+}
+
 .trade-btn-direction,
 .trade-bottom-action-bar .buy,
 .trade-bottom-action-bar .sell {

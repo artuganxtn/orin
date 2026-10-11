@@ -49,6 +49,20 @@ def main():
         if chunk.is_file() and chunk.relative_to(assets).as_posix() not in emitted:
             chunk.unlink()
     shutil.rmtree(assets / ".vite")
+    api_base_url = os.environ.get("ORIN_API_BASE_URL", "").strip()
+    if not api_base_url:
+        raise SystemExit(
+            "[FATAL] ORIN_API_BASE_URL is unset. "
+            "Set it to the production backend URL before building the APK."
+        )
+    url_lower = api_base_url.lower()
+    if "staging" in url_lower or "custom" in url_lower:
+        raise SystemExit(
+            f"[FATAL] ORIN_API_BASE_URL contains a prohibited string "
+            f"('staging' or 'custom'): {api_base_url}"
+        )
+    (assets / "config.json").write_text(json.dumps({"apiBaseUrl": api_base_url}, indent=2))
+    print(f"Staged API base URL: {api_base_url} into assets/public/config.json")
     res = APP / "res"
     for density in ["mdpi", "hdpi", "xhdpi", "xxhdpi", "xxxhdpi"]:
         shutil.copytree(ROOT / f"public/brand/android/mipmap-{density}", res / f"mipmap-{density}", dirs_exist_ok=True)

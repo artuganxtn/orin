@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from './account';
+import { apiFetch } from '../lib/client-api';
 import { useUi } from './ui';
 /** Plain text only. Published content never executes HTML or scripts. */
 export function usePublishedContent(slug: string) {
@@ -8,8 +7,9 @@ export function usePublishedContent(slug: string) {
     useEffect(() => {
         let current = true;
         setContent(null);
-        void getDoc(doc(db, 'orinPublicContent', slug)).then(s => {
-            const d = s.data();
+        void apiFetch('/api/content/' + slug).then(async res => {
+            if (!res.ok) return;
+            const d = await res.json();
             if (current && d?.status === 'published' && typeof d.bodyAr === 'string' && typeof d.bodyEn === 'string')
                 setContent(d as Record<string, string>);
         }).catch(() => { });

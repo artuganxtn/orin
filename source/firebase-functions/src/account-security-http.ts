@@ -1,4 +1,3 @@
-import {onRequest} from 'firebase-functions/v2/https';
 import {resolveObservedIP} from './account-security-ip';
 import * as security from './account-security';
 const defaultOrigins=['https://orin-99951.web.app','https://orin-99951.firebaseapp.com'];
@@ -51,4 +50,4 @@ export async function securityHandle(req:any,res:any){
   }res.json(result);
  }catch(error){const known=error instanceof security.SecurityError,status=known?error.status:503;if(!known)console.error('ORIN_SECURITY_FAILURE',{code:'internal',name:error instanceof Error?error.name:'Unknown'});res.status(status).json({error:known?error.message:'خدمة الأمان غير متاحة مؤقتًا.',available:false,code:known?error.code:'security-unavailable'});}
 }
-export const orinSecurity=onRequest({region:'europe-west1',memory:'256MiB',timeoutSeconds:60,maxInstances:3,concurrency:20,secrets:['ORIN_SECURITY_MASTER_KEY'],cors:false},securityHandle);
+export const orinSecurity = securityHandle;

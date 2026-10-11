@@ -1,5 +1,5 @@
 import {ensureFreshSecurityAccess} from './account-security-client';
-type Runtime={token:(force?:boolean)=>Promise<string|null>;onUnauthorized:()=>void;request?:(path:string,init:RequestInit)=>Promise<Response>};
+type Runtime={token:(force?:boolean)=>Promise<string|null>;onUnauthorized:()=>void;request?:(path:string,init:RequestInit)=>Promise<Response>;base?:string};
 let runtime:Runtime|null=null;
 export function configureFirebaseTransport(value:Runtime){runtime=value}
 export const firebaseMode=()=>runtime!==null;
@@ -21,12 +21,13 @@ export async function apiFetch(path:string,init:RequestInit={}){
   const token=await runtime.token();
   if(token)headers.set('Authorization',`Bearer ${token}`);
  }
- let result=await fetch(path,{...init,headers});
+ const targetUrl=(runtime?.base?runtime.base.replace(/\/+$/,''):'')+path;
+ let result=await fetch(targetUrl,{...init,headers});
  if(result.status===401&&runtime&&!path.startsWith('/api/control/')){
   const refreshedToken=await runtime.token(true).catch(()=>null);
   if(refreshedToken){
    headers.set('Authorization',`Bearer ${refreshedToken}`);
-   result=await fetch(path,{...init,headers});
+   result=await fetch(targetUrl,{...init,headers});
   }
   if(result.status===401&&!path.startsWith('/api/security/state'))runtime.onUnauthorized();
  }

@@ -8,7 +8,8 @@ export function passwordStrength(password:string){
 }
 export const validEmail=(value:string)=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())&&value.trim().length<=320;
 export const APP_VERSION='1.6.2';
-export const EMAIL_RETURN_ORIGIN='https://orin-99951.web.app';
+export const EMAIL_RETURN_ORIGIN = typeof window !== 'undefined' && window.location?.origin && !window.location.origin.includes('localhost') ? window.location.origin : 'https://orin-trader.top';
+
 
 // Matches the current AndroidManifest versionCode; update both when distributing a new APK.
 export const APP_BUILD_CODE=20;

@@ -30,6 +30,10 @@
         }
       },
       {
+        "source": "/orin.apk",
+        "destination": "/orin-app.bin"
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }
@@ -49,6 +53,45 @@
           {
             "key": "X-Frame-Options",
             "value": "DENY"
+          }
+        ]
+      },
+      {
+        "source": "**/*.mobileconfig",
+        "headers": [
+          {
+            "key": "Content-Type",
+            "value": "application/x-apple-aspen-config; charset=utf-8"
+          },
+          {
+            "key": "Content-Disposition",
+            "value": "attachment; filename=\"orin.mobileconfig\""
+          }
+        ]
+      },
+      {
+        "source": "/orin-app.bin",
+        "headers": [
+          {
+            "key": "Content-Type",
+            "value": "application/vnd.android.package-archive"
+          },
+          {
+            "key": "Content-Disposition",
+            "value": "attachment; filename=\"ORIN-1.6.2.apk\""
+          }
+        ]
+      },
+      {
+        "source": "/orin.apk",
+        "headers": [
+          {
+            "key": "Content-Type",
+            "value": "application/vnd.android.package-archive"
+          },
+          {
+            "key": "Content-Disposition",
+            "value": "attachment; filename=\"ORIN-1.6.2.apk\""
           }
         ]
       },

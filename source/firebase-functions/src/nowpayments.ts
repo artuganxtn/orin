@@ -1,5 +1,5 @@
 import {createHmac,timingSafeEqual} from 'node:crypto';
-import {ApiError} from './store';
+export class ApiError extends Error { constructor(message: string, public status = 400) { super(message); } }
 import type {PaymentCoin} from '../../lib/payments';
 export type ProviderPayment=Record<string,unknown>;
 export function canonical(value:unknown):unknown{
