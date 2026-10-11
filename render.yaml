@@ -5,7 +5,7 @@ services:
     plan: starter
     region: oregon
     rootDir: source/firebase-functions
-    buildCommand: npm --prefix .. install --include=dev && npm install --include=dev && npm --prefix .. run build:firebase && npm run build
+    buildCommand: npm --prefix .. install --include=dev && npm install --include=dev && npm --prefix .. run build:render && npm run build
     startCommand: npm start
     healthCheckPath: /healthz
     envVars:

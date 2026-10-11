@@ -21,7 +21,7 @@ import {safeDestination} from '../lib/orin-routes';
 import {PERMISSIONS,type Permission,type ControlSession} from '../lib/control-center';
 import {DEFAULT_PREFERENCES,DEFAULT_CONFIGURATION,CAPABILITIES,type SettingsState} from '../lib/preferences';
 import type {LabState} from '../lib/contracts';
-import {createSparkApi} from '../firebase-spark/adapter';
+configureFirebaseTransport({base:apiBase,token:async(force=false)=>{await auth.authStateReady();if(!auth.currentUser)return null;try{return await auth.currentUser.getIdToken(force);}catch{return null;}},onUnauthorized:()=>{if(location.pathname.startsWith('/login')||location.pathname.startsWith('/register'))return;if(!auth.currentUser){const next=encodeURIComponent(location.pathname);to('/login?next='+next,true);}else{void auth.currentUser.getIdToken(true).catch(()=>{});}}});
 import {UiBridge,NetworkState,ErrorBoundary,useUi,setUi} from './ui';
 import {Security} from './security';
 import {Legal,Help} from './legal';
@@ -57,7 +57,7 @@ const loadWorkspace=()=>import('../app/trading-workspace');
 const loadDashboard=()=>import('./control-center').then(m=>({default:m.ControlCenter}));
 const OrinApp=lazy(loadWorkspace),Dashboard=lazy(loadDashboard);
 if((import.meta.env.DEV||import.meta.env.MODE==='android-qa')&&import.meta.env.VITE_FIREBASE_EMULATORS==='true'){connectAuthEmulator(auth,'http://127.0.0.1:9099',{disableWarnings:true});}
-configureFirebaseTransport({base:apiBase,token:async(force=false)=>{await auth.authStateReady();if(!auth.currentUser)return null;try{return await auth.currentUser.getIdToken(force);}catch{return null;}},onUnauthorized:()=>{if(location.pathname.startsWith('/login')||location.pathname.startsWith('/register'))return;if(!auth.currentUser){const next=encodeURIComponent(location.pathname);to('/login?next='+next,true);}else{void auth.currentUser.getIdToken(true).catch(()=>{});}},...(import.meta.env.VITE_FIREBASE_SPARK==='true'?{request:createSparkApi(db,async()=>{await auth.authStateReady();return auth.currentUser},createProgramTransport(apiBase || import.meta.env.VITE_ORIN_PROGRAM_API_URL,async()=>{await auth.authStateReady();return auth.currentUser?.getIdToken()??null}))}:{})});
+configureFirebaseTransport({base:apiBase,token:async(force=false)=>{await auth.authStateReady();if(!auth.currentUser)return null;try{return await auth.currentUser.getIdToken(force);}catch{return null;}},onUnauthorized:()=>{if(location.pathname.startsWith('/login')||location.pathname.startsWith('/register'))return;if(!auth.currentUser){const next=encodeURIComponent(location.pathname);to('/login?next='+next,true);}else{void auth.currentUser.getIdToken(true).catch(()=>{});}}});
 const proofApp=getApps().find(a=>a.name==='orin-security-proof')??initializeApp(app.options,'orin-security-proof');
 const proofAuth=getAuth(proofApp);
 if((import.meta.env.DEV||import.meta.env.MODE==='android-qa')&&import.meta.env.VITE_FIREBASE_EMULATORS==='true')connectAuthEmulator(proofAuth,'http://127.0.0.1:9099',{disableWarnings:true});
@@ -157,40 +157,38 @@ function App(){
      }
     }, 3500);
 
-    stopProfile=onSnapshot(doc(db,'users',activeUser.uid),snap=>{
+    void (async () => {
      if (fallbackTimer) { clearTimeout(fallbackTimer); fallbackTimer = undefined; }
-     if(!valid())return;
-     const p: Profile = snap.exists() ? snap.data() as Profile : fallbackUser;
-     if (isOwnerOrAdmin && p.role !== 'admin') p.role = 'admin';
-     setProfile(p);
-     if(initialized||priming)return;
-     if(p.disabled){initialized=ticket.ready({user:u});setSecurityGate(null);return}
-     priming=true;
-     if(typeof document.fonts?.load==='function') document.fonts.load('400 16px ORIN').catch(()=>{});
-     void Promise.all([
-      getInitial<SettingsState>('/api/settings').catch(()=>defaultSettings),
-      getInitial<LabState>('/api/lab').catch(()=>defaultLab),
-      getInitial<any>('/api/experience/configuration').catch(()=>null),
-      loadWorkspace().catch(()=>loadWorkspace()),
-      ...((p.role==='admin'||isOwnerEmail(u.email))?[loadDashboard().catch(()=>null)]:[])
-     ]).then(([settings,lab,config])=>{
-      enterApp(settings, lab, config, p);
-     }).catch(e=>{
+     if (!valid()) return;
+
+     if (typeof document.fonts?.load==='function') document.fonts.load('400 16px ORIN').catch(()=>{});
+
+     try {
+      const [settings, lab, config] = await Promise.all([
+       getInitial<SettingsState>('/api/settings').catch(()=>defaultSettings),
+       getInitial<LabState>('/api/lab').catch(()=>defaultLab),
+       getInitial<any>('/api/experience/configuration').catch(()=>null),
+       loadWorkspace().catch(()=>loadWorkspace()),
+       ...((isOwnerOrAdmin)?[loadDashboard().catch(()=>null)]:[])
+      ]);
+
+      const isAppAdmin = (settings as any)?.isAdmin || isOwnerOrAdmin;
+      const p: Profile = {
+       uid: activeUser.uid,
+       email: (settings as any)?.email || activeUser.email || '',
+       displayName: (settings as any)?.profile?.displayName || activeUser.displayName || 'مستخدم ORIN',
+       role: isAppAdmin ? 'admin' : 'user',
+       disabled: false
+      };
+
+      if (!valid()) return;
+      enterApp(settings as any, lab as any, config, p);
+     } catch (e) {
       console.warn('Startup initial data load fallback:', e);
-      enterApp(defaultSettings, defaultLab, null, p);
-     });
-    },e=>{
-     if (fallbackTimer) { clearTimeout(fallbackTimer); fallbackTimer = undefined; }
-     if(!valid())return;
-     if(initialized)console.warn('ORIN profile subscription unavailable',e.code);
-     else {
-      console.warn('Profile onSnapshot error, proceeding with fallback profile:', e);
-      setProfile(fallbackUser);
-      void loadWorkspace().finally(() => {
-       enterApp(defaultSettings, defaultLab, null, fallbackUser);
-      });
+      if (valid()) enterApp(defaultSettings, defaultLab, null, fallbackUser);
      }
-    });
+    })();
+    stopProfile = () => {};
    })().catch(e=>{initializing=false;console.warn('Startup non-fatal error:',e);});
   },e=>pending.fail(e,!navigator.onLine));
   return()=>{if(fallbackTimer)clearTimeout(fallbackTimer);disposed=true;version++;controller.dispose();stopProfile();stop();removeEventListener('offline',offline)};

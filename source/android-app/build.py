@@ -38,7 +38,7 @@ def main():
     # Fresh staging prevents stale hashed chunks from earlier releases entering verification.
     asset_root = Path(tempfile.mkdtemp(prefix="assets-", dir=BUILD))
     assets = asset_root / "public"
-    dist_name = "firebase-security-dist" if (ROOT / "firebase-security-dist").is_dir() else "firebase-spark-dist"
+    dist_name = "firebase-dist" if (ROOT / "firebase-dist").is_dir() else ("firebase-security-dist" if (ROOT / "firebase-security-dist").is_dir() else "firebase-spark-dist")
     shutil.copytree(ROOT / dist_name, assets)
     # Retain only chunks from the current Vite graph; copied source trees may
     # contain obsolete hashes from an older build.

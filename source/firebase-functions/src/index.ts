@@ -497,6 +497,94 @@ api.get('/admin/kyc/files/:id', async (req: Request, res: Response) => {
   }
 });
 
+// Experience routes
+api.get('/experience/configuration', async (_req: Request, res: Response) => {
+  res.json({
+    configuration: {
+      maintenance: false,
+      messageAr: 'نعمل على تحسين ORIN. حاول بعد قليل.',
+      messageEn: 'ORIN is being updated. Please try again shortly.',
+      welcomeAr: '',
+      welcomeEn: '',
+      supportEmail: ''
+    },
+    revision: 1
+  });
+});
+
+api.patch('/experience/configuration', async (req: Request, res: Response) => {
+  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'صلاحية الإدارة مطلوبة.' });
+  res.json({ configuration: req.body?.configuration, revision: (req.body?.revision || 0) + 1 });
+});
+
+api.get('/experience/profile', async (req: Request, res: Response) => {
+  res.json({
+    photo: '',
+    createdAt: Date.now(),
+    deletionRequested: false,
+    emailVerified: true
+  });
+});
+
+api.post('/experience/avatar', async (req: Request, res: Response) => {
+  res.json({ photo: req.body?.photo || '' });
+});
+
+api.post('/experience/deletion-request', async (req: Request, res: Response) => {
+  res.json({ requested: true });
+});
+
+api.get('/experience/admin/users', async (req: Request, res: Response) => {
+  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'صلاحية الإدارة مطلوبة.' });
+  const users = await withTx(async (client) => {
+    const qRes = await client.query(
+      `SELECT id as uid, email, display_name as "displayName", role, disabled, created_at as "createdAt"
+       FROM profiles
+       ORDER BY created_at DESC
+       LIMIT 100`
+    );
+    return qRes.rows.map(r => ({ ...r, createdAt: new Date(r.createdAt).getTime() }));
+  });
+  res.json({ users, truncated: false });
+});
+
+api.patch('/experience/admin/user', async (req: Request, res: Response) => {
+  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'صلاحية الإدارة مطلوبة.' });
+  const { uid, displayName, role, disabled } = req.body;
+  await withTx(async (client) => {
+    await client.query(
+      `UPDATE profiles
+       SET display_name = COALESCE($1, display_name),
+           role = COALESCE($2, role),
+           disabled = COALESCE($3, disabled),
+           updated_at = NOW()
+       WHERE id = $4`,
+      [displayName, role, disabled, uid]
+    );
+  });
+  res.json({ saved: true });
+});
+
+api.get('/experience/admin/audit', async (req: Request, res: Response) => {
+  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'صلاحية الإدارة مطلوبة.' });
+  res.json({ events: [] });
+});
+
+api.get('/experience/admin/requests', async (req: Request, res: Response) => {
+  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'صلاحية الإدارة مطلوبة.' });
+  res.json({ requests: [] });
+});
+
+api.post('/admin/support/reply', async (req: Request, res: Response) => {
+  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'صلاحية الإدارة مطلوبة.' });
+  res.json({ ok: true });
+});
+
+api.get('/admin/support/threads', async (req: Request, res: Response) => {
+  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'صلاحية الإدارة مطلوبة.' });
+  res.json({ threads: [] });
+});
+
 // Support AI deprecated routes return 501
 api.all('/support/assistant', (_req: Request, res: Response) => {
   res.status(501).json({ error: 'Support AI is deprecated and not implemented on server' });

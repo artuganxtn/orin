@@ -1,0 +1,6 @@
+
+source/firebase-functions/.pgdata/
+*.apk
+*.jks
+*.p12
+store-password.txt

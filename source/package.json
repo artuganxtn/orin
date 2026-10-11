@@ -12,7 +12,7 @@
     "start": "node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js dev --config dist/server/wrangler.json --local --persist-to .wrangler/state --ip 127.0.0.1 --inspector-port 0",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate",
-    "build:firebase": "vite build --config firebase-web/vite.config.mts && node -e \"require('fs').copyFileSync('firebase-web/public/manifest.webmanifest', 'firebase-dist/manifest.webmanifest')\"",
+    "build:firebase": "node scripts/build-dist.mjs render",
     "deploy:firebase": "firebase deploy --project orin-99951 --config firebase-web/firebase.json --only hosting,firestore:rules",
     "test:firebase": "firebase emulators:exec --project demo-orin-auth --config firebase-web/firebase.json --only auth,firestore \"node --experimental-strip-types --test firebase-web/rules.test.mjs firebase-web/auth-smoke.test.mjs\"",
     "build:firebase-original": "vite build --config firebase-app/vite.config.mts && npm --prefix firebase-functions run build",
