@@ -306,7 +306,12 @@ export function KycModal({
       });
 
       if (!res.ok) {
-        const errJson = (await res.json().catch(() => ({}))) as { error?: string };
+        const errJson = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
+        if (errJson.code === 'kyc_pending' || errJson.code === 'already_verified') {
+          setExistingStatus(errJson.code === 'already_verified' ? 'verified' : 'review');
+          setSubmitted(true);
+          return;
+        }
         throw new Error(errJson.error || t('تعذر إرسال طلب التوثيق. أعد المحاولة.', 'Failed to submit KYC. Try again.'));
       }
 
