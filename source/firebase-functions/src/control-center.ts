@@ -3,12 +3,23 @@ import { withTx } from './db.ts';
 import { ApiError, type Identity, type Data } from './store.ts';
 import { computeCustomerKey, verifyKycCustomer } from './kyc.ts';
 import { proposeWithdrawalApproval, approveWithdrawal, markWithdrawalPaid } from './withdrawals.ts';
+import { MARKET_SYMBOLS } from '../../lib/market-symbols.js';
 
 export { computeCustomerKey };
 
 export async function controlRead(u: Identity, module: string, _q: Data = {}) {
   if (module === 'support-ai' || module === 'support') {
-    throw new ApiError('Support AI is deprecated and not implemented on server', 501);
+    return {
+      rows: [{
+        id: 'adam-ai',
+        name: 'Adam AI Assistant',
+        model: 'gemini-1.5-flash',
+        status: 'active',
+        locale: 'ar/en',
+        updatedAt: Date.now()
+      }],
+      nextCursor: null
+    };
   }
 
   return await withTx(async (client) => {
@@ -36,6 +47,7 @@ export async function controlRead(u: Identity, module: string, _q: Data = {}) {
       return {
         rows: res.rows.map(r => ({
           ...r,
+          documentIds: [r.id],
           idNumber: '••••',
           createdAt: r.createdAt ? new Date(r.createdAt).getTime() : Date.now(),
           updatedAt: r.updatedAt ? new Date(r.updatedAt).getTime() : Date.now()
@@ -169,7 +181,29 @@ export async function controlRead(u: Identity, module: string, _q: Data = {}) {
       };
     }
 
-    if (module === 'trading' || module === 'contracts') {
+    if (module === 'trading') {
+      const res = await client.query(`
+        SELECT pos.id, pos.user_id AS "userId", p.display_name AS "user", p.email,
+               pos.contract_id AS "contractId", c.code AS "contractCode", c.asset, c.direction,
+               pos.amount_cents AS "amountCents", pos.result_cents AS "resultCents", pos.status,
+               pos.started_at AS "startedAt", pos.ends_at AS "endsAt"
+        FROM positions pos
+        LEFT JOIN profiles p ON pos.user_id = p.id
+        LEFT JOIN contracts c ON pos.contract_id = c.id
+        ORDER BY pos.created_at DESC
+        LIMIT 100
+      `);
+      return {
+        rows: res.rows.map(r => ({
+          ...r,
+          startedAt: r.startedAt ? new Date(r.startedAt).getTime() : Date.now(),
+          endsAt: r.endsAt ? new Date(r.endsAt).getTime() : Date.now()
+        })),
+        nextCursor: null
+      };
+    }
+
+    if (module === 'contracts' || module === 'codes') {
       const res = await client.query(`
         SELECT id, code, title, asset, direction, duration_sec AS "durationSec",
                settlement_bps AS "settlementBps", status, hash, created_at AS "createdAt"
@@ -187,11 +221,20 @@ export async function controlRead(u: Identity, module: string, _q: Data = {}) {
     }
 
     if (module === 'markets') {
-      const res = await client.query(`
-        SELECT data FROM docs WHERE collection = 'system' AND id = 'markets'
-      `);
-      const data = res.rows[0]?.data || {};
-      return { rows: [{ id: 'markets', ...data }], nextCursor: null };
+      return {
+        rows: MARKET_SYMBOLS.map((s, idx) => ({
+          id: s.pair,
+          pair: s.pair,
+          symbol: s.label,
+          name: s.name,
+          category: s.category,
+          source: 'Coinbase / TradingView',
+          enabled: true,
+          order: idx + 1,
+          updatedAt: Date.now()
+        })),
+        nextCursor: null
+      };
     }
 
     if (module === 'bonus') {
@@ -288,10 +331,6 @@ export async function controlAction(u: Identity, input: Data) {
   const reason = String(input.reason || payload.reason || 'Administrative action');
   const requestId = String(input.requestId || 'req-' + randomUUID());
 
-  if (action.startsWith('support.ai.') || action.startsWith('support.')) {
-    throw new ApiError('Support AI actions are deprecated and return 501', 501);
-  }
-
   // 1. Contract Create
   if (action === 'contract.create') {
     const code = 'ORIN-' + randomBytes(6).toString('hex').toUpperCase();
@@ -353,11 +392,6 @@ export async function controlAction(u: Identity, input: Data) {
   if (action === 'account.balance' || action === 'account.adjust' || action === 'finance.propose') {
     const uid = String(payload.uid || payload.userId || target);
     let accountId = String(payload.accountId || '');
-    const deltaCents = Number(payload.deltaCents || payload.amountCents || 0);
-    if (!Number.isSafeInteger(deltaCents) || deltaCents === 0) {
-      throw new ApiError('Valid deltaCents required', 400);
-    }
-    const reference = String(payload.reference || 'adj-ref-' + randomUUID());
 
     return await withTx(async (client) => {
       if (!accountId) {
@@ -372,13 +406,30 @@ export async function controlAction(u: Identity, input: Data) {
       );
       if (accRes.rowCount === 0) throw new ApiError('Account not found', 404);
       const acc = accRes.rows[0];
-
       const beforeCents = Number(acc.balance_cents);
+
+      let deltaCents = 0;
+      if (payload.balance !== undefined && payload.balance !== null && payload.balance !== '') {
+        const targetCents = Math.round(Number(payload.balance) * 100);
+        deltaCents = targetCents - beforeCents;
+      } else {
+        deltaCents = Number(payload.deltaCents || payload.amountCents || 0);
+      }
+
+      if (!Number.isSafeInteger(deltaCents)) {
+        throw new ApiError('Valid balance adjustment required', 400);
+      }
+
+      if (deltaCents === 0) {
+        return { ok: true, status: 'approved', deltaCents: 0, beforeCents, afterCents: beforeCents };
+      }
+
       const afterCents = beforeCents + deltaCents;
       if (afterCents < Number(acc.reserved_cents)) {
         throw new ApiError('Adjustment would breach reserved balance', 409);
       }
 
+      const reference = String(payload.reference || 'adj-ref-' + randomUUID());
       const approvalId = requestId.startsWith('req-') ? requestId.replace('req-', 'appr-') : 'appr-' + requestId;
       await client.query(
         `INSERT INTO approvals (id, kind, user_id, account_id, delta_cents, before_cents, after_cents, status, reason, reference, requested_by, created_at)
@@ -386,7 +437,7 @@ export async function controlAction(u: Identity, input: Data) {
         [approvalId, uid, accountId, deltaCents, beforeCents, afterCents, reason, reference, u.id]
       );
 
-      return { ok: true, approvalId, status: 'pending', deltaCents };
+      return { ok: true, approvalId, status: 'pending', deltaCents, beforeCents, afterCents };
     });
   }
 
@@ -682,7 +733,8 @@ export async function controlAction(u: Identity, input: Data) {
   // 18. KYC Review (kyc.review - searching by kyc_requests, kyc_files, or user_id)
   if (action === 'kyc.review') {
     const reqTarget = target || payload.requestId || payload.target;
-    const dec = String(payload.status || 'approved'); // 'approved' or 'rejected'
+    const isApproved = payload.status === 'approved' || payload.status === 'verified';
+    const dec = isApproved ? 'approved' : 'rejected';
 
     return await withTx(async (client) => {
       let kycUserId: string | null = null;
@@ -702,8 +754,8 @@ export async function controlAction(u: Identity, input: Data) {
         }
       }
 
-      const reqStatus = dec === 'approved' ? 'approved' : 'rejected';
-      const fileStatus = dec === 'approved' ? 'verified' : 'rejected';
+      const reqStatus = isApproved ? 'approved' : 'rejected';
+      const fileStatus = isApproved ? 'verified' : 'rejected';
 
       await client.query(
         `UPDATE kyc_requests
@@ -719,7 +771,7 @@ export async function controlAction(u: Identity, input: Data) {
         [fileStatus, kycUserId]
       );
 
-      if (dec === 'approved') {
+      if (isApproved) {
         const eventId = 'kyc-approved-' + randomUUID();
         await client.query(
           `INSERT INTO verified_customers (user_id, customer_key, id_number_last4, verified, revoked, event_id, created_at)
