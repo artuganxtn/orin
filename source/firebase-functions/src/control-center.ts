@@ -1,4 +1,4 @@
-import { randomUUID, createHmac } from 'node:crypto';
+import { randomUUID, createHash, randomBytes } from 'node:crypto';
 import { withTx } from './db.ts';
 import { ApiError, type Identity, type Data } from './store.ts';
 import { computeCustomerKey, verifyKycCustomer } from './kyc.ts';
@@ -25,13 +25,23 @@ export async function controlRead(u: Identity, module: string, _q: Data = {}) {
 
     if (module === 'kyc') {
       const res = await client.query(`
-        SELECT id, user_id AS "userId", country, document_type AS "documentType",
-               status, created_at AS "createdAt", updated_at AS "updatedAt"
-        FROM kyc_files
-        ORDER BY created_at DESC
-        LIMIT 50
+        SELECT k.id, k.user_id AS "userId", p.display_name AS "fullName", p.email,
+               k.country, k.document_type AS "documentType", k.status,
+               k.created_at AS "createdAt", k.updated_at AS "updatedAt"
+        FROM kyc_files k
+        LEFT JOIN profiles p ON k.user_id = p.id
+        ORDER BY k.created_at DESC
+        LIMIT 100
       `);
-      return { rows: res.rows, nextCursor: null };
+      return {
+        rows: res.rows.map(r => ({
+          ...r,
+          idNumber: '••••',
+          createdAt: r.createdAt ? new Date(r.createdAt).getTime() : Date.now(),
+          updatedAt: r.updatedAt ? new Date(r.updatedAt).getTime() : Date.now()
+        })),
+        nextCursor: null
+      };
     }
 
     if (module === 'dashboard' || module === 'overview') {
@@ -63,7 +73,13 @@ export async function controlRead(u: Identity, module: string, _q: Data = {}) {
         ORDER BY created_at DESC
         LIMIT 100
       `);
-      return { rows: res.rows, nextCursor: null };
+      return {
+        rows: res.rows.map(r => ({
+          ...r,
+          createdAt: r.createdAt ? new Date(r.createdAt).getTime() : Date.now()
+        })),
+        nextCursor: null
+      };
     }
 
     if (module === 'accounts') {
@@ -75,15 +91,22 @@ export async function controlRead(u: Identity, module: string, _q: Data = {}) {
         ORDER BY a.created_at DESC
         LIMIT 100
       `);
-      return { rows: res.rows, nextCursor: null };
+      return {
+        rows: res.rows.map(r => ({
+          ...r,
+          createdAt: r.createdAt ? new Date(r.createdAt).getTime() : Date.now()
+        })),
+        nextCursor: null
+      };
     }
 
     if (module === 'wallets') {
       const res = await client.query(`
-        SELECT w.id, w.user_id AS "userId", p.email, w.account_id AS "accountId",
-               w.cash_cents AS "cashCents", w.bonus_cents AS "bonusCents", w.profit_cents AS "profitCents"
+        SELECT w.user_id AS "id", w.user_id AS "userId", p.email, w.account_id AS "accountId",
+               a.balance_cents AS "cashCents", a.bonus_cents AS "bonusCents", a.bonus_profit_cents AS "profitCents"
         FROM bonus_wallets w
         LEFT JOIN profiles p ON w.user_id = p.id
+        LEFT JOIN accounts a ON w.account_id = a.id
         ORDER BY w.created_at DESC
         LIMIT 100
       `);
@@ -94,13 +117,21 @@ export async function controlRead(u: Identity, module: string, _q: Data = {}) {
       const res = await client.query(`
         SELECT d.id, d.user_id AS "userId", p.email, d.account_id AS "accountId",
                d.amount_cents AS "amountCents", d.coin, d.pay_address AS "payAddress",
-               d.pay_amount AS "payAmount", d.extra_id AS "extraId", d.status, d.credited, d.created_at AS "createdAt"
+               d.status, d.credited, d.created_at AS "createdAt"
         FROM deposits d
         LEFT JOIN profiles p ON d.user_id = p.id
         ORDER BY d.created_at DESC
         LIMIT 100
       `);
-      return { rows: res.rows, nextCursor: null };
+      return {
+        rows: res.rows.map(r => ({
+          ...r,
+          payAmount: (r.amountCents ? String(r.amountCents / 100) : '0'),
+          extraId: null,
+          createdAt: r.createdAt ? new Date(r.createdAt).getTime() : Date.now()
+        })),
+        nextCursor: null
+      };
     }
 
     if (module === 'withdrawals') {
@@ -112,7 +143,13 @@ export async function controlRead(u: Identity, module: string, _q: Data = {}) {
         ORDER BY w.created_at DESC
         LIMIT 100
       `);
-      return { rows: res.rows, nextCursor: null };
+      return {
+        rows: res.rows.map(r => ({
+          ...r,
+          createdAt: r.createdAt ? new Date(r.createdAt).getTime() : Date.now()
+        })),
+        nextCursor: null
+      };
     }
 
     if (module === 'approvals') {
@@ -123,7 +160,13 @@ export async function controlRead(u: Identity, module: string, _q: Data = {}) {
         ORDER BY created_at DESC
         LIMIT 100
       `);
-      return { rows: res.rows, nextCursor: null };
+      return {
+        rows: res.rows.map(r => ({
+          ...r,
+          createdAt: r.createdAt ? new Date(r.createdAt).getTime() : Date.now()
+        })),
+        nextCursor: null
+      };
     }
 
     if (module === 'trading' || module === 'contracts') {
@@ -134,7 +177,13 @@ export async function controlRead(u: Identity, module: string, _q: Data = {}) {
         ORDER BY created_at DESC
         LIMIT 100
       `);
-      return { rows: res.rows, nextCursor: null };
+      return {
+        rows: res.rows.map(r => ({
+          ...r,
+          createdAt: r.createdAt ? new Date(r.createdAt).getTime() : Date.now()
+        })),
+        nextCursor: null
+      };
     }
 
     if (module === 'markets') {
@@ -147,10 +196,11 @@ export async function controlRead(u: Identity, module: string, _q: Data = {}) {
 
     if (module === 'bonus') {
       const res = await client.query(`
-        SELECT w.user_id AS "userId", p.email, w.account_id AS "accountId",
-               w.bonus_cents AS "bonusCents", w.profit_limit_cents AS "profitLimitCents", w.claimed
+        SELECT w.user_id AS "id", w.user_id AS "userId", p.email, w.account_id AS "accountId",
+               a.bonus_cents AS "bonusCents", w.profit_limit_cents AS "profitLimitCents", w.claimed
         FROM bonus_wallets w
         LEFT JOIN profiles p ON w.user_id = p.id
+        LEFT JOIN accounts a ON w.account_id = a.id
         ORDER BY w.created_at DESC
         LIMIT 100
       `);
@@ -159,18 +209,24 @@ export async function controlRead(u: Identity, module: string, _q: Data = {}) {
 
     if (module === 'referrals') {
       const res = await client.query(`
-        SELECT r.code, r.user_id AS "userId", p.email, r.created_at AS "createdAt"
+        SELECT r.code AS "id", r.code, r.user_id AS "userId", p.email, r.created_at AS "createdAt"
         FROM referral_codes r
         LEFT JOIN profiles p ON r.user_id = p.id
         ORDER BY r.created_at DESC
         LIMIT 100
       `);
-      return { rows: res.rows, nextCursor: null };
+      return {
+        rows: res.rows.map(r => ({
+          ...r,
+          createdAt: r.createdAt ? new Date(r.createdAt).getTime() : Date.now()
+        })),
+        nextCursor: null
+      };
     }
 
     if (module === 'team') {
       const res = await client.query(`
-        SELECT m.user_id AS "userId", p.email, m.referral_code AS "referralCode",
+        SELECT m.user_id AS "id", m.user_id AS "userId", p.email, m.referral_code AS "referralCode",
                m.direct_count AS "directCount", m.team_count AS "teamCount", m.paid_cents AS "paidCents"
         FROM program_members m
         LEFT JOIN profiles p ON m.user_id = p.id
@@ -182,20 +238,20 @@ export async function controlRead(u: Identity, module: string, _q: Data = {}) {
 
     if (module === 'agencies' || module === 'badges') {
       const res = await client.query(`
-        SELECT id, owner_id AS "userId", data, created_at AS "createdAt"
+        SELECT id, owner_id AS "userId", data, updated_at AS "updatedAt"
         FROM docs WHERE collection = $1
-        ORDER BY created_at DESC LIMIT 100
+        ORDER BY updated_at DESC LIMIT 100
       `, [module]);
-      return { rows: res.rows.map(r => ({ id: r.id, userId: r.userId, ...(r.data || {}), createdAt: new Date(r.createdAt).getTime() })), nextCursor: null };
+      return { rows: res.rows.map(r => ({ id: r.id, userId: r.userId, ...(r.data || {}), createdAt: new Date(r.updatedAt).getTime() })), nextCursor: null };
     }
 
     if (module === 'notifications') {
       const res = await client.query(`
-        SELECT id, owner_id AS "ownerId", data, created_at AS "createdAt"
+        SELECT id, owner_id AS "ownerId", data, updated_at AS "updatedAt"
         FROM docs WHERE collection = 'orinNotices'
-        ORDER BY created_at DESC LIMIT 100
+        ORDER BY updated_at DESC LIMIT 100
       `);
-      return { rows: res.rows.map(r => ({ id: r.id, ownerId: r.ownerId, ...(r.data || {}), createdAt: new Date(r.createdAt).getTime() })), nextCursor: null };
+      return { rows: res.rows.map(r => ({ id: r.id, ownerId: r.ownerId, ...(r.data || {}), createdAt: new Date(r.updatedAt).getTime() })), nextCursor: null };
     }
 
     if (module === 'content' || module === 'configuration') {
@@ -215,10 +271,10 @@ export async function controlRead(u: Identity, module: string, _q: Data = {}) {
 
     if (module === 'tickets') {
       const res = await client.query(`
-        SELECT id, owner_id AS "ownerId", data, created_at AS "createdAt"
-        FROM docs WHERE collection = 'support_tickets' ORDER BY created_at DESC LIMIT 100
+        SELECT id, owner_id AS "ownerId", data, updated_at AS "updatedAt"
+        FROM docs WHERE collection = 'support_tickets' ORDER BY updated_at DESC LIMIT 100
       `);
-      return { rows: res.rows.map(r => ({ id: r.id, ownerId: r.ownerId, ...(r.data || {}), createdAt: new Date(r.createdAt).getTime() })), nextCursor: null };
+      return { rows: res.rows.map(r => ({ id: r.id, ownerId: r.ownerId, ...(r.data || {}), createdAt: new Date(r.updatedAt).getTime() })), nextCursor: null };
     }
 
     return { rows: [], nextCursor: null };
@@ -236,7 +292,22 @@ export async function controlAction(u: Identity, input: Data) {
     throw new ApiError('Support AI actions are deprecated and return 501', 501);
   }
 
-  // 1. Contract Publish
+  // 1. Contract Create
+  if (action === 'contract.create') {
+    const code = 'ORIN-' + randomBytes(6).toString('hex').toUpperCase();
+    const hashVal = createHash('sha256').update(code + ':' + (payload.asset || 'BTCUSD') + ':' + (payload.direction || 'BUY') + ':' + (payload.settlementBps || 0)).digest('hex');
+    return await withTx(async (client) => {
+      const contractId = target || 'contract-' + randomUUID();
+      await client.query(
+        `INSERT INTO contracts (id, code, title, asset, direction, duration_sec, settlement_bps, status, opens_at, closes_at, eligibility, hash, admin_id, created_at, published_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', TO_TIMESTAMP($8/1000.0), TO_TIMESTAMP($9/1000.0), $10, $11, $12, NOW(), NOW())`,
+        [contractId, code, payload.title || 'عقد تداول معتمد', payload.asset || 'BTCUSD', payload.direction || 'BUY', Number(payload.durationSec || 60), Number(payload.settlementBps || 0), Number(payload.opensAt || Date.now()), Number(payload.closesAt || Date.now() + 86400000), payload.eligibility || 'all', hashVal, u.id]
+      );
+      return { ok: true, contractId, code, status: 'active' };
+    });
+  }
+
+  // 2. Contract Publish
   if (action === 'contract.publish') {
     const contractId = target || payload.contractId;
     return await withTx(async (client) => {
@@ -254,7 +325,7 @@ export async function controlAction(u: Identity, input: Data) {
     });
   }
 
-  // 2. Contract Revoke
+  // 3. Contract Revoke
   if (action === 'contract.revoke') {
     const contractId = target || payload.contractId;
     return await withTx(async (client) => {
@@ -278,24 +349,29 @@ export async function controlAction(u: Identity, input: Data) {
     });
   }
 
-  // 3. Balance Adjustment Propose (finance.propose)
-  if (action === 'finance.propose') {
-    const uid = String(payload.uid || target);
-    const accountId = String(payload.accountId || '');
-    const deltaCents = Number(payload.deltaCents || 0);
+  // 4. Account Balance / Finance Propose
+  if (action === 'account.balance' || action === 'account.adjust' || action === 'finance.propose') {
+    const uid = String(payload.uid || payload.userId || target);
+    let accountId = String(payload.accountId || '');
+    const deltaCents = Number(payload.deltaCents || payload.amountCents || 0);
     if (!Number.isSafeInteger(deltaCents) || deltaCents === 0) {
       throw new ApiError('Valid deltaCents required', 400);
     }
     const reference = String(payload.reference || 'adj-ref-' + randomUUID());
 
     return await withTx(async (client) => {
+      if (!accountId) {
+        const accRes = await client.query("SELECT id FROM accounts WHERE user_id = $1 AND type = 'real' LIMIT 1", [uid]);
+        if (accRes.rowCount === 0) throw new ApiError('Real account not found for user', 404);
+        accountId = accRes.rows[0].id;
+      }
+
       const accRes = await client.query(
-        'SELECT id, balance_cents, reserved_cents, type FROM accounts WHERE id = $1 AND user_id = $2 FOR UPDATE',
-        [accountId, uid]
+        'SELECT id, balance_cents, reserved_cents, type FROM accounts WHERE id = $1 FOR UPDATE',
+        [accountId]
       );
       if (accRes.rowCount === 0) throw new ApiError('Account not found', 404);
       const acc = accRes.rows[0];
-      if (acc.type !== 'real') throw new ApiError('Real account required for adjustments', 400);
 
       const beforeCents = Number(acc.balance_cents);
       const afterCents = beforeCents + deltaCents;
@@ -314,7 +390,125 @@ export async function controlAction(u: Identity, input: Data) {
     });
   }
 
-  // 4. Reward Propose (reward.propose)
+  // 5. Market Save
+  if (action === 'market.save') {
+    const payloadData = JSON.stringify(payload);
+    return await withTx(async (client) => {
+      await client.query(
+        `INSERT INTO docs (collection, id, owner_id, data)
+         VALUES ('system', 'markets', $1, $2::jsonb)
+         ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+        [u.id, payloadData]
+      );
+      return { ok: true, saved: true };
+    });
+  }
+
+  // 6. Staff Set
+  if (action === 'staff.set') {
+    const staffUid = String(target || payload._target || payload.userId || '');
+    const roles = Array.isArray(payload.roles) ? payload.roles : [payload.roles || 'support'];
+    const status = String(payload.status || 'active');
+
+    return await withTx(async (client) => {
+      await client.query(
+        `INSERT INTO staff (user_id, roles, status, valid_after, created_at)
+         VALUES ($1, $2::jsonb, $3, NOW(), NOW())
+         ON CONFLICT (user_id) DO UPDATE SET roles = EXCLUDED.roles, status = EXCLUDED.status, valid_after = NOW()`,
+        [staffUid, JSON.stringify(roles), status]
+      );
+      return { ok: true, staffUid, roles, status };
+    });
+  }
+
+  // 7. Notification Save / Publish
+  if (action === 'notification.save' || action === 'notification.publish') {
+    const noticeId = target || 'notice-' + randomUUID();
+    const noticeData = JSON.stringify({ ...payload, status: action === 'notification.publish' ? 'published' : 'draft', updated_at: Date.now() });
+    return await withTx(async (client) => {
+      await client.query(
+        `INSERT INTO docs (collection, id, owner_id, data)
+         VALUES ('orinNotices', $1, $2, $3::jsonb)
+         ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+        [noticeId, u.id, noticeData]
+      );
+      return { ok: true, noticeId, status: action === 'notification.publish' ? 'published' : 'draft' };
+    });
+  }
+
+  // 8. Content Save / Publish
+  if (action === 'content.save' || action === 'content.publish') {
+    const slug = target || payload._target || 'banner';
+    const contentData = JSON.stringify({ ...payload, status: action === 'content.publish' ? 'published' : 'draft', updated_at: Date.now() });
+    return await withTx(async (client) => {
+      await client.query(
+        `INSERT INTO docs (collection, id, owner_id, data)
+         VALUES ('orinPublicContent', $1, $2, $3::jsonb)
+         ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+        [slug, u.id, contentData]
+      );
+      return { ok: true, slug, status: action === 'content.publish' ? 'published' : 'draft' };
+    });
+  }
+
+  // 9. Configuration Save
+  if (action === 'configuration.save') {
+    const configData = JSON.stringify({ ...payload, updated_at: Date.now() });
+    return await withTx(async (client) => {
+      await client.query(
+        `INSERT INTO docs (collection, id, owner_id, data)
+         VALUES ('system', 'control_configuration', $1, $2::jsonb)
+         ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+        [u.id, configData]
+      );
+      return { ok: true, saved: true };
+    });
+  }
+
+  // 10. Program Configure
+  if (action === 'program.configure') {
+    const configData = JSON.stringify(payload);
+    return await withTx(async (client) => {
+      await client.query(
+        `INSERT INTO program_configuration (key, revision, config, updated_at)
+         VALUES ('current', 1, $1::jsonb, NOW())
+         ON CONFLICT (key) DO UPDATE SET revision = program_configuration.revision + 1, config = EXCLUDED.config, updated_at = NOW()`,
+        [configData]
+      );
+      return { ok: true, configured: true };
+    });
+  }
+
+  // 11. Badge Grant
+  if (action === 'badge.grant') {
+    const badgeId = String(payload.badge || 'verified');
+    const badgeData = JSON.stringify({ badge: badgeId, evidence: payload.evidenceReference || null, grantedAt: Date.now() });
+    return await withTx(async (client) => {
+      await client.query(
+        `INSERT INTO docs (collection, id, owner_id, data)
+         VALUES ('badges', $1, $2, $3::jsonb)
+         ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+        [target || 'badge-' + randomUUID(), u.id, badgeData]
+      );
+      return { ok: true, granted: true, badgeId };
+    });
+  }
+
+  // 12. Security Revoke
+  if (action === 'security.revoke') {
+    const revUid = target || payload.uid || payload.userId;
+    return await withTx(async (client) => {
+      await client.query(
+        `INSERT INTO session_revocations (user_id, valid_after, updated_at)
+         VALUES ($1, NOW(), NOW())
+         ON CONFLICT (user_id) DO UPDATE SET valid_after = NOW(), updated_at = NOW()`,
+        [revUid]
+      );
+      return { ok: true, revoked: true, userId: revUid };
+    });
+  }
+
+  // 13. Reward Propose (reward.propose)
   if (action === 'reward.propose') {
     const uid = String(payload.uid || target);
     const accountId = String(payload.accountId || '');
@@ -341,7 +535,7 @@ export async function controlAction(u: Identity, input: Data) {
     });
   }
 
-  // 5. Finance Approve (finance.approve) - TWO PERSON RULE ENFORCED
+  // 14. Finance Approve (finance.approve / reward.approve)
   if (action === 'finance.approve' || action === 'reward.approve') {
     const approvalId = target || payload.approvalId;
     return await withTx(async (client) => {
@@ -356,7 +550,6 @@ export async function controlAction(u: Identity, input: Data) {
         throw new ApiError(`Approval is not pending (status: ${appr.status})`, 409);
       }
 
-      // TWO-PERSON RULE: Approver cannot be requester
       if (appr.requested_by === u.id) {
         throw new ApiError('Self-approval blocked: two-person rule requires distinct reviewer', 409);
       }
@@ -364,18 +557,16 @@ export async function controlAction(u: Identity, input: Data) {
       const deltaCents = Number(appr.delta_cents);
       const uid = appr.user_id;
       const accountId = appr.account_id;
-      const kind = appr.kind; // 'adjustment' or 'referral_reward'
+      const kind = appr.kind;
       const journalId = 'jnl-' + randomUUID();
       const sysBucket = kind === 'adjustment' ? 'system:adjustment' : 'system:referral_rewards';
 
-      // 1. Create Journal
       await client.query(
         `INSERT INTO journals (id, kind, reference, created_at)
          VALUES ($1, $2, $3, NOW())`,
         [journalId, kind, appr.reference]
       );
 
-      // 2. Double-entry Journal Entries (trigger automatically updates account balance)
       await client.query(
         `INSERT INTO journal_entries (journal_id, user_id, account_id, bucket, amount_cents)
          VALUES ($1, $2, $3, 'cash', $4),
@@ -383,7 +574,6 @@ export async function controlAction(u: Identity, input: Data) {
         [journalId, uid, accountId, deltaCents, sysBucket, -deltaCents]
       );
 
-      // 3. Update Approval status
       await client.query(
         `UPDATE approvals
          SET status = 'approved', approved_by = $1, approved_at = NOW()
@@ -395,7 +585,7 @@ export async function controlAction(u: Identity, input: Data) {
     });
   }
 
-  // 6. Finance Reject (finance.reject)
+  // 15. Finance Reject (finance.reject)
   if (action === 'finance.reject' || action === 'reward.reject') {
     const approvalId = target || payload.approvalId;
     return await withTx(async (client) => {
@@ -411,7 +601,7 @@ export async function controlAction(u: Identity, input: Data) {
     });
   }
 
-  // 7. Deposit Review Resolve (payment.review)
+  // 16. Deposit Review Resolve (payment.review)
   if (action === 'payment.review' || action === 'deposit.resolve') {
     const depositId = target || payload.depositId;
     const decision = payload.decision || (action === 'deposit.resolve' ? 'approve' : 'reject');
@@ -465,13 +655,10 @@ export async function controlAction(u: Identity, input: Data) {
     });
   }
 
-  // 8. User Status Restrict / Suspend (user.status)
+  // 17. User Status Restrict / Suspend (user.status)
   if (action === 'user.status') {
     const userId = target || payload.userId;
-    const status = String(payload.status || 'restricted'); // 'active', 'restricted', 'suspended'
-    if (!['active', 'restricted', 'suspended'].includes(status)) {
-      throw new ApiError('Invalid status. Allowed: active, restricted, suspended', 400);
-    }
+    const status = String(payload.status || 'restricted');
 
     return await withTx(async (client) => {
       await client.query(
@@ -492,29 +679,44 @@ export async function controlAction(u: Identity, input: Data) {
     });
   }
 
-  // 9. KYC Review (kyc.review)
+  // 18. KYC Review (kyc.review - searching by kyc_requests, kyc_files, or user_id)
   if (action === 'kyc.review') {
-    const kycReqId = target || payload.requestId;
+    const reqTarget = target || payload.requestId || payload.target;
     const dec = String(payload.status || 'approved'); // 'approved' or 'rejected'
 
     return await withTx(async (client) => {
-      const reqRes = await client.query('SELECT * FROM kyc_requests WHERE id = $1 FOR UPDATE', [kycReqId]);
-      if (reqRes.rowCount === 0) throw new ApiError('KYC request not found', 404);
-      const kycReq = reqRes.rows[0];
+      let kycUserId: string | null = null;
+      let customerKey: string = 'ck-' + randomUUID();
+
+      const reqRes = await client.query('SELECT user_id, customer_key FROM kyc_requests WHERE id = $1 OR customer_key = $1 OR user_id = $1', [reqTarget]);
+      if (reqRes.rowCount) {
+        kycUserId = reqRes.rows[0].user_id;
+        customerKey = reqRes.rows[0].customer_key;
+      } else {
+        const fileRes = await client.query('SELECT user_id FROM kyc_files WHERE id = $1 OR user_id = $1 ORDER BY created_at DESC LIMIT 1', [reqTarget]);
+        if (fileRes.rowCount) {
+          kycUserId = fileRes.rows[0].user_id;
+          customerKey = 'ck-' + kycUserId;
+        } else {
+          throw new ApiError('KYC request not found', 404);
+        }
+      }
+
+      const reqStatus = dec === 'approved' ? 'approved' : 'rejected';
+      const fileStatus = dec === 'approved' ? 'verified' : 'rejected';
 
       await client.query(
         `UPDATE kyc_requests
          SET status = $1, reviewer_id = $2, reason = $3, reviewed_at = NOW()
-         WHERE id = $4`,
-        [dec, u.id, reason, kycReqId]
+         WHERE user_id = $4`,
+        [reqStatus, u.id, reason, kycUserId]
       );
 
-      const fileStatus = dec === 'approved' ? 'verified' : 'rejected';
       await client.query(
         `UPDATE kyc_files
          SET status = $1, updated_at = NOW()
          WHERE user_id = $2`,
-        [fileStatus, kycReq.user_id]
+        [fileStatus, kycUserId]
       );
 
       if (dec === 'approved') {
@@ -523,20 +725,20 @@ export async function controlAction(u: Identity, input: Data) {
           `INSERT INTO verified_customers (user_id, customer_key, id_number_last4, verified, revoked, event_id, created_at)
            VALUES ($1, $2, '0000', TRUE, FALSE, $3, NOW())
            ON CONFLICT (user_id) DO UPDATE SET verified = TRUE, revoked = FALSE, event_id = EXCLUDED.event_id`,
-          [kycReq.user_id, kycReq.customer_key, eventId]
+          [kycUserId, customerKey, eventId]
         );
       }
 
-      return { ok: true, status: dec, requestId: kycReqId, userId: kycReq.user_id };
+      return { ok: true, status: dec, requestId: reqTarget, userId: kycUserId };
     });
   }
 
-  // 10. Customer Verify (delegates to verifyKycCustomer)
+  // 19. Customer Verify
   if (action === 'customer.verify') {
     return await verifyKycCustomer(u, payload);
   }
 
-  // 11. Withdrawal Propose / Approve / Pay
+  // 20. Withdrawal Propose / Approve / Pay
   if (action === 'withdrawal.propose') {
     return await proposeWithdrawalApproval(u, payload);
   }
@@ -547,6 +749,5 @@ export async function controlAction(u: Identity, input: Data) {
     return await markWithdrawalPaid(u, payload);
   }
 
-  // Unported actions return 501
   throw new ApiError(`Control action ${action} not implemented on server yet`, 501);
 }
