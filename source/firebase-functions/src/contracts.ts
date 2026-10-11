@@ -1,5 +1,6 @@
 import { withTx, pool } from './db.ts';
 import { createHash } from 'node:crypto';
+import { getTradingAccounts } from './client-services.ts';
 
 export interface Identity {
   id: string;
@@ -360,6 +361,10 @@ export async function state(u: Identity, now = Date.now()) {
     );
 
     const user = profRes.rows[0] ?? { id: u.id, display_name: '', tier: 'standard' };
+    const isAdmin = u.role === 'admin' || user.role === 'admin';
+    const seenAt = user.preferences?.seen_at ? Number(user.preferences.seen_at) : (user.updated_at ? new Date(user.updated_at).getTime() : 0);
+    const acceptedAt = user.accepted_at ? new Date(user.accepted_at).getTime() : null;
+
     const acc = accRes.rows[0] ?? {
       balance_cents: '0',
       reserved_cents: '0',
@@ -369,13 +374,166 @@ export async function state(u: Identity, now = Date.now()) {
       bonus_profit_cents: '0',
     };
 
+    let accountDirectory = null;
+    try {
+      accountDirectory = await getTradingAccounts(u, client);
+    } catch {
+      accountDirectory = { accounts: [], activeId: '' };
+    }
+
+    const contracts = cntRes.rows.map(c => ({
+      id: c.id,
+      code: c.code,
+      title: c.title,
+      asset: c.asset,
+      direction: c.direction,
+      duration_sec: Number(c.duration_sec),
+      durationSec: Number(c.duration_sec),
+      settlement_bps: Number(c.settlement_bps),
+      settlementBps: Number(c.settlement_bps),
+      eligibility: c.eligibility,
+      canonical: c.canonical || '',
+      opens_at: c.opens_at ? new Date(c.opens_at).getTime() : 0,
+      opensAt: c.opens_at ? new Date(c.opens_at).getTime() : 0,
+      closes_at: c.closes_at ? new Date(c.closes_at).getTime() : 0,
+      closesAt: c.closes_at ? new Date(c.closes_at).getTime() : 0,
+      published_at: c.published_at ? new Date(c.published_at).getTime() : (c.created_at ? new Date(c.created_at).getTime() : 0),
+      publishedAt: c.published_at ? new Date(c.published_at).getTime() : (c.created_at ? new Date(c.created_at).getTime() : 0),
+      admin_id: c.admin_id || '',
+      hash: c.hash || '',
+      participants: 0
+    }));
+    const contractMap = new Map(contracts.map(c => [c.id, c]));
+
+    const positions = posRes.rows.map(p => {
+      let contract = contractMap.get(p.contract_id);
+      if (!contract) {
+        contract = {
+          id: p.contract_id,
+          code: '',
+          title: '',
+          asset: 'XAUUSD',
+          direction: 'BUY',
+          duration_sec: 60,
+          durationSec: 60,
+          settlement_bps: 0,
+          settlementBps: 0,
+          eligibility: 'all',
+          canonical: '',
+          opens_at: 0,
+          opensAt: 0,
+          closes_at: 0,
+          closesAt: 0,
+          published_at: 0,
+          publishedAt: 0,
+          admin_id: '',
+          hash: '',
+          participants: 0
+        };
+      }
+      return {
+        id: p.id,
+        user_id: p.user_id,
+        userId: p.user_id,
+        contract_id: p.contract_id,
+        contractId: p.contract_id,
+        account_id: p.account_id,
+        accountId: p.account_id,
+        amount_cents: Number(p.amount_cents),
+        amountCents: Number(p.amount_cents),
+        result_cents: Number(p.result_cents),
+        resultCents: Number(p.result_cents),
+        is_bonus: Boolean(p.is_bonus),
+        isBonus: Boolean(p.is_bonus),
+        status: p.status,
+        started_at: p.started_at ? new Date(p.started_at).getTime() : 0,
+        startedAt: p.started_at ? new Date(p.started_at).getTime() : 0,
+        ends_at: p.ends_at ? new Date(p.ends_at).getTime() : 0,
+        endsAt: p.ends_at ? new Date(p.ends_at).getTime() : 0,
+        settled_at: p.settled_at ? new Date(p.settled_at).getTime() : null,
+        settledAt: p.settled_at ? new Date(p.settled_at).getTime() : null,
+        contract
+      };
+    });
+
+    let notifications: any[] = [];
+    try {
+      const noticeRows = await client.query(
+        `SELECT id, data, updated_at FROM docs
+         WHERE collection = 'orinNotices'
+           AND (owner_id = $1 OR owner_id IS NULL OR data->>'user_id' = $1 OR data->>'user_id' = '*')
+         ORDER BY updated_at DESC LIMIT 50`,
+        [u.id]
+      );
+      notifications = noticeRows.rows.map(r => ({
+        id: r.id,
+        title: r.data?.title || '',
+        message: r.data?.message || r.data?.body || '',
+        contract_id: r.data?.contract_id || null,
+        created_at: r.data?.created_at || (r.updated_at ? new Date(r.updated_at).getTime() : now)
+      }));
+    } catch {
+      notifications = [];
+    }
+
+    const receipts = recRes.rows.map(r => ({
+      id: r.id,
+      position_id: r.position_id,
+      positionId: r.position_id,
+      user_id: r.user_id,
+      userId: r.user_id,
+      payload: typeof r.payload === 'string' ? r.payload : JSON.stringify(r.payload),
+      hash: r.hash,
+      created_at: r.created_at ? new Date(r.created_at).getTime() : 0,
+      createdAt: r.created_at ? new Date(r.created_at).getTime() : 0
+    }));
+
+    const ledger = jrnRes.rows.map(je => ({
+      id: String(je.id),
+      journal_id: je.journal_id,
+      journalId: je.journal_id,
+      account_id: je.account_id,
+      accountId: je.account_id,
+      account: je.bucket,
+      bucket: je.bucket,
+      amount_cents: Number(je.amount_cents),
+      amountCents: Number(je.amount_cents),
+      kind: je.kind,
+      effective_at: je.created_at ? new Date(je.created_at).getTime() : 0,
+      effectiveAt: je.created_at ? new Date(je.created_at).getTime() : 0
+    }));
+
+    let audit: any[] = [];
+    if (isAdmin) {
+      try {
+        const audRes = await client.query(`SELECT * FROM audit ORDER BY created_at DESC LIMIT 100`);
+        audit = audRes.rows.map(a => ({
+          id: String(a.id),
+          actor_id: a.actor_id,
+          action: a.action,
+          reference: a.reference,
+          payload: typeof a.payload === 'string' ? a.payload : JSON.stringify(a.payload),
+          payload_hash: a.payload_hash,
+          created_at: a.created_at ? new Date(a.created_at).getTime() : 0
+        }));
+      } catch {
+        audit = [];
+      }
+    }
+
     return {
       serverTime: now,
       user: {
         id: u.id,
-        name: user.display_name,
-        tier: user.tier,
+        name: user.display_name || 'مستخدم ORIN',
+        tier: user.tier || 'standard',
+        accepted_at: acceptedAt,
+        acceptedAt,
+        seen_at: seenAt,
+        seenAt
       },
+      isAdmin,
+      accountDirectory,
       balanceCents: Number(acc.balance_cents),
       reservedCents: Number(acc.reserved_cents),
       realizedCents: Number(acc.realized_cents),
@@ -385,10 +543,12 @@ export async function state(u: Identity, now = Date.now()) {
       bonus_cents: Number(acc.bonus_cents),
       bonus_reserved_cents: Number(acc.bonus_reserved_cents),
       bonus_profit_cents: Number(acc.bonus_profit_cents),
-      contracts: cntRes.rows,
-      positions: posRes.rows,
-      receipts: recRes.rows,
-      ledger: jrnRes.rows,
+      contracts,
+      positions,
+      notifications,
+      receipts,
+      ledger,
+      audit,
     };
   } finally {
     client.release();
@@ -410,10 +570,10 @@ export async function revokeContract(u: Identity, contractId: string, reason?: s
 export async function action(u: Identity, input: any, now = Date.now()) {
   const act = input?.action;
   const effectiveNow = input?.now || now;
+  let result: any = { ok: true };
   if (act === 'publish') {
-    return await publish(u, input.contract || input, effectiveNow);
-  }
-  if (act === 'join') {
+    result = await publish(u, input.contract || input, effectiveNow);
+  } else if (act === 'join') {
     const joinInput = {
       code: input.code || input.contractCode || input.contractId,
       amountCents: input.amountCents,
@@ -421,15 +581,31 @@ export async function action(u: Identity, input: any, now = Date.now()) {
       contractHash: input.contractHash,
       useBonus: input.useBonus
     };
-    return await join(u, joinInput, effectiveNow);
+    result = await join(u, joinInput, effectiveNow);
+  } else if (act === 'settle') {
+    result = await settle(u, effectiveNow);
+  } else if (act === 'revoke') {
+    result = await revokeContract(u, input.contractId, input.reason, effectiveNow);
+  } else if (act === 'accept') {
+    await withTx(async (client) => {
+      await client.query(`UPDATE profiles SET accepted_at = NOW() WHERE id = $1`, [u.id]);
+    });
+    result = { ok: true, accepted: true };
+  } else if (act === 'read') {
+    await withTx(async (client) => {
+      await client.query(
+        `UPDATE profiles
+         SET preferences = jsonb_set(COALESCE(preferences, '{}'::jsonb), '{seen_at}', to_jsonb($2::bigint))
+         WHERE id = $1`,
+        [u.id, effectiveNow]
+      );
+    });
+    result = { ok: true, seen_at: effectiveNow };
+  } else {
+    throw new ApiError(`Unsupported contract action: ${act}`, 400);
   }
-  if (act === 'settle') {
-    return await settle(u, effectiveNow);
-  }
-  if (act === 'revoke') {
-    return await revokeContract(u, input.contractId, input.reason, effectiveNow);
-  }
-  throw new ApiError(`Unsupported contract action: ${act}`, 400);
+  const currentState = await state(u, effectiveNow);
+  return { ...result, result, state: currentState };
 }
 
 export async function verify(u: Identity, code: string) {

@@ -10,8 +10,10 @@ let runtime:Runtime|null=null,session:SecuritySession|null=null,refreshing:Promi
 const SESSION_KEY='orin-security-session-v1';
 export class AccountSecurityError extends Error{constructor(public code:string,message:string,public status=503){super(message);this.name='AccountSecurityError'}}
 function isValidSecurityEndpoint(base:string){
+ if(!base || base==='') return true;
  if(/^https:\/\/europe-west1-orin-99951\.cloudfunctions\.net\/orinSecurity$/.test(base))return true;
  if(/^https:\/\/[a-z0-9-]+\.onrender\.com(\/.*)?$/i.test(base))return true;
+ if(base==='https://orin-trader.top'||base.startsWith('https://orin-trader.top/'))return true;
  if(typeof import.meta!=='undefined'&&(import.meta as any).env?.VITE_ORIN_SECURITY_API_URL===base)return true;
  if(typeof import.meta!=='undefined'&&(import.meta as any).env?.DEV&&/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?\//.test(base))return true;
  return false;

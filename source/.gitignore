@@ -66,3 +66,10 @@ firebase-spark/*debug.log
 /android-app/signing/
 
 /firebase-app/*-test.mjs
+
+.pgdata
+*.apk
+*.jks
+*.p12
+store-password.txt
+

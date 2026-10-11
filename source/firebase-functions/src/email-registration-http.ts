@@ -108,6 +108,7 @@ export async function identityHandle(req: any, res: any) {
     const service = emailRegistration(authClient as any, pepperVal, async ({ to, code, challengeId }) => {
       if (process.env.NODE_ENV === 'test') {
         lastTestOtp = { email: to, code, challengeId };
+        (globalThis as any).__lastTestOtp = lastTestOtp;
         return;
       }
       try {

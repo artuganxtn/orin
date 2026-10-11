@@ -95,15 +95,12 @@ def main():
     password = signing / "store-password.txt"
     keystore = signing / "orin-release.p12"
 
-    if keystore.is_file() and password.is_file():
-        ks_path = keystore
-        ks_pass = "file:" + str(password)
-        ks_alias = "orin"
-    else:
-        print("Release keystore not found. Falling back to debug.keystore.")
-        ks_path = Path(r"C:\Users\dipnr\.android\debug.keystore")
-        ks_pass = "pass:android"
-        ks_alias = "androiddebugkey"
+    if not keystore.is_file() or not password.is_file():
+        raise SystemExit("[FATAL] Release keystore or password missing. Refusing to build or sign with debug key.")
+
+    ks_path = keystore
+    ks_pass = "file:" + str(password)
+    ks_alias = "orin"
 
     run(JAVA, "-jar", TOOLS / "lib/apksigner.jar", "sign", "--ks", ks_path,
         "--ks-key-alias", ks_alias, "--ks-pass", ks_pass,

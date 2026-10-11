@@ -6,6 +6,7 @@ function isValidPaymentsEndpoint(base:string){
  if(!base || base==='') return true;
  if(base==='https://europe-west1-orin-99951.cloudfunctions.net/orinPayments')return true;
  if(/^https:\/\/[a-z0-9-]+\.onrender\.com(\/.*)?$/i.test(base))return true;
+ if(base==='https://orin-trader.top'||base.startsWith('https://orin-trader.top/'))return true;
  if(typeof import.meta!=='undefined'&&(import.meta as any).env?.VITE_ORIN_PAYMENTS_API_URL===base)return true;
  return false;
 }

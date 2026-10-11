@@ -2,6 +2,7 @@ import express, { type Request, type Response } from 'express';
 import cors from 'cors';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { createHash, randomUUID } from 'node:crypto';
 import { authMiddleware } from './auth-middleware.ts';
 import { paymentsHandle } from './payments-http.ts';
 import { programSummary, programAction, adminPrograms, accountActivity } from './programs.ts';
@@ -499,53 +500,144 @@ api.get('/admin/kyc/files/:id', async (req: Request, res: Response) => {
 
 // Experience routes
 api.get('/experience/configuration', async (_req: Request, res: Response) => {
-  res.json({
-    configuration: {
-      maintenance: false,
-      messageAr: 'نعمل على تحسين ORIN. حاول بعد قليل.',
-      messageEn: 'ORIN is being updated. Please try again shortly.',
-      welcomeAr: '',
-      welcomeEn: '',
-      supportEmail: ''
-    },
-    revision: 1
-  });
+  try {
+    const result = await withTx(async (client) => {
+      const docRes = await client.query("SELECT data FROM docs WHERE collection = 'system' AND id = 'experience_configuration'");
+      if (docRes.rowCount && docRes.rows[0].data) {
+        return docRes.rows[0].data;
+      }
+      return {
+        configuration: {
+          maintenance: false,
+          messageAr: 'نعمل على تحسين ORIN. حاول بعد قليل.',
+          messageEn: 'ORIN is being updated. Please try again shortly.',
+          welcomeAr: '',
+          welcomeEn: '',
+          supportEmail: ''
+        },
+        revision: 1
+      };
+    });
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 api.patch('/experience/configuration', async (req: Request, res: Response) => {
   if (req.user?.role !== 'admin') return res.status(403).json({ error: 'صلاحية الإدارة مطلوبة.' });
-  res.json({ configuration: req.body?.configuration, revision: (req.body?.revision || 0) + 1 });
+  const config = req.body?.configuration;
+  if (!config || typeof config !== 'object') return res.status(400).json({ error: 'إعدادات غير صالحة.' });
+  try {
+    const nextRevision = (Number(req.body?.revision) || 0) + 1;
+    const payloadData = { configuration: config, revision: nextRevision };
+    await withTx(async (client) => {
+      await client.query(
+        `INSERT INTO docs (collection, id, data, updated_at)
+         VALUES ('system', 'experience_configuration', $1::jsonb, NOW())
+         ON CONFLICT (collection, id)
+         DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+        [JSON.stringify(payloadData)]
+      );
+
+      const auditPayload = JSON.stringify({ actorId: req.user!.id, action: 'experience_configuration_updated', revision: nextRevision });
+      const auditHash = createHash('sha256').update(auditPayload).digest('hex');
+      const refId = 'exp-cfg-' + Date.now() + '-' + randomUUID().slice(0, 8);
+      await client.query(
+        `INSERT INTO audit (actor_id, action, reference, payload, payload_hash)
+         VALUES ($1, 'experience_configuration_updated', $2, $3::jsonb, $4)`,
+        [req.user!.id, refId, auditPayload, auditHash]
+      );
+    });
+    res.json(payloadData);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 api.get('/experience/profile', async (req: Request, res: Response) => {
-  res.json({
-    photo: '',
-    createdAt: Date.now(),
-    deletionRequested: false,
-    emailVerified: true
-  });
+  try {
+    const result = await withTx(async (client) => {
+      const pRes = await client.query('SELECT profile, created_at FROM profiles WHERE id = $1', [req.user!.id]);
+      if (pRes.rowCount === 0) throw new Error('Profile not found');
+      const row = pRes.rows[0];
+      const docRes = await client.query("SELECT data FROM docs WHERE collection = 'avatars' AND id = $1", [req.user!.id]);
+      const avatarData = docRes.rows[0]?.data;
+      return {
+        photo: avatarData?.photo || '',
+        createdAt: new Date(row.created_at).getTime(),
+        deletionRequested: row.profile?.closureStatus === 'requested',
+        emailVerified: req.user!.verified
+      };
+    });
+    res.json(result);
+  } catch (err: any) {
+    res.status(404).json({ error: err.message });
+  }
 });
 
 api.post('/experience/avatar', async (req: Request, res: Response) => {
-  res.json({ photo: req.body?.photo || '' });
+  const photo = String(req.body?.photo || '');
+  if (photo.length > 60000) return res.status(400).json({ error: 'اختر صورة صالحة بحجم صغير.' });
+  try {
+    await withTx(async (client) => {
+      await client.query(
+        `INSERT INTO docs (collection, id, data, updated_at)
+         VALUES ('avatars', $1, jsonb_build_object('photo', $2::text, 'updatedAt', extract(epoch from now())*1000), NOW())
+         ON CONFLICT (collection, id)
+         DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+        [req.user!.id, photo]
+      );
+    });
+    res.json({ photo });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 api.post('/experience/deletion-request', async (req: Request, res: Response) => {
-  res.json({ requested: true });
+  if (req.body?.confirmed !== true) return res.status(400).json({ error: 'أكّد الطلب أولًا.' });
+  try {
+    await withTx(async (client) => {
+      await client.query(
+        `UPDATE profiles
+         SET profile = jsonb_set(COALESCE(profile, '{}'::jsonb), '{closureStatus}', '"requested"'),
+             updated_at = NOW()
+         WHERE id = $1`,
+        [req.user!.id]
+      );
+
+      const auditPayload = JSON.stringify({ uid: req.user!.id, action: 'account_deletion_requested', timestamp: Date.now() });
+      const auditHash = createHash('sha256').update(auditPayload).digest('hex');
+      const refId = req.user!.id + '-del-' + Date.now();
+      await client.query(
+        `INSERT INTO audit (actor_id, action, reference, payload, payload_hash)
+         VALUES ($1, 'account_deletion_requested', $2, $3::jsonb, $4)`,
+        [req.user!.id, refId, auditPayload, auditHash]
+      );
+    });
+    res.json({ requested: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 api.get('/experience/admin/users', async (req: Request, res: Response) => {
   if (req.user?.role !== 'admin') return res.status(403).json({ error: 'صلاحية الإدارة مطلوبة.' });
-  const users = await withTx(async (client) => {
-    const qRes = await client.query(
-      `SELECT id as uid, email, display_name as "displayName", role, disabled, created_at as "createdAt"
-       FROM profiles
-       ORDER BY created_at DESC
-       LIMIT 100`
-    );
-    return qRes.rows.map(r => ({ ...r, createdAt: new Date(r.createdAt).getTime() }));
-  });
-  res.json({ users, truncated: false });
+  try {
+    const users = await withTx(async (client) => {
+      const qRes = await client.query(
+        `SELECT id as uid, email, display_name as "displayName", role, disabled, created_at as "createdAt"
+         FROM profiles
+         ORDER BY created_at DESC
+         LIMIT 100`
+      );
+      return qRes.rows.map(r => ({ ...r, createdAt: new Date(r.createdAt).getTime() }));
+    });
+    res.json({ users, truncated: false });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 api.patch('/experience/admin/user', async (req: Request, res: Response) => {
@@ -567,22 +659,97 @@ api.patch('/experience/admin/user', async (req: Request, res: Response) => {
 
 api.get('/experience/admin/audit', async (req: Request, res: Response) => {
   if (req.user?.role !== 'admin') return res.status(403).json({ error: 'صلاحية الإدارة مطلوبة.' });
-  res.json({ events: [] });
+  try {
+    const events = await withTx(async (client) => {
+      const qRes = await client.query(
+        `SELECT id, actor_id as "actorId", action, reference, payload, created_at as "createdAt"
+         FROM audit
+         ORDER BY created_at DESC
+         LIMIT 100`
+      );
+      return qRes.rows.map(r => ({ ...r, id: String(r.id), createdAt: new Date(r.createdAt).getTime() }));
+    });
+    res.json({ events });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 api.get('/experience/admin/requests', async (req: Request, res: Response) => {
   if (req.user?.role !== 'admin') return res.status(403).json({ error: 'صلاحية الإدارة مطلوبة.' });
-  res.json({ requests: [] });
+  try {
+    const requests = await withTx(async (client) => {
+      const qRes = await client.query(
+        `SELECT id as uid, email, display_name as "displayName", created_at as "createdAt"
+         FROM profiles
+         WHERE profile->>'closureStatus' = 'requested'
+         ORDER BY updated_at DESC
+         LIMIT 100`
+      );
+      return qRes.rows.map(r => ({ ...r, createdAt: new Date(r.createdAt).getTime(), type: 'deletion', status: 'requested' }));
+    });
+    res.json({ requests });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 api.post('/admin/support/reply', async (req: Request, res: Response) => {
   if (req.user?.role !== 'admin') return res.status(403).json({ error: 'صلاحية الإدارة مطلوبة.' });
-  res.json({ ok: true });
+  const { uid, id, text } = req.body || {};
+  if (!uid || !text) return res.status(400).json({ error: 'بيانات غير صالحة.' });
+  const msgId = id || randomUUID();
+  try {
+    await withTx(async (client) => {
+      const docRes = await client.query("SELECT data FROM docs WHERE collection = 'support_threads' AND id = $1 FOR UPDATE", [uid]);
+      const thread = docRes.rows[0]?.data || { id: uid, messages: [], handoffRequested: false, updatedAt: Date.now() };
+      thread.messages.push({
+        id: msgId,
+        text,
+        senderId: req.user!.id,
+        kind: 'staff',
+        createdAt: Date.now()
+      });
+      thread.updatedAt = Date.now();
+      await client.query(
+        `INSERT INTO docs (collection, id, data, updated_at)
+         VALUES ('support_threads', $1, $2, NOW())
+         ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+        [uid, JSON.stringify(thread)]
+      );
+
+      const auditPayload = JSON.stringify({ actorId: req.user!.id, action: 'support_reply_sent', uid, msgId });
+      const auditHash = createHash('sha256').update(auditPayload).digest('hex');
+      const refId = uid + '-' + msgId;
+      await client.query(
+        `INSERT INTO audit (actor_id, action, reference, payload, payload_hash)
+         VALUES ($1, 'support_reply_sent', $2, $3::jsonb, $4)`,
+        [req.user!.id, refId, auditPayload, auditHash]
+      );
+    });
+    res.json({ ok: true, messageId: msgId });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 api.get('/admin/support/threads', async (req: Request, res: Response) => {
   if (req.user?.role !== 'admin') return res.status(403).json({ error: 'صلاحية الإدارة مطلوبة.' });
-  res.json({ threads: [] });
+  try {
+    const threads = await withTx(async (client) => {
+      const qRes = await client.query(
+        `SELECT id, data, updated_at FROM docs WHERE collection = 'support_threads' ORDER BY updated_at DESC LIMIT 50`
+      );
+      return qRes.rows.map(r => ({
+        id: r.id,
+        updatedAt: new Date(r.updated_at).getTime(),
+        handoffRequested: !!r.data?.handoffRequested
+      }));
+    });
+    res.json({ threads });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Support AI deprecated routes return 501

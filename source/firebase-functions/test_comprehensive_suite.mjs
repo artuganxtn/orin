@@ -162,14 +162,14 @@ console.log(`[PASS] Verified active PostgreSQL role: ${roleCheck.rows[0].current
 assert.equal(roleCheck.rows[0].current_user, 'orin_app');
 
 // Import application modules
-const { paymentService } = await import('./src/payments.ts');
-const { canonical } = await import('./src/nowpayments.ts');
-const { programAction, programSummary, adminPrograms } = await import('./src/programs.ts');
-const { recordVerifiedCustomer, recordConfirmedDeposit, recordFinalBonusProfit } = await import('./src/program-ingestion.ts');
-const { publish, join, settle, state } = await import('./src/contracts.ts');
-const { requestWithdrawal, proposeWithdrawalApproval, approveWithdrawal, markWithdrawalPaid } = await import('./src/withdrawals.ts');
-const { submitKyc, getKycStatus, verifyKycCustomer } = await import('./src/kyc.ts');
-const { app } = await import('./src/index.ts');
+const { paymentService } = await import('./lib/payments.js');
+const { canonical } = await import('./lib/nowpayments.js');
+const { programAction, programSummary, adminPrograms } = await import('./lib/programs.js');
+const { recordVerifiedCustomer, recordConfirmedDeposit, recordFinalBonusProfit } = await import('./lib/program-ingestion.js');
+const { publish, join, settle, state } = await import('./lib/contracts.js');
+const { requestWithdrawal, proposeWithdrawalApproval, approveWithdrawal, markWithdrawalPaid } = await import('./lib/withdrawals.js');
+const { submitKyc, getKycStatus, verifyKycCustomer } = await import('./lib/kyc.js');
+const { app } = await import('./lib/index.js');
 
 const assertInvariant = async (label) => {
   const mismatchRes = await appClient.query(`
@@ -931,7 +931,7 @@ await assertInvariant('After All Control Actions');
 console.log('\nTesting KYC features: schema, access log, list privacy, HMAC secret...');
 
 // 1. Customer key throws without KYC_HMAC_SECRET
-const { computeCustomerKey } = await import('./src/kyc.ts');
+const { computeCustomerKey } = await import('./lib/kyc.js');
 const origHmacSecret = process.env.KYC_HMAC_SECRET;
 delete process.env.KYC_HMAC_SECRET;
 assert.throws(() => {
@@ -1037,7 +1037,7 @@ assert.equal(challengeDoc.rowCount, 1);
 assert.equal(challengeDoc.rows[0].data.email, signupEmail);
 assert.equal(challengeDoc.rows[0].data.delivery, 'sent');
 
-const { lastTestOtp } = await import('./src/email-registration-http.ts');
+const lastTestOtp = globalThis.__lastTestOtp;
 assert.ok(lastTestOtp?.code, 'Test OTP code must be recorded in test mode');
 
 // 2. Complete registration with code and challengeId

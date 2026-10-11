@@ -20,17 +20,17 @@ export function transactionStatus(status:string,ar=true){return transactionStatu
 
 // Scope by an explicit account tag. Legacy untagged entries belong only to primary demo.
 export function accountLedger(state:LabState,account:TradingAccount){
- return state.ledger.filter(row=>{const r=row as LedgerRow&{accountId?:string;account_id?:string};return (r.accountId??r.account_id??(account.type==='demo'?'primary':null))===account.id});
+ return (state.ledger ?? []).filter(row=>{const r=row as LedgerRow&{accountId?:string;account_id?:string};return (r.accountId??r.account_id??(account.type==='demo'?'primary':null))===account.id});
 }
 export function buildTransactions(state:LabState,account:TradingAccount,deposits:DepositView[]):AccountTransaction[]{
- const items:AccountTransaction[]=deposits.filter(d=>d.accountId===account.id&&Number.isSafeInteger(d.amountCents)&&d.amountCents>0&&Number.isFinite(d.createdAt)).map(d=>({id:d.id,kind:'deposit',status:d.credited&&d.status==='finished'?'credited':d.status,amountCents:d.amountCents,currency:'USD',createdAt:d.createdAt,accountId:account.id,accountNumber:account.accountNumber,accountType:account.type,entries:[],deposit:d}));
+ const items:AccountTransaction[]=(deposits ?? []).filter(d=>d.accountId===account.id&&Number.isSafeInteger(d.amountCents)&&d.amountCents>0&&Number.isFinite(d.createdAt)).map(d=>({id:d.id,kind:'deposit',status:d.credited&&d.status==='finished'?'credited':d.status,amountCents:d.amountCents,currency:'USD',createdAt:d.createdAt,accountId:account.id,accountNumber:account.accountNumber,accountType:account.type,entries:[],deposit:d}));
  const journals=new Map<string,LedgerRow[]>();
  for(const row of accountLedger(state,account)){if(!Number.isSafeInteger(row.amount_cents)||!Number.isFinite(row.effective_at))continue;const rows=journals.get(row.journal_id)??[];if(!rows.some(r=>r.id===row.id))rows.push(row);journals.set(row.journal_id,rows)}
  for(const [id,entries] of journals){
   const payment=items.find(t=>t.deposit?.paymentId&&id==='deposit-nowpayments-'+t.deposit.paymentId);
   if(payment){payment.entries=entries;continue}
   // Use the customer leg, never the sum of a balanced journal or its clearing leg.
-  const cash=entries.filter(r=>r.account==='cash'||r.account===`user:${state.user.id}:cash`||r.account===`customer:${state.user.id}:${account.id}`);
+  const cash=(entries ?? []).filter(r=>r.account==='cash'||r.account===`user:${state.user.id}:cash`||r.account===`customer:${state.user.id}:${account.id}`);
   const amount=cash.length?cash.reduce((n,r)=>n+r.amount_cents,0):null;
   items.push({id,kind:entries[0].kind,status:'recorded',amountCents:amount!==null&&Number.isSafeInteger(amount)?amount:null,currency:account.currency,createdAt:Math.min(...entries.map(r=>r.effective_at)),accountId:account.id,accountNumber:account.accountNumber,accountType:account.type,entries});
  }
