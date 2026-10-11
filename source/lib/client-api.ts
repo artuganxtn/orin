@@ -31,5 +31,21 @@ export async function apiFetch(path:string,init:RequestInit={}){
   }
   if(result.status===401&&!path.startsWith('/api/security/state'))runtime.onUnauthorized();
  }
+ if(!result.ok){
+  void result.clone().json().then((data: any)=>{
+   if(data?.code==='kyc_required'){
+    import('sonner').then(({toast})=>{
+     import('./navigation').then(({navigateTo})=>{
+      toast.error(data.error || 'توثيق الهوية (KYC) مطلوب لإتمام هذه العملية.', {
+       action: {
+        label: 'تحقق الآن',
+        onClick: () => navigateTo('/settings/kyc')
+       }
+      });
+     });
+    }).catch(()=>{});
+   }
+  }).catch(()=>{});
+ }
  return result;
 }

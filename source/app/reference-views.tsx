@@ -43,13 +43,50 @@ function MarketPanel({pair,compact=false,headerExternal=false}:{pair:string;comp
  const feed=useLiveMarket(native&&visible?pair:null,prefs.chartInterval,revision);
  return <div ref={root} className="orin-market-panel">{native&&<LiveAssetQuote pair={pair} compact={compact} headerExternal={headerExternal}/>}<div className="trade-timeframes home-timeframes" role="group" aria-label={t('الفاصل الزمني','Timeframe')}>{c.enabledTimeframes.map(frame=><button key={frame} aria-pressed={prefs.chartInterval===frame} className={prefs.chartInterval===frame?'active':''} onClick={()=>void change({chartInterval:frame as Preferences['chartInterval']})}>{FRAME_NAMES[frame]}</button>)}</div>{native?<ResilientCandles feed={feed} pair={pair} retry={()=>setRevision(x=>x+1)} revision={revision}/>:<Suspense fallback={<ChartLoading/>}><TradingViewChart symbol={marketSymbol(pair).tv} height={compact?260:300}/></Suspense>}</div>;
 }
+function HomeKycBanner() {
+  const { t } = useOrin();
+  const { navigate } = useNavigation();
+  const [kycStatus, setKycStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void apiFetch('/api/kyc')
+      .then(res => res.ok ? res.json() : null)
+      .then((data: any) => {
+        if (active && data) setKycStatus(data.status);
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
+
+  if (kycStatus === 'verified') return null;
+
+  return (
+    <section className="kyc-overview-card home-kyc-banner" style={{ margin: '12px 0', padding: '16px', background: 'var(--orin-surface)', border: '1px solid var(--orin-line)', borderRadius: '16px' }}>
+      <div className="kyc-overview-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+        <div className="kyc-overview-title" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <ShieldCheck size={28} style={{ color: '#0788ff', flex: 'none' }} />
+          <div>
+            <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 600 }}>{t('أكمل تأكيد هويتك', 'Complete Identity Verification')}</h3>
+            <p style={{ margin: '2px 0 0', fontSize: '12px', color: 'var(--orin-muted)' }}>{t('استكمل بيانات حسابك لإتمام الإيداع والتداول والسحب.', 'Complete your account details for deposits, trading, and withdrawals.')}</p>
+          </div>
+        </div>
+        <button type="button" className="btn-primary kyc-action-btn" style={{ padding: '8px 18px', fontSize: '13px', borderRadius: '10px' }} onClick={() => navigate('/settings/kyc')}>
+          {t('تحقق الآن', 'Verify Now')}
+        </button>
+      </div>
+    </section>
+  );
+}
+
 export function ReferenceHome({state,prefs,selectedPair,onPairChange,onHideBalance,onNavigate,onInvite,onFunding,onTerms,onAccountsChange,onTransfer,code='',setCode,amount='1000',setAmount,onExecuteCode,onLookupCode,busy=false,activePosition,now=Date.now(),progress=0}:{state:LabState|null;prefs:Preferences;selectedPair?:string;onPairChange?:(pair:string)=>void;onHideBalance:()=>void;onNavigate:(tab:string)=>void;onInvite:()=>void;onFunding:(kind:'deposit'|'withdraw')=>void;onTerms:()=>void;onTransfer?:()=>void;onAccountsChange?:(directory:AccountDirectory,phase?:'optimistic'|'confirmed'|'rollback')=>void;code?:string;setCode?:(s:string)=>void;amount?:string;setAmount?:(s:string)=>void;onExecuteCode?:(code:string,amount?:string)=>void;onLookupCode?:(code:string)=>void;busy?:boolean;activePosition?:Position;now?:number;progress?:number}){
  const {configuration,t,number,marketReady}=useOrin();const [localPair,setLocalPair]=useState(prefs.chartPair);const chosenPair=selectedPair??localPair,setPair=(value:string)=>{setLocalPair(value);onPairChange?.(value)};useEffect(()=>setLocalPair(prefs.chartPair),[prefs.chartPair]);const pair=configuration.enabledSymbols.includes(chosenPair)?chosenPair:configuration.defaultSymbol,symbol=marketSymbol(pair);
  const account=activeTradingAccount(state?.accountDirectory);
  const reloadAccounts=async()=>{const r=await apiFetch('/api/trading-accounts');if(!r.ok)throw new Error(t('تعذر قراءة الرصيد المحفوظ.','Unable to read saved balance.'));onAccountsChange?.(await r.json(),'confirmed')};
  const settled=state?.positions.filter(p=>p.status==='settled')??[],win=settled.length?100*settled.filter(p=>p.result_cents>0).length/settled.length:null;
  return <div className="reference-home">
-  {sparkMode()?<BalanceAccounts state={state} onHideBalance={onHideBalance} onTerms={onTerms} onDirectoryChange={onAccountsChange}/>:<section className="balance-hero"><img src="/brand/orin-mark.png" alt=""/><div className="balance-top"><span>{t('إجمالي الرصيد','Total balance')}</span><button aria-label={prefs.hideBalance?t('إظهار الرصيد','Show balance'):t('إخفاء الرصيد','Hide balance')} onClick={onHideBalance}>{prefs.hideBalance?<EyeOff/>:<Eye/>}</button></div><strong className="balance-total num">{prefs.hideBalance?'••••••':state?`$${number((state.balanceCents+state.reservedCents)/100)}`:'$ —'}</strong><div className="balance-bottom"><span className={`num ${(state?.realizedCents??0)<0?'loss':'gain'}`}>{prefs.hideBalance?'••••':state?`${state.realizedCents>=0?'+':''}${number(state.realizedCents/100)}`:'—'}</span><button onClick={onTerms}>{t('حساب حقيقي','Real account')} · USD <Info size={13}/></button></div></section>}
+  <BalanceAccounts state={state} onHideBalance={onHideBalance} onTerms={onTerms} onDirectoryChange={onAccountsChange}/>
+  <HomeKycBanner/>
   <div className="quick-actions">
     <button type="button" onClick={()=>{
       const realAcc = state?.accountDirectory?.accounts.find(a=>a.type==='real');

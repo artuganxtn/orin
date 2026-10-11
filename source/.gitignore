@@ -72,4 +72,6 @@ firebase-spark/*debug.log
 *.jks
 *.p12
 store-password.txt
+tsconfig.tsbuildinfo
+playwright-screenshots/
 

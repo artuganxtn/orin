@@ -59,7 +59,9 @@ export async function getSettings(u: Identity): Promise<Data> {
       displayName: profileRow.display_name || u.name || 'مستخدم ORIN',
       phone: profileRow.profile?.phone || '',
       country: profileRow.profile?.country || '',
-      closureStatus: profileRow.profile?.closureStatus || 'open'
+      closureStatus: profileRow.profile?.closureStatus || 'open',
+      role: profileRow.role || 'user',
+      disabled: profileRow.disabled === true
     };
 
     const preferences = parsePreferences(

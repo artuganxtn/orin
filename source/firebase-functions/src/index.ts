@@ -92,7 +92,7 @@ api.post('/withdrawals', async (req: Request, res: Response) => {
     const result = await requestWithdrawal(req.user!, req.body);
     res.json(result);
   } catch (err: any) {
-    res.status(err.status || 400).json({ error: err.message });
+    res.status(err.status || 400).json({ error: err.message, code: err.code });
   }
 });
 
@@ -101,7 +101,7 @@ api.get('/withdrawals', async (req: Request, res: Response) => {
     const result = await getUserWithdrawals(req.user!);
     res.json(result);
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message, code: err.code });
   }
 });
 
@@ -114,7 +114,7 @@ api.get('/withdrawals/:id', async (req: Request, res: Response) => {
     }
     res.json(result);
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message, code: err.code });
   }
 });
 
@@ -124,7 +124,7 @@ api.post('/kyc', async (req: Request, res: Response) => {
     const result = await submitKyc(req.user!, req.body);
     res.json(result);
   } catch (err: any) {
-    res.status(err.status || 400).json({ error: err.message });
+    res.status(err.status || 400).json({ error: err.message, code: err.code });
   }
 });
 
@@ -133,7 +133,7 @@ api.get('/kyc', async (req: Request, res: Response) => {
     const result = await getKycStatus(req.user!);
     res.json(result);
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message, code: err.code });
   }
 });
 
@@ -143,7 +143,7 @@ api.get('/settings', async (req: Request, res: Response) => {
     const result = await getSettings(req.user!);
     res.json(result);
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message, code: err.code });
   }
 });
 
@@ -300,7 +300,7 @@ api.get('/account-activity', async (req: Request, res: Response) => {
     const result = await accountActivity(req.user!, String(req.query.accountId || ''));
     res.json(result);
   } catch (err: any) {
-    res.status(err.status || 400).json({ error: err.message });
+    res.status(err.status || 400).json({ error: err.message, code: err.code });
   }
 });
 
@@ -310,7 +310,7 @@ api.get('/trading-accounts', async (req: Request, res: Response) => {
     const result = await getTradingAccounts(req.user!);
     res.json(result);
   } catch (err: any) {
-    res.status(err.status || 400).json({ error: err.message });
+    res.status(err.status || 400).json({ error: err.message, code: err.code });
   }
 });
 
@@ -319,7 +319,7 @@ api.post('/trading-accounts', async (req: Request, res: Response) => {
     const result = await createTradingAccount(req.user!, req.body);
     res.json(result);
   } catch (err: any) {
-    res.status(err.status || 400).json({ error: err.message });
+    res.status(err.status || 400).json({ error: err.message, code: err.code });
   }
 });
 
@@ -328,7 +328,7 @@ api.patch('/trading-accounts', async (req: Request, res: Response) => {
     const result = await selectTradingAccount(req.user!, req.body);
     res.json(result);
   } catch (err: any) {
-    res.status(err.status || 400).json({ error: err.message });
+    res.status(err.status || 400).json({ error: err.message, code: err.code });
   }
 });
 
@@ -339,7 +339,7 @@ api.get('/demo-wallet', async (req: Request, res: Response) => {
     const result = await getDemoWallet(req.user!, accountId);
     res.json(result);
   } catch (err: any) {
-    res.status(err.status || 400).json({ error: err.message });
+    res.status(err.status || 400).json({ error: err.message, code: err.code });
   }
 });
 
@@ -348,7 +348,7 @@ api.post('/demo-wallet', async (req: Request, res: Response) => {
     const result = await operateDemoWallet(req.user!, req.body);
     res.json(result);
   } catch (err: any) {
-    res.status(err.status || 400).json({ error: err.message });
+    res.status(err.status || 400).json({ error: err.message, code: err.code });
   }
 });
 
@@ -358,7 +358,7 @@ api.get('/support/messages', async (req: Request, res: Response) => {
     const result = await getSupportMessages(req.user!);
     res.json(result);
   } catch (err: any) {
-    res.status(err.status || 400).json({ error: err.message });
+    res.status(err.status || 400).json({ error: err.message, code: err.code });
   }
 });
 
@@ -367,7 +367,7 @@ api.post('/support/messages', async (req: Request, res: Response) => {
     const result = await sendSupportMessage(req.user!, req.body);
     res.json(result);
   } catch (err: any) {
-    res.status(err.status || 400).json({ error: err.message });
+    res.status(err.status || 400).json({ error: err.message, code: err.code });
   }
 });
 
@@ -377,7 +377,7 @@ api.post('/referrals/attribute', async (req: Request, res: Response) => {
     const result = await attributeReferral(req.user!, req.body?.code);
     res.json(result);
   } catch (err: any) {
-    res.status(err.status || 400).json({ error: err.message });
+    res.status(err.status || 400).json({ error: err.message, code: err.code });
   }
 });
 
@@ -401,7 +401,7 @@ api.get('/lab', async (req: Request, res: Response) => {
     const result = await state(req.user!);
     res.json(result);
   } catch (err: any) {
-    res.status(err.status || 400).json({ error: err.message });
+    res.status(err.status || 400).json({ error: err.message, code: err.code });
   }
 });
 
@@ -410,7 +410,7 @@ api.post('/lab', async (req: Request, res: Response) => {
     const result = await action(req.user!, req.body);
     res.json(result);
   } catch (err: any) {
-    res.status(err.status || 400).json({ error: err.message });
+    res.status(err.status || 400).json({ error: err.message, code: err.code });
   }
 });
 
@@ -419,7 +419,7 @@ api.post('/invitations/verify', async (req: Request, res: Response) => {
     const result = await verify(req.user!, req.body?.code);
     res.json(result);
   } catch (err: any) {
-    res.status(err.status || 400).json({ error: err.message });
+    res.status(err.status || 400).json({ error: err.message, code: err.code });
   }
 });
 
@@ -429,7 +429,7 @@ api.get('/control/queues', async (req: Request, res: Response) => {
     const result = await operationQueues(req.user!, (req.user as any).roles || []);
     res.json(result);
   } catch (err: any) {
-    res.status(err.status || 400).json({ error: err.message });
+    res.status(err.status || 400).json({ error: err.message, code: err.code });
   }
 });
 
@@ -438,7 +438,7 @@ api.get('/control/audit', async (req: Request, res: Response) => {
     const result = await readAudit(req.user!, req.query);
     res.json(result);
   } catch (err: any) {
-    res.status(err.status || 400).json({ error: err.message });
+    res.status(err.status || 400).json({ error: err.message, code: err.code });
   }
 });
 
@@ -447,7 +447,7 @@ api.get('/control/tickets', async (req: Request, res: Response) => {
     const result = await readTickets(req.user!, req.query);
     res.json(result);
   } catch (err: any) {
-    res.status(err.status || 400).json({ error: err.message });
+    res.status(err.status || 400).json({ error: err.message, code: err.code });
   }
 });
 
@@ -456,7 +456,7 @@ api.post('/control/action', async (req: Request, res: Response) => {
     const result = await controlAction(req.user!, req.body);
     res.json(result);
   } catch (err: any) {
-    res.status(err.status || 400).json({ error: err.message });
+    res.status(err.status || 400).json({ error: err.message, code: err.code });
   }
 });
 
@@ -465,7 +465,7 @@ api.get('/control/staff', async (req: Request, res: Response) => {
     const result = await controlRead(req.user!, 'staff');
     res.json(result);
   } catch (err: any) {
-    res.status(err.status || 400).json({ error: err.message });
+    res.status(err.status || 400).json({ error: err.message, code: err.code });
   }
 });
 
@@ -474,7 +474,7 @@ api.get('/admin/staff', async (req: Request, res: Response) => {
     const result = await controlRead(req.user!, 'staff');
     res.json(result);
   } catch (err: any) {
-    res.status(err.status || 400).json({ error: err.message });
+    res.status(err.status || 400).json({ error: err.message, code: err.code });
   }
 });
 
@@ -483,7 +483,7 @@ api.get('/admin/kyc/files', async (req: Request, res: Response) => {
     const result = await listKycFiles(req.user!);
     res.json(result);
   } catch (err: any) {
-    res.status(err.status || 400).json({ error: err.message });
+    res.status(err.status || 400).json({ error: err.message, code: err.code });
   }
 });
 
@@ -494,7 +494,7 @@ api.get('/admin/kyc/files/:id', async (req: Request, res: Response) => {
     const result = await readKycFile(req.user!, id, reason);
     res.json(result);
   } catch (err: any) {
-    res.status(err.status || 400).json({ error: err.message });
+    res.status(err.status || 400).json({ error: err.message, code: err.code });
   }
 });
 

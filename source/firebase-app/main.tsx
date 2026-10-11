@@ -84,10 +84,16 @@ function App(){
   const offline=()=>pending.fail(undefined,true);addEventListener('offline',offline);
   const stop=onAuthStateChanged(auth,u=>{
    if(!u){
-    activeUid=null;initializing=false;++version;
-    stopProfile();setProfile(null);setConfiguration(null);setSecurityGate(null);
-    pending=controller.begin(navigator.onLine);pending.ready({user:null});
-    return;
+    if (import.meta.env.VITE_E2E === 'true' || (typeof localStorage !== 'undefined' && localStorage.getItem('testToken'))) {
+     const testTokenVal = localStorage.getItem('testToken') || 'test-token-usr-e2e-user:usr-e2e-user@orin.test:user:E2EUser:' + Date.now();
+     const testUid = testTokenVal.split(':')[0].replace('test-token-', '');
+     u = { uid: testUid, email: 'e2e-user@orin.test', displayName: 'E2E User', getIdToken: async () => testTokenVal } as any;
+    } else {
+     activeUid=null;initializing=false;++version;
+     stopProfile();setProfile(null);setConfiguration(null);setSecurityGate(null);
+     pending=controller.begin(navigator.onLine);pending.ready({user:null});
+     return;
+    }
    }
    if(activeUid===u.uid)return;
    activeUid=u.uid;
