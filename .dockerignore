@@ -1,0 +1,15 @@
+**/node_modules
+.git
+.idea
+brain
+handoff
+verification-162
+verification-prior-161
+web-current-review
+web-security-migration
+source/firebase-dist
+source/firebase-functions/lib
+source/android-app
+**/.pgdata
+**/*.apk
+**/*.log
