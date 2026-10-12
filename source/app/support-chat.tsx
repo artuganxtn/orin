@@ -92,7 +92,30 @@ function SupportSession({uid}:{uid:string}){
   </div>
   {assistantNote&&<div className="adam-reply-note" role="status"><p>{assistantNote}</p>{retryReply&&!snapshot.handoffRequested&&!assistantBusy&&<button type="button" disabled={connection!=='connected'} onClick={()=>void requestReply(retryReply)}>{t('المحاولة مجددًا','Try again')}</button>}</div>}
   {error&&<p role="alert" className="support-inline-error">{error}</p>}
-  <form className="support-composer" onSubmit={e=>{e.preventDefault();submit()}}><textarea ref={input} aria-label={t('رسالتك','Your message')} placeholder={t('اكتب رسالتك لAdam…','Write to Adam…')} value={text} maxLength={2000} onChange={e=>setText(e.target.value)} rows={1}/><button type="submit" disabled={!text.trim()||pending.length>=50} aria-label={t('إرسال الرسالة','Send message')}><Send size={22}/></button></form>
+  <form className="support-composer" onSubmit={e=>{e.preventDefault();submit()}}>
+    <textarea
+      ref={input}
+      aria-label={t('رسالتك','Your message')}
+      placeholder={t('اكتب رسالتك لAdam…','Write to Adam…')}
+      value={text}
+      maxLength={2000}
+      onChange={e=>{
+        setText(e.target.value);
+        if (input.current) {
+          input.current.style.height = 'auto';
+          input.current.style.height = Math.min(input.current.scrollHeight, 120) + 'px';
+        }
+      }}
+      onKeyDown={e=>{
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          submit();
+        }
+      }}
+      rows={1}
+    />
+    <button type="submit" disabled={!text.trim()||pending.length>=50} aria-label={t('إرسال الرسالة','Send message')}><Send size={22}/></button>
+  </form>
   <p className="adam-privacy-note">{t('لأمانك، لا تشارك كلمة المرور أو رموز التحقق.','For your security, never share passwords or verification codes.')}</p>
  </FullPageContent></FullPage>;
 }
