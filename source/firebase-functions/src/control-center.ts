@@ -1,13 +1,19 @@
 import { randomUUID, createHash, randomBytes } from 'node:crypto';
 import { withTx } from './db.ts';
 import { ApiError, type Identity, type Data } from './store.ts';
-import { computeCustomerKey, verifyKycCustomer } from './kyc.ts';
+import { computeCustomerKey, verifyKycCustomer, idLast4, getKycFilesKey, decryptAesGcm } from './kyc.ts';
 import { proposeWithdrawalApproval, approveWithdrawal, markWithdrawalPaid } from './withdrawals.ts';
 import { MARKET_SYMBOLS } from '../../lib/market-symbols.js';
 
 export { computeCustomerKey };
+const hash = (text: string) => createHash('sha256').update(text).digest('hex');
 
-export async function controlRead(u: Identity, module: string, _q: Data = {}) {
+export async function controlRead(u: Identity, module: string, q: Data = {}) {
+  const limit = Math.min(Math.max(Number(q.limit || 50), 1), 100);
+  const offset = Math.max(Number(q.cursor || 0), 0);
+  const searchStr = String(q.search || '').trim().toLowerCase();
+  const statusFilter = String(q.status || 'all').trim().toLowerCase();
+
   if (module === 'support-ai' || module === 'support') {
     return {
       rows: [{
@@ -18,41 +24,53 @@ export async function controlRead(u: Identity, module: string, _q: Data = {}) {
         locale: 'ar/en',
         updatedAt: Date.now()
       }],
-      nextCursor: null
+      nextCursor: null,
+      hasMore: false
     };
   }
 
   return await withTx(async (client) => {
-    if (module === 'staff') {
-      const res = await client.query(`
-        SELECT s.user_id AS id, p.email, p.display_name AS "displayName",
-               s.roles, s.status, s.valid_after AS "validAfter", s.created_at AS "createdAt"
-        FROM staff s
-        JOIN profiles p ON s.user_id = p.id
-        ORDER BY s.created_at DESC
-      `);
-      return { rows: res.rows, nextCursor: null };
-    }
+    if (module === 'audit' || module === 'security') {
+      let sql = 'SELECT id, actor_id AS "adminId", action, reference AS target, payload, payload_hash AS "payloadHash", created_at AS "createdAt" FROM audit';
+      const wheres: string[] = [];
+      const params: any[] = [];
 
-    if (module === 'kyc') {
-      const res = await client.query(`
-        SELECT k.id, k.user_id AS "userId", p.display_name AS "fullName", p.email,
-               k.country, k.document_type AS "documentType", k.status,
-               k.created_at AS "createdAt", k.updated_at AS "updatedAt"
-        FROM kyc_files k
-        LEFT JOIN profiles p ON k.user_id = p.id
-        ORDER BY k.created_at DESC
-        LIMIT 100
-      `);
+      if (q.action) {
+        params.push(q.action);
+        wheres.push(`action = $${params.length}`);
+      }
+      if (q.adminId) {
+        params.push(q.adminId);
+        wheres.push(`actor_id = $${params.length}`);
+      }
+      if (q.target) {
+        params.push(q.target);
+        wheres.push(`reference = $${params.length}`);
+      }
+      if (q.from) {
+        params.push(new Date(Number(q.from)));
+        wheres.push(`created_at >= $${params.length}`);
+      }
+      if (q.to) {
+        params.push(new Date(Number(q.to)));
+        wheres.push(`created_at <= $${params.length}`);
+      }
+
+      if (wheres.length > 0) {
+        sql += ' WHERE ' + wheres.join(' AND ');
+      }
+
+      sql += ` ORDER BY created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+      params.push(limit + 1, offset);
+
+      const res = await client.query(sql, params);
+      const hasMore = res.rows.length > limit;
+      const rows = res.rows.slice(0, limit).map(r => ({ ...r, createdAt: new Date(r.createdAt).getTime() }));
+
       return {
-        rows: res.rows.map(r => ({
-          ...r,
-          documentIds: [r.id],
-          idNumber: '••••',
-          createdAt: r.createdAt ? new Date(r.createdAt).getTime() : Date.now(),
-          updatedAt: r.updatedAt ? new Date(r.updatedAt).getTime() : Date.now()
-        })),
-        nextCursor: null
+        rows,
+        nextCursor: hasMore ? String(offset + limit) : null,
+        hasMore
       };
     }
 
@@ -74,253 +92,139 @@ export async function controlRead(u: Identity, module: string, _q: Data = {}) {
           pendingApprovalsCount: Number(aRes.rows[0].count),
           updatedAt: Date.now()
         }],
-        nextCursor: null
+        nextCursor: null,
+        hasMore: false
       };
     }
 
     if (module === 'users') {
-      const res = await client.query(`
-        SELECT id, email, display_name AS "displayName", role, disabled, created_at AS "createdAt"
-        FROM profiles
-        ORDER BY created_at DESC
-        LIMIT 100
-      `);
-      return {
-        rows: res.rows.map(r => ({
-          ...r,
-          createdAt: r.createdAt ? new Date(r.createdAt).getTime() : Date.now()
-        })),
-        nextCursor: null
-      };
-    }
+      let sql = 'SELECT id, email, display_name AS "displayName", role, disabled, created_at AS "createdAt" FROM profiles';
+      const wheres: string[] = [];
+      const params: any[] = [];
 
-    if (module === 'accounts') {
-      const res = await client.query(`
-        SELECT a.id, a.user_id AS "userId", p.email, a.account_number AS "accountNumber",
-               a.type, a.currency, a.balance_cents AS "balanceCents", a.status, a.created_at AS "createdAt"
-        FROM accounts a
-        LEFT JOIN profiles p ON a.user_id = p.id
-        ORDER BY a.created_at DESC
-        LIMIT 100
-      `);
+      if (statusFilter !== 'all') {
+        if (statusFilter === 'active') wheres.push('disabled = FALSE');
+        else if (statusFilter === 'disabled' || statusFilter === 'suspended') wheres.push('disabled = TRUE');
+        else { params.push(statusFilter); wheres.push(`role = $${params.length}`); }
+      }
+
+      if (searchStr) {
+        params.push(`%${searchStr}%`);
+        wheres.push(`(LOWER(display_name) LIKE $${params.length} OR LOWER(email) LIKE $${params.length} OR LOWER(id) LIKE $${params.length})`);
+      }
+
+      if (wheres.length > 0) sql += ' WHERE ' + wheres.join(' AND ');
+      sql += ` ORDER BY created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+      params.push(limit + 1, offset);
+
+      const res = await client.query(sql, params);
+      const hasMore = res.rows.length > limit;
+      const rows = res.rows.slice(0, limit).map(r => ({
+        ...r,
+        status: r.disabled ? 'disabled' : 'active',
+        createdAt: new Date(r.createdAt).getTime()
+      }));
+
       return {
-        rows: res.rows.map(r => ({
-          ...r,
-          createdAt: r.createdAt ? new Date(r.createdAt).getTime() : Date.now()
-        })),
-        nextCursor: null
+        rows,
+        nextCursor: hasMore ? String(offset + limit) : null,
+        hasMore
       };
     }
 
     if (module === 'wallets') {
-      const res = await client.query(`
-        SELECT w.user_id AS "id", w.user_id AS "userId", p.email, w.account_id AS "accountId",
-               a.balance_cents AS "cashCents", a.bonus_cents AS "bonusCents", a.bonus_profit_cents AS "profitCents"
-        FROM bonus_wallets w
-        LEFT JOIN profiles p ON w.user_id = p.id
-        LEFT JOIN accounts a ON w.account_id = a.id
-        ORDER BY w.created_at DESC
-        LIMIT 100
-      `);
-      return { rows: res.rows, nextCursor: null };
-    }
+      let sql = `
+        SELECT a.id, a.user_id AS "userId", p.email, p.display_name AS "displayName", a.id AS "accountId",
+               a.account_number AS "accountNumber", a.type, a.balance_cents AS "cashCents",
+               a.bonus_cents AS "bonusCents", a.bonus_profit_cents AS "profitCents"
+        FROM accounts a
+        LEFT JOIN profiles p ON a.user_id = p.id
+      `;
+      const wheres: string[] = [];
+      const params: any[] = [];
 
-    if (module === 'deposits') {
-      const res = await client.query(`
-        SELECT d.id, d.user_id AS "userId", p.email, d.account_id AS "accountId",
-               d.amount_cents AS "amountCents", d.coin, d.pay_address AS "payAddress",
-               d.status, d.credited, d.created_at AS "createdAt"
-        FROM deposits d
-        LEFT JOIN profiles p ON d.user_id = p.id
-        ORDER BY d.created_at DESC
-        LIMIT 100
-      `);
+      if (statusFilter !== 'all') {
+        params.push(statusFilter);
+        wheres.push(`a.type = $${params.length}`);
+      }
+
+      if (searchStr) {
+        params.push(`%${searchStr}%`);
+        wheres.push(`(LOWER(p.display_name) LIKE $${params.length} OR LOWER(p.email) LIKE $${params.length} OR LOWER(a.account_number) LIKE $${params.length})`);
+      }
+
+      if (wheres.length > 0) sql += ' WHERE ' + wheres.join(' AND ');
+      sql += ` ORDER BY a.created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+      params.push(limit + 1, offset);
+
+      const res = await client.query(sql, params);
+      const hasMore = res.rows.length > limit;
+      const rows = res.rows.slice(0, limit);
+
       return {
-        rows: res.rows.map(r => ({
-          ...r,
-          payAmount: (r.amountCents ? String(r.amountCents / 100) : '0'),
-          extraId: null,
-          createdAt: r.createdAt ? new Date(r.createdAt).getTime() : Date.now()
-        })),
-        nextCursor: null
+        rows,
+        nextCursor: hasMore ? String(offset + limit) : null,
+        hasMore
       };
     }
 
-    if (module === 'withdrawals') {
-      const res = await client.query(`
-        SELECT w.id, w.user_id AS "userId", p.email, w.amount_cents AS "amountCents",
-               w.address, w.coin, w.status, w.created_at AS "createdAt"
-        FROM withdrawal_requests w
-        LEFT JOIN profiles p ON w.user_id = p.id
-        ORDER BY w.created_at DESC
-        LIMIT 100
-      `);
-      return {
-        rows: res.rows.map(r => ({
-          ...r,
-          createdAt: r.createdAt ? new Date(r.createdAt).getTime() : Date.now()
-        })),
-        nextCursor: null
-      };
+    let sql = '';
+    if (module === 'staff') {
+      sql = `SELECT s.user_id AS id, p.email, p.display_name AS "displayName", s.roles, s.status, s.valid_after AS "validAfter", s.created_at AS "createdAt" FROM staff s JOIN profiles p ON s.user_id = p.id ORDER BY s.created_at DESC`;
+    } else if (module === 'kyc') {
+      sql = `SELECT k.id, k.user_id AS "userId", p.display_name AS "fullName", p.email, k.country, k.document_type AS "documentType", k.status, k.created_at AS "createdAt", k.updated_at AS "updatedAt" FROM kyc_files k LEFT JOIN profiles p ON k.user_id = p.id ORDER BY k.created_at DESC`;
+    } else if (module === 'accounts') {
+      sql = `SELECT a.id, a.user_id AS "userId", p.email, a.account_number AS "accountNumber", a.type, a.currency, a.balance_cents AS "balanceCents", a.status, a.created_at AS "createdAt" FROM accounts a LEFT JOIN profiles p ON a.user_id = p.id ORDER BY a.created_at DESC`;
+    } else if (module === 'deposits') {
+      sql = `SELECT d.id, d.user_id AS "userId", p.email, d.account_id AS "accountId", d.amount_cents AS "amountCents", d.coin, d.pay_address AS "payAddress", d.status, d.credited, d.created_at AS "createdAt" FROM deposits d LEFT JOIN profiles p ON d.user_id = p.id ORDER BY d.created_at DESC`;
+    } else if (module === 'withdrawals') {
+      sql = `SELECT w.id, w.user_id AS "userId", p.email, w.amount_cents AS "amountCents", w.address, w.coin, w.status, w.created_at AS "createdAt" FROM withdrawal_requests w LEFT JOIN profiles p ON w.user_id = p.id ORDER BY w.created_at DESC`;
+    } else if (module === 'approvals') {
+      sql = `SELECT id, kind, reward_kind AS "rewardKind", user_id AS "userId", account_id AS "accountId", delta_cents AS "deltaCents", status, reason, requested_by AS "requestedBy", created_at AS "createdAt" FROM approvals ORDER BY created_at DESC`;
+    } else if (module === 'trading') {
+      sql = `SELECT pos.id, pos.user_id AS "userId", p.display_name AS "user", p.email, pos.contract_id AS "contractId", c.code AS "contractCode", c.asset, c.direction, pos.amount_cents AS "amountCents", pos.result_cents AS "resultCents", pos.status, pos.started_at AS "startedAt", pos.ends_at AS "endsAt" FROM positions pos LEFT JOIN profiles p ON pos.user_id = p.id LEFT JOIN contracts c ON pos.contract_id = c.id ORDER BY pos.started_at DESC`;
+    } else if (module === 'contracts' || module === 'codes') {
+      sql = `SELECT id, code, title, asset, direction, duration_sec AS "durationSec", settlement_bps AS "settlementBps", status, hash, created_at AS "createdAt" FROM contracts ORDER BY created_at DESC`;
+    } else if (module === 'markets') {
+      return { rows: MARKET_SYMBOLS.map((s, idx) => ({ id: s.pair, pair: s.pair, symbol: s.label, name: s.name, category: s.category, source: 'Coinbase / TradingView', enabled: true, order: idx + 1, updatedAt: Date.now() })), nextCursor: null, hasMore: false };
+    } else if (module === 'bonus') {
+      sql = `SELECT w.user_id AS "id", w.user_id AS "userId", p.email, w.account_id AS "accountId", a.bonus_cents AS "bonusCents", w.profit_limit_cents AS "profitLimitCents", w.claimed FROM bonus_wallets w LEFT JOIN profiles p ON w.user_id = p.id LEFT JOIN accounts a ON w.account_id = a.id ORDER BY w.created_at DESC`;
+    } else if (module === 'referrals') {
+      sql = `SELECT r.code AS "id", r.code, r.user_id AS "userId", p.email, r.created_at AS "createdAt" FROM referral_codes r LEFT JOIN profiles p ON r.user_id = p.id ORDER BY r.created_at DESC`;
+    } else if (module === 'team') {
+      sql = `SELECT m.user_id AS "id", m.user_id AS "userId", p.email, m.referral_code AS "referralCode", m.direct_count AS "directCount", m.team_count AS "teamCount", m.paid_cents AS "paidCents" FROM program_members m LEFT JOIN profiles p ON m.user_id = p.id ORDER BY m.created_at DESC`;
+    } else if (module === 'agencies' || module === 'badges') {
+      sql = `SELECT id, owner_id AS "userId", data, updated_at AS "updatedAt" FROM docs WHERE collection = '${module}' ORDER BY updated_at DESC`;
+    } else if (module === 'notifications') {
+      sql = `SELECT id, owner_id AS "ownerId", data, updated_at AS "updatedAt" FROM docs WHERE collection = 'orinNotices' ORDER BY updated_at DESC`;
+    } else if (module === 'content' || module === 'configuration') {
+      sql = `SELECT id, data, updated_at AS "updatedAt" FROM docs WHERE collection = 'system' ORDER BY updated_at DESC`;
+    } else if (module === 'tickets') {
+      sql = `SELECT id, owner_id AS "ownerId", data, updated_at AS "updatedAt" FROM docs WHERE collection = 'support_tickets' ORDER BY updated_at DESC`;
+    } else {
+      return { rows: [], nextCursor: null, hasMore: false };
     }
 
-    if (module === 'approvals') {
-      const res = await client.query(`
-        SELECT id, kind, reward_kind AS "rewardKind", user_id AS "userId", account_id AS "accountId",
-               delta_cents AS "deltaCents", status, reason, requested_by AS "requestedBy", created_at AS "createdAt"
-        FROM approvals
-        ORDER BY created_at DESC
-        LIMIT 100
-      `);
-      return {
-        rows: res.rows.map(r => ({
-          ...r,
-          createdAt: r.createdAt ? new Date(r.createdAt).getTime() : Date.now()
-        })),
-        nextCursor: null
-      };
+    const res = await client.query(sql + ` LIMIT ${limit + 1} OFFSET ${offset}`);
+    const hasMore = res.rows.length > limit;
+    let rows = res.rows.slice(0, limit);
+
+    if (module === 'kyc') {
+      rows = rows.map(r => ({ ...r, documentIds: [r.id], idNumber: '••••', createdAt: r.createdAt ? new Date(r.createdAt).getTime() : Date.now(), updatedAt: r.updatedAt ? new Date(r.updatedAt).getTime() : Date.now() }));
     }
 
-    if (module === 'trading') {
-      const res = await client.query(`
-        SELECT pos.id, pos.user_id AS "userId", p.display_name AS "user", p.email,
-               pos.contract_id AS "contractId", c.code AS "contractCode", c.asset, c.direction,
-               pos.amount_cents AS "amountCents", pos.result_cents AS "resultCents", pos.status,
-               pos.started_at AS "startedAt", pos.ends_at AS "endsAt"
-        FROM positions pos
-        LEFT JOIN profiles p ON pos.user_id = p.id
-        LEFT JOIN contracts c ON pos.contract_id = c.id
-        ORDER BY pos.created_at DESC
-        LIMIT 100
-      `);
-      return {
-        rows: res.rows.map(r => ({
-          ...r,
-          startedAt: r.startedAt ? new Date(r.startedAt).getTime() : Date.now(),
-          endsAt: r.endsAt ? new Date(r.endsAt).getTime() : Date.now()
-        })),
-        nextCursor: null
-      };
+    if (searchStr) {
+      rows = rows.filter(r => JSON.stringify(r).toLowerCase().includes(searchStr));
+    }
+    if (statusFilter !== 'all') {
+      rows = rows.filter(r => r.status === statusFilter || r.type === statusFilter);
     }
 
-    if (module === 'contracts' || module === 'codes') {
-      const res = await client.query(`
-        SELECT id, code, title, asset, direction, duration_sec AS "durationSec",
-               settlement_bps AS "settlementBps", status, hash, created_at AS "createdAt"
-        FROM contracts
-        ORDER BY created_at DESC
-        LIMIT 100
-      `);
-      return {
-        rows: res.rows.map(r => ({
-          ...r,
-          createdAt: r.createdAt ? new Date(r.createdAt).getTime() : Date.now()
-        })),
-        nextCursor: null
-      };
-    }
-
-    if (module === 'markets') {
-      return {
-        rows: MARKET_SYMBOLS.map((s, idx) => ({
-          id: s.pair,
-          pair: s.pair,
-          symbol: s.label,
-          name: s.name,
-          category: s.category,
-          source: 'Coinbase / TradingView',
-          enabled: true,
-          order: idx + 1,
-          updatedAt: Date.now()
-        })),
-        nextCursor: null
-      };
-    }
-
-    if (module === 'bonus') {
-      const res = await client.query(`
-        SELECT w.user_id AS "id", w.user_id AS "userId", p.email, w.account_id AS "accountId",
-               a.bonus_cents AS "bonusCents", w.profit_limit_cents AS "profitLimitCents", w.claimed
-        FROM bonus_wallets w
-        LEFT JOIN profiles p ON w.user_id = p.id
-        LEFT JOIN accounts a ON w.account_id = a.id
-        ORDER BY w.created_at DESC
-        LIMIT 100
-      `);
-      return { rows: res.rows, nextCursor: null };
-    }
-
-    if (module === 'referrals') {
-      const res = await client.query(`
-        SELECT r.code AS "id", r.code, r.user_id AS "userId", p.email, r.created_at AS "createdAt"
-        FROM referral_codes r
-        LEFT JOIN profiles p ON r.user_id = p.id
-        ORDER BY r.created_at DESC
-        LIMIT 100
-      `);
-      return {
-        rows: res.rows.map(r => ({
-          ...r,
-          createdAt: r.createdAt ? new Date(r.createdAt).getTime() : Date.now()
-        })),
-        nextCursor: null
-      };
-    }
-
-    if (module === 'team') {
-      const res = await client.query(`
-        SELECT m.user_id AS "id", m.user_id AS "userId", p.email, m.referral_code AS "referralCode",
-               m.direct_count AS "directCount", m.team_count AS "teamCount", m.paid_cents AS "paidCents"
-        FROM program_members m
-        LEFT JOIN profiles p ON m.user_id = p.id
-        ORDER BY m.created_at DESC
-        LIMIT 100
-      `);
-      return { rows: res.rows, nextCursor: null };
-    }
-
-    if (module === 'agencies' || module === 'badges') {
-      const res = await client.query(`
-        SELECT id, owner_id AS "userId", data, updated_at AS "updatedAt"
-        FROM docs WHERE collection = $1
-        ORDER BY updated_at DESC LIMIT 100
-      `, [module]);
-      return { rows: res.rows.map(r => ({ id: r.id, userId: r.userId, ...(r.data || {}), createdAt: new Date(r.updatedAt).getTime() })), nextCursor: null };
-    }
-
-    if (module === 'notifications') {
-      const res = await client.query(`
-        SELECT id, owner_id AS "ownerId", data, updated_at AS "updatedAt"
-        FROM docs WHERE collection = 'orinNotices'
-        ORDER BY updated_at DESC LIMIT 100
-      `);
-      return { rows: res.rows.map(r => ({ id: r.id, ownerId: r.ownerId, ...(r.data || {}), createdAt: new Date(r.updatedAt).getTime() })), nextCursor: null };
-    }
-
-    if (module === 'content' || module === 'configuration') {
-      const res = await client.query(`
-        SELECT id, data, updated_at AS "updatedAt" FROM docs WHERE collection = 'system'
-      `);
-      return { rows: res.rows.map(r => ({ id: r.id, ...(r.data || {}), updatedAt: new Date(r.updatedAt).getTime() })), nextCursor: null };
-    }
-
-    if (module === 'security' || module === 'audit') {
-      const res = await client.query(`
-        SELECT id, actor_id AS "actorId", action, reference, payload_hash AS "payloadHash", created_at AS "createdAt"
-        FROM audit ORDER BY created_at DESC LIMIT 100
-      `);
-      return { rows: res.rows.map(r => ({ id: r.id, actorId: r.actorId, action: r.action, reference: r.reference, payloadHash: r.payloadHash, createdAt: new Date(r.createdAt).getTime() })), nextCursor: null };
-    }
-
-    if (module === 'tickets') {
-      const res = await client.query(`
-        SELECT id, owner_id AS "ownerId", data, updated_at AS "updatedAt"
-        FROM docs WHERE collection = 'support_tickets' ORDER BY updated_at DESC LIMIT 100
-      `);
-      return { rows: res.rows.map(r => ({ id: r.id, ownerId: r.ownerId, ...(r.data || {}), createdAt: new Date(r.updatedAt).getTime() })), nextCursor: null };
-    }
-
-    return { rows: [], nextCursor: null };
+    return {
+      rows,
+      nextCursor: hasMore ? String(offset + limit) : null,
+      hasMore
+    };
   });
 }
 
@@ -328,7 +232,7 @@ export async function controlAction(u: Identity, input: Data) {
   const action = String(input.action || '');
   const target = String(input.target || '');
   const payload = input.data || {};
-  const reason = String(input.reason || payload.reason || 'Administrative action');
+  const reason = String(input.reason ?? payload.reason ?? '').trim();
   const requestId = String(input.requestId || 'req-' + randomUUID());
 
   // 1. Contract Create
@@ -458,17 +362,77 @@ export async function controlAction(u: Identity, input: Data) {
   // 6. Staff Set
   if (action === 'staff.set') {
     const staffUid = String(target || payload._target || payload.userId || '');
-    const roles = Array.isArray(payload.roles) ? payload.roles : [payload.roles || 'support'];
-    const status = String(payload.status || 'active');
+    if (!staffUid) {
+      throw new ApiError('Target staff user ID required', 400);
+    }
+
+    if (staffUid === u.id) {
+      throw new ApiError('Caller cannot change their own staff roles', 409);
+    }
+
+    const requestedRoles = Array.isArray(payload.roles) ? payload.roles as any[] : [payload.roles || 'support'];
+    const status = (payload.status === 'disabled' || payload.status === 'suspended') ? 'disabled' : 'active';
 
     return await withTx(async (client) => {
+      const pRes = await client.query('SELECT id, role, disabled FROM profiles WHERE id = $1', [staffUid]);
+      if (pRes.rowCount === 0) {
+        throw new ApiError('Target user profile not found', 404);
+      }
+
+      const callerStaffRes = await client.query("SELECT roles FROM staff WHERE user_id = $1 AND status = 'active'", [u.id]);
+      const callerRoles: string[] = callerStaffRes.rowCount && Array.isArray(callerStaffRes.rows[0].roles)
+        ? callerStaffRes.rows[0].roles
+        : (u.role === 'admin' ? ['super_admin'] : []);
+
+      if (!callerRoles.includes('super_admin')) {
+        for (const r of requestedRoles) {
+          if (!callerRoles.includes(r)) {
+            throw new ApiError(`Caller cannot grant role '${r}' because caller does not hold it`, 403);
+          }
+        }
+      }
+
+      const currentStaffRes = await client.query("SELECT roles, status FROM staff WHERE user_id = $1", [staffUid]);
+      const isTargetSuperAdmin = currentStaffRes.rowCount > 0 &&
+        Array.isArray(currentStaffRes.rows[0].roles) &&
+        currentStaffRes.rows[0].roles.includes('super_admin') &&
+        currentStaffRes.rows[0].status === 'active';
+
+      const willBeSuperAdmin = status === 'active' && requestedRoles.includes('super_admin');
+
+      if (isTargetSuperAdmin && !willBeSuperAdmin) {
+        const superCountRes = await client.query(
+          "SELECT COUNT(*) FROM staff WHERE roles @> '[\"super_admin\"]'::jsonb AND status = 'active'"
+        );
+        const superCount = Number(superCountRes.rows[0].count);
+        if (superCount <= 1) {
+          throw new ApiError('The last super_admin cannot be removed or disabled', 409);
+        }
+      }
+
       await client.query(
         `INSERT INTO staff (user_id, roles, status, valid_after, created_at)
          VALUES ($1, $2::jsonb, $3, NOW(), NOW())
          ON CONFLICT (user_id) DO UPDATE SET roles = EXCLUDED.roles, status = EXCLUDED.status, valid_after = NOW()`,
-        [staffUid, JSON.stringify(roles), status]
+        [staffUid, JSON.stringify(requestedRoles), status]
       );
-      return { ok: true, staffUid, roles, status };
+
+      await client.query(
+        `INSERT INTO session_revocations (user_id, valid_after, updated_at)
+         VALUES ($1, NOW(), NOW())
+         ON CONFLICT (user_id) DO UPDATE SET valid_after = NOW(), updated_at = NOW()`,
+        [staffUid]
+      );
+
+      const auditPayload = JSON.stringify({ staffUid, roles: requestedRoles, status, updatedBy: u.id });
+      await client.query(
+        `INSERT INTO audit (actor_id, action, reference, payload, payload_hash)
+         VALUES ($1, 'STAFF_ROLE_SET', $2, $3::jsonb, $4)
+         ON CONFLICT (action, reference) DO NOTHING`,
+        [u.id, staffUid + '-' + Date.now(), auditPayload, hash(auditPayload)]
+      );
+
+      return { ok: true, staffUid, roles: requestedRoles, status };
     });
   }
 
@@ -545,6 +509,43 @@ export async function controlAction(u: Identity, input: Data) {
     });
   }
 
+  // 11b. Agency Set
+  if (action === 'agency.set') {
+    const agencyUid = target || payload.userId || payload.uid;
+    if (!agencyUid) {
+      throw new ApiError('Agency user ID required', 400);
+    }
+    const granted = payload.granted === true || payload.granted === 'true' || payload.granted === 'on';
+
+    return await withTx(async (client) => {
+      const agencyData = JSON.stringify({ agencyGranted: granted, name: payload.name || 'وكالة معتمدة', updatedAt: Date.now() });
+      await client.query(
+        `INSERT INTO docs (collection, id, owner_id, data)
+         VALUES ('agencies', $1, $2, $3::jsonb)
+         ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+        [agencyUid, u.id, agencyData]
+      );
+      return { ok: true, agencyUid, agencyGranted: granted };
+    });
+  }
+
+  // 11c. Referral Review
+  if (action === 'referral.review') {
+    const refTarget = target || payload.referralId || payload.id;
+    if (!refTarget) {
+      throw new ApiError('Referral target or ID required', 400);
+    }
+    const status = String(payload.status || 'qualified');
+
+    return await withTx(async (client) => {
+      await client.query(
+        `UPDATE referral_rewards SET status = $1 WHERE referrer_user_id = $2 OR referred_user_id = $2`,
+        [status, refTarget]
+      );
+      return { ok: true, status, referralId: refTarget };
+    });
+  }
+
   // 12. Security Revoke
   if (action === 'security.revoke') {
     const revUid = target || payload.uid || payload.userId;
@@ -556,6 +557,105 @@ export async function controlAction(u: Identity, input: Data) {
         [revUid]
       );
       return { ok: true, revoked: true, userId: revUid };
+    });
+  }
+
+  // 12b. Account Delete (Safe Close)
+  if (action === 'account.delete') {
+    const uid = String(payload.uid || payload.userId || target);
+    const accountId = String(payload.accountId || target);
+
+    return await withTx(async (client) => {
+      let targetAccId = accountId;
+      const accRes = await client.query('SELECT id, user_id, balance_cents, reserved_cents, status FROM accounts WHERE id = $1 OR user_id = $1 ORDER BY type ASC LIMIT 1 FOR UPDATE', [accountId]);
+      if (accRes.rowCount === 0) throw new ApiError('Account not found', 404);
+      const acc = accRes.rows[0];
+      targetAccId = acc.id;
+
+      if (Number(acc.balance_cents) !== 0) {
+        throw new ApiError(`Cannot close account with non-zero balance ($${(Number(acc.balance_cents)/100).toFixed(2)}). Debit balance to zero first via approved finance action.`, 409);
+      }
+
+      await client.query("UPDATE positions SET status = 'settled', settled_at = NOW() WHERE account_id = $1 AND status = 'active'", [targetAccId]);
+      await client.query("UPDATE accounts SET status = 'closed', updated_at = NOW() WHERE id = $1", [targetAccId]);
+      await client.query("UPDATE profiles SET disabled = TRUE, updated_at = NOW() WHERE id = $1", [acc.user_id]);
+      await client.query("INSERT INTO session_revocations (user_id, valid_after, updated_at) VALUES ($1, NOW(), NOW()) ON CONFLICT (user_id) DO UPDATE SET valid_after = NOW(), updated_at = NOW()", [acc.user_id]);
+
+      return { ok: true, closed: true, accountId: targetAccId, userId: acc.user_id };
+    });
+  }
+
+  // 12c. Support Tickets (ticket.create, ticket.update, ticket.note)
+  if (action === 'ticket.create') {
+    const ticketId = target || 'spt-' + randomUUID();
+    const ticketData = JSON.stringify({
+      id: ticketId,
+      uid: payload.uid || target,
+      title: payload.title || 'تذكرة دعم من الإدارة',
+      description: payload.description || '',
+      category: payload.category || 'account',
+      priority: payload.priority || 'normal',
+      status: 'open',
+      assigneeId: payload.assigneeId || u.id,
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    });
+
+    return await withTx(async (client) => {
+      await client.query(
+        `INSERT INTO docs (collection, id, owner_id, data)
+         VALUES ('support_tickets', $1, $2, $3::jsonb)
+         ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+        [ticketId, payload.uid || target || u.id, ticketData]
+      );
+      return { ok: true, ticketId, status: 'open' };
+    });
+  }
+
+  if (action === 'ticket.update') {
+    const ticketId = target || payload.ticketId;
+    return await withTx(async (client) => {
+      const tRes = await client.query("SELECT data FROM docs WHERE collection = 'support_tickets' AND id = $1", [ticketId]);
+      if (tRes.rowCount === 0) throw new ApiError('Ticket not found', 404);
+      const prevData = tRes.rows[0].data || {};
+      const updatedData = JSON.stringify({
+        ...prevData,
+        status: payload.status || prevData.status || 'in_progress',
+        priority: payload.priority || prevData.priority || 'normal',
+        assigneeId: payload.assigneeId !== undefined ? payload.assigneeId : prevData.assigneeId,
+        dueAt: payload.dueAt || prevData.dueAt,
+        updatedAt: Date.now()
+      });
+
+      await client.query(
+        `UPDATE docs SET data = $1::jsonb, updated_at = NOW() WHERE collection = 'support_tickets' AND id = $2`,
+        [updatedData, ticketId]
+      );
+      return { ok: true, ticketId, status: payload.status || prevData.status };
+    });
+  }
+
+  if (action === 'ticket.note') {
+    const ticketId = target || payload.ticketId;
+    const bodyText = String(payload.body || '').trim();
+    if (!bodyText) throw new ApiError('Note body is required', 400);
+
+    return await withTx(async (client) => {
+      const noteId = 'note-' + randomUUID();
+      const noteData = JSON.stringify({
+        id: noteId,
+        ticketId,
+        authorId: u.id,
+        body: bodyText,
+        createdAt: Date.now()
+      });
+
+      await client.query(
+        `INSERT INTO docs (collection, id, owner_id, data)
+         VALUES ('support_ticket_notes', $1, $2, $3::jsonb)`,
+        [noteId, u.id, noteData]
+      );
+      return { ok: true, noteId, ticketId };
     });
   }
 
@@ -733,29 +833,78 @@ export async function controlAction(u: Identity, input: Data) {
   // 18. KYC Review (kyc.review - searching by kyc_requests, kyc_files, or user_id)
   if (action === 'kyc.review') {
     const reqTarget = target || payload.requestId || payload.target;
-    const isApproved = payload.status === 'approved' || payload.status === 'verified';
-    const dec = isApproved ? 'approved' : 'rejected';
+    const inputStatus = String(payload.status || '');
+
+    if (!['approved', 'verified', 'rejected', 'more_information', 'revoke'].includes(inputStatus)) {
+      throw new ApiError('حالة المراجعة غير صالحة. / Invalid KYC review status.', 400);
+    }
+
+    if ((inputStatus === 'rejected' || inputStatus === 'more_information') && (!reason || reason.trim().length < 5)) {
+      throw new ApiError('سبب المراجعة / رفض الطلب مطلوب بحد أدنى 5 أحرف. / Review reason (min 5 chars) is required.', 400);
+    }
+
+    const isApproved = inputStatus === 'approved' || inputStatus === 'verified';
+    const isMoreInfo = inputStatus === 'more_information';
+    const isRevoke = inputStatus === 'revoke';
 
     return await withTx(async (client) => {
       let kycUserId: string | null = null;
-      let customerKey: string = 'ck-' + randomUUID();
+      let kycFileId: string | null = null;
 
       const reqRes = await client.query('SELECT user_id, customer_key FROM kyc_requests WHERE id = $1 OR customer_key = $1 OR user_id = $1', [reqTarget]);
       if (reqRes.rowCount) {
         kycUserId = reqRes.rows[0].user_id;
-        customerKey = reqRes.rows[0].customer_key;
       } else {
-        const fileRes = await client.query('SELECT user_id FROM kyc_files WHERE id = $1 OR user_id = $1 ORDER BY created_at DESC LIMIT 1', [reqTarget]);
+        const fileRes = await client.query('SELECT id, user_id FROM kyc_files WHERE id = $1 OR user_id = $1 ORDER BY created_at DESC LIMIT 1', [reqTarget]);
         if (fileRes.rowCount) {
           kycUserId = fileRes.rows[0].user_id;
-          customerKey = 'ck-' + kycUserId;
+          kycFileId = fileRes.rows[0].id;
         } else {
           throw new ApiError('KYC request not found', 404);
         }
       }
 
-      const reqStatus = isApproved ? 'approved' : 'rejected';
-      const fileStatus = isApproved ? 'verified' : 'rejected';
+      if (!kycFileId && kycUserId) {
+        const fRes = await client.query('SELECT id FROM kyc_files WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1', [kycUserId]);
+        if (fRes.rowCount) kycFileId = fRes.rows[0].id;
+      }
+
+      if (kycFileId) {
+        const logCheck = await client.query('SELECT id FROM kyc_access_log WHERE staff_id = $1 AND kyc_file_id = $2 LIMIT 1', [u.id, kycFileId]);
+        if (logCheck.rowCount === 0) {
+          throw new ApiError('يجب معاينة الوثائق وتمرير سبب الوصول أولاً قبل مراجعة الطلب. / Prior document access log entry required before reviewing KYC request.', 403);
+        }
+      }
+
+      let customerKey = 'ck-' + kycUserId;
+      let last4 = '0000';
+      const kFileRes = await client.query('SELECT * FROM kyc_files WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1', [kycUserId]);
+      if (kFileRes.rowCount) {
+        const kFile = kFileRes.rows[0];
+        const encKey = getKycFilesKey();
+        if (kFile.id_number_encrypted && kFile.id_number_iv && kFile.id_number_tag) {
+          const realIdNum = decryptAesGcm(kFile.id_number_encrypted, kFile.id_number_iv, kFile.id_number_tag, encKey);
+          customerKey = computeCustomerKey(kFile.country, kFile.document_type, realIdNum);
+          last4 = idLast4(realIdNum);
+        }
+      }
+
+      if (isApproved) {
+        const regRes = await client.query('SELECT user_id FROM customer_registry WHERE customer_key = $1', [customerKey]);
+        if (regRes.rowCount > 0 && regRes.rows[0].user_id !== kycUserId) {
+          throw new ApiError('وثيقة الهوية هذه مسجلة بالفعل لحساب آخر. / Duplicate identity document detected.', 409);
+        }
+
+        await client.query(
+          `INSERT INTO customer_registry (customer_key, user_id)
+           VALUES ($1, $2)
+           ON CONFLICT (customer_key) DO NOTHING`,
+          [customerKey, kycUserId]
+        );
+      }
+
+      const reqStatus = isApproved ? 'approved' : isMoreInfo ? 'more_information' : 'rejected';
+      const fileStatus = isApproved ? 'verified' : isMoreInfo ? 'more_information' : 'rejected';
 
       await client.query(
         `UPDATE kyc_requests
@@ -775,13 +924,20 @@ export async function controlAction(u: Identity, input: Data) {
         const eventId = 'kyc-approved-' + randomUUID();
         await client.query(
           `INSERT INTO verified_customers (user_id, customer_key, id_number_last4, verified, revoked, event_id, created_at)
-           VALUES ($1, $2, '0000', TRUE, FALSE, $3, NOW())
-           ON CONFLICT (user_id) DO UPDATE SET verified = TRUE, revoked = FALSE, event_id = EXCLUDED.event_id`,
-          [kycUserId, customerKey, eventId]
+           VALUES ($1, $2, $3, TRUE, FALSE, $4, NOW())
+           ON CONFLICT (user_id) DO UPDATE SET customer_key = EXCLUDED.customer_key, id_number_last4 = EXCLUDED.id_number_last4, verified = TRUE, revoked = FALSE, event_id = EXCLUDED.event_id`,
+          [kycUserId, customerKey, last4, eventId]
         );
+      } else if (isRevoke) {
+        await client.query(
+          `UPDATE verified_customers SET verified = FALSE, revoked = TRUE WHERE user_id = $1`,
+          [kycUserId]
+        );
+        await client.query("UPDATE kyc_requests SET status = 'rejected', reason = $1, reviewed_at = NOW() WHERE user_id = $2", [reason, kycUserId]);
+        await client.query("UPDATE kyc_files SET status = 'rejected', updated_at = NOW() WHERE user_id = $1", [kycUserId]);
       }
 
-      return { ok: true, status: dec, requestId: reqTarget, userId: kycUserId };
+      return { ok: true, status: fileStatus, requestId: reqTarget, userId: kycUserId };
     });
   }
 

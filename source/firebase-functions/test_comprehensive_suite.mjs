@@ -541,10 +541,11 @@ await assertInvariant('After Withdrawal Payout');
 // ===================================================================
 console.log('\n--- PART D: BATCH 3 SUPERTEST OVER REAL HTTP ---');
 
-const tokenA = 'test-token-userA';
-const tokenB = 'test-token-userB';
-const tokenAdmin1 = 'test-token-admin1';
-const tokenAdmin2 = 'test-token-admin2';
+const futureTime = Date.now() + 86400000;
+const tokenA = `test-token-userA:userA@orin.test:user:UserA:${futureTime}`;
+const tokenB = `test-token-userB:userB@orin.test:user:UserB:${futureTime}`;
+const tokenAdmin1 = `test-token-admin1:admin1@orin.test:admin:AdminOne:${futureTime}`;
+const tokenAdmin2 = `test-token-admin2:admin2@orin.test:admin:AdminTwo:${futureTime}`;
 
 // 1. Production Mode Check: verify fake token is strictly rejected with 401
 process.env.NODE_ENV = 'production';
@@ -754,12 +755,17 @@ console.log('[PASS] Support Assistant and Escalation routes (/support/assistant,
 
 // --- E.2 Control Center Actions over HTTP (as orin_app) ---
 console.log('\nTesting Control Center ported actions over HTTP...');
-// Seed staff table
+// Seed staff table & profiles
 await appClient.query(`
+  INSERT INTO profiles (id, email, display_name, role) VALUES
+    ('admin1', 'admin1@orin.test', 'Admin One', 'admin'),
+    ('admin2', 'admin2@orin.test', 'Admin Two', 'admin')
+  ON CONFLICT (id) DO UPDATE SET role = EXCLUDED.role;
+
   INSERT INTO staff (user_id, roles, status) VALUES
-    ('admin1', '["admin", "finance", "operations", "compliance"]'::jsonb, 'active'),
-    ('admin2', '["admin", "finance", "operations", "compliance"]'::jsonb, 'active')
-  ON CONFLICT (user_id) DO NOTHING;
+    ('admin1', '["super_admin"]'::jsonb, 'active'),
+    ('admin2', '["super_admin"]'::jsonb, 'active')
+  ON CONFLICT (user_id) DO UPDATE SET roles = EXCLUDED.roles, status = EXCLUDED.status;
 `);
 
 // 1. Staff list

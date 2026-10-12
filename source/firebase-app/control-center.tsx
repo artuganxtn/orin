@@ -89,16 +89,17 @@ const field = (key: string, label: string, type = 'text', options?: [
     string
 ][]): Field => ({ key, label, type, options, required: true });
 const fallbackSession: ControlSession = {
-    available: true,
-    uid: 'admin',
-    roles: ['super_admin'],
-    permissions: Object.keys(PERMISSIONS) as Permission[],
-    reauthSeconds: 300,
-    capabilities: { payments: true, execution: true, kycDocuments: true, push: true, scheduler: true }
+    available: false,
+    roles: [],
+    permissions: [],
+    reason: 'session_expired',
+    reauthSeconds: 0,
+    capabilities: { payments: false, execution: false, kycDocuments: false, push: false, scheduler: false }
 };
 export function ControlCenter({ path = '/admin', navigate, request = apiFetch, reauthenticate, preview = false, initialSession, initialData }: Props) {
     const [module, setModule] = useState(path.split('/')[2] || 'dashboard'), [session, setSession] = useState<ControlSession>(initialSession ?? fallbackSession), [data, setData] = useState<any>(initialData ?? null), [loading, setLoading] = useState(!initialData), [error, setError] = useState(''), [message, setMessage] = useState(''), [search, setSearch] = useState(''), [globalSearch, setGlobalSearch] = useState(''), [status, setStatus] = useState('all'), [cursor, setCursor] = useState(''), [row, setRow] = useState<ControlRow | null>(null), [detail, setDetail] = useState<any>(null), [edit, setEdit] = useState<Edit | null>(null), [busy, setBusy] = useState(false), [mobile, setMobile] = useState(false), [reauth, setReauth] = useState(false);
     const [priority, setPriority] = useState('all'), [assignee, setAssignee] = useState('all'), [pageHistory, setPageHistory] = useState<string[]>([]), [detailLoading, setDetailLoading] = useState(false);
+    const [kycPromptRow, setKycPromptRow] = useState<ControlRow | null>(null), [kycReasonInput, setKycReasonInput] = useState('');
     const blankAudit = { from: '', to: '', adminId: '', action: '', target: '' };
     const [auditDraft, setAuditDraft] = useState(blankAudit), [auditFilters, setAuditFilters] = useState(blankAudit);
     const detailSequence = useRef(0);
@@ -242,6 +243,11 @@ export function ControlCenter({ path = '/admin', navigate, request = apiFetch, r
         }
     }
     async function inspect(r: ControlRow) {
+        if (module === 'kyc') {
+            setKycPromptRow(r);
+            setKycReasonInput('');
+            return;
+        }
         const token = ++detailSequence.current;
         setRow(r); setDetail(null); setDetailLoading(true);
         try {
@@ -249,6 +255,18 @@ export function ControlCenter({ path = '/admin', navigate, request = apiFetch, r
                 const result = await read(module === 'users' ? '/api/control/user?uid=' + encodeURIComponent(r.id) : '/api/control/tickets?ticket=' + encodeURIComponent(r.id));
                 if (token === detailSequence.current) { setDetail(result); if (result.ticket) setRow(result.ticket); }
             }
+        } catch (e) { if (token === detailSequence.current) setError((e as Error).message); }
+        finally { if (token === detailSequence.current) setDetailLoading(false); }
+    }
+    async function submitKycReason(reason: string) {
+        if (!kycPromptRow || reason.trim().length < 5) return;
+        const targetRow = kycPromptRow;
+        setKycPromptRow(null);
+        const token = ++detailSequence.current;
+        setRow(targetRow); setDetail(null); setDetailLoading(true);
+        try {
+            const result = await read('/api/control/kyc-detail?id=' + encodeURIComponent(targetRow.id) + '&reason=' + encodeURIComponent(reason.trim()));
+            if (token === detailSequence.current) { setDetail(result); setRow(prev => ({ ...prev, ...result })); }
         } catch (e) { if (token === detailSequence.current) setError((e as Error).message); }
         finally { if (token === detailSequence.current) setDetailLoading(false); }
     }
@@ -398,5 +416,35 @@ export function ControlCenter({ path = '/admin', navigate, request = apiFetch, r
                     v = v.join(', ');
                 return <label className={['textarea', 'checkbox'].includes(f.type ?? '') ? 'wide' : ''} key={f.key}><span>{f.label}</span>{f.type === 'textarea' ? <textarea name={f.key} defaultValue={v} required={f.required} rows={4} maxLength={20000}/> : ['select', 'roles'].includes(f.type ?? '') ? <select name={f.key} defaultValue={Array.isArray(v) ? v[0] : v || f.options?.[0]?.[0]}>{f.options?.map(([key, label]) => <option value={key} key={key}>{label}</option>)}</select> : f.type === 'checkbox' ? <input type="checkbox" name={f.key} defaultChecked={!!v}/> : <input name={f.key} type={['money', 'nullable-number'].includes(f.type ?? '') ? 'number' : f.type === 'csv' ? 'text' : f.type ?? 'text'} step={f.type === 'money' ? '0.01' : f.type === 'number' ? '1' : undefined} defaultValue={v} required={f.required} maxLength={2000}/>}</label>;
             })}<label className="wide"><span>سبب العملية / مرجع المراجعة <strong>*</strong></span><textarea name="reason" minLength={3} maxLength={1000} required rows={2} placeholder="اكتب سببًا واضحًا يظهر في سجل التدقيق"/></label></div><label className="occ-confirm"><input name="confirmed" type="checkbox" required/>راجعت الهدف والبيانات وأؤكد هذه العملية.</label>{reauth && reauthenticate && <button type="button" onClick={() => void reauthenticate()}>إعادة تسجيل الدخول للمصادقة</button>}<footer><button type="button" disabled={busy} onClick={() => setEdit(null)}>إلغاء</button><button className="occ-primary" disabled={busy} type="submit">{busy ? 'جارٍ التحقق والحفظ…' : preview ? 'تجربة الإجراء في المعاينة' : 'تأكيد وإرسال للخادم'}</button></footer></form></section></div>}
+   {kycPromptRow && (
+    <div className="occ-overlay">
+      <section role="dialog" className="occ-modal" style={{ maxWidth: '440px' }}>
+        <h2>سبب معاينة وثيقة الهوية (مطلوب)</h2>
+        <p style={{ fontSize: '13px', color: 'var(--orin-muted)', margin: '8px 0 16px' }}>يجب توثيق سبب الوصول إلى صورة ورقم الوثيقة في سجل التدقيق المباشر.</p>
+        <form onSubmit={e => { e.preventDefault(); void submitKycReason(kycReasonInput); }}>
+          <label className="occ-field" style={{ display: 'grid', gap: '6px' }}>
+            <span style={{ fontSize: '13px', fontWeight: 600 }}>سبب المعاينة (5 أحرف على الأقل) *</span>
+            <textarea
+              required
+              minLength={5}
+              value={kycReasonInput}
+              onChange={e => setKycReasonInput(e.target.value)}
+              placeholder="أدخل سبب المعاينة والتدقيق (مثال: مراجعة طلب التوثيق للسحب)..."
+              rows={3}
+              style={{ width: '100%', padding: '10px', borderRadius: '10px', border: '1px solid var(--orin-line)', background: 'var(--orin-surface-soft)', color: 'var(--orin-ink)' }}
+            />
+          </label>
+          <div className="occ-actions" style={{ marginTop: '16px', display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+            <button type="submit" className="occ-primary" disabled={kycReasonInput.trim().length < 5}>
+              تأكيد وعرض التفاصيل
+            </button>
+            <button type="button" onClick={() => setKycPromptRow(null)}>
+              إلغاء
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+   )}
  </div>;
 }

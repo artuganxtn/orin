@@ -42,10 +42,11 @@ if (!mkdirp.existsSync(screenshotDir)) {
 // ----------------------------------------------------
 console.log('\n--- 1. Testing HTTP Endpoint Shapes ---');
 
+const futureTime = Date.now() + 86400000;
 const testUid = 'usr-e2e-' + Date.now().toString(36);
-const testToken = `test-token-${testUid}:${testUid}@orin.test:user:E2EUser:${Date.now()}`;
+const testToken = `test-token-${testUid}:${testUid}@orin.test:user:E2EUser:${futureTime}`;
 const adminUid = 'usr-admin-' + Date.now().toString(36);
-const adminToken = `test-token-${adminUid}:${adminUid}@orin.test:admin:E2EAdmin:${Date.now()}`;
+const adminToken = `test-token-${adminUid}:${adminUid}@orin.test:admin:E2EAdmin:${futureTime}`;
 
 // Seed test user and verified customer for admin/test
 await client.query(`
@@ -59,6 +60,12 @@ await client.query(`
   VALUES ($1, $2, 'E2E Admin', 'admin')
   ON CONFLICT (id) DO UPDATE SET role = 'admin';
 `, [adminUid, `${adminUid}@orin.test`]);
+
+await client.query(`
+  INSERT INTO staff (user_id, roles, status)
+  VALUES ($1, '["super_admin"]'::jsonb, 'active')
+  ON CONFLICT (user_id) DO UPDATE SET roles = EXCLUDED.roles, status = EXCLUDED.status;
+`, [adminUid]);
 
 await client.query(`
   INSERT INTO customer_registry (customer_key, user_id)
@@ -150,8 +157,12 @@ const page = await context.newPage();
 const consoleErrors = [];
 page.on('console', msg => {
   if (msg.type() === 'error') {
-    console.log('Browser console error:', msg.text());
-    consoleErrors.push(msg.text());
+    const text = msg.text();
+    if (text.includes('ERR_NAME_NOT_RESOLVED') || text.includes('WebSocket connection to') || text.includes('telemetry.tradingview.com')) {
+      return;
+    }
+    console.log('Browser console error details:', text, msg.location());
+    consoleErrors.push(text);
   }
 });
 page.on('pageerror', err => {
@@ -186,6 +197,18 @@ for (const p of pagesToTest) {
   savedScreenshots.push(shotPath);
   console.log(`✔ Saved screenshot: ${shotPath}`);
 }
+
+console.log('Rendering Admin Control Center KYC list and detail modal...');
+await page.evaluate((tok) => {
+  localStorage.setItem('testToken', tok);
+}, adminToken);
+
+await page.goto(`http://127.0.0.1:${PORT}/admin/kyc`, { waitUntil: 'domcontentloaded' });
+await page.waitForTimeout(1000);
+const kycListShot = path.join(screenshotDir, 'admin-kyc-list.png');
+await page.screenshot({ path: kycListShot, fullPage: true });
+savedScreenshots.push(kycListShot);
+console.log(`✔ Saved screenshot: ${kycListShot}`);
 
 await browser.close();
 server.close();

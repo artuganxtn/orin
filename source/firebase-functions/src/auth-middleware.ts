@@ -79,7 +79,7 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
         await client.query(
           `INSERT INTO accounts (id, user_id, account_number, type, currency, status)
            VALUES ($1, $2, $3, 'real', 'USD', 'active')
-           ON CONFLICT (id) DO NOTHING`,
+           ON CONFLICT DO NOTHING`,
           [accId, uid, accNum]
         );
       }

@@ -1,4 +1,4 @@
-import { randomUUID, createHmac, createCipheriv, randomBytes } from 'node:crypto';
+import { randomUUID, createHmac, createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { withTx } from './db.ts';
 import { recordVerifiedCustomer } from './program-ingestion.ts';
 
@@ -20,7 +20,7 @@ export async function requireVerifiedKyc(user: { id: string }, client: any) {
   }
 }
 
-function getKycFilesKey(): Buffer {
+export function getKycFilesKey(): Buffer {
   const raw = process.env.KYC_FILES_KEY || 'orin-kyc-files-key-32-bytes-2026!';
   if (raw.length === 64 && /^[0-9a-fA-F]+$/.test(raw)) {
     return Buffer.from(raw, 'hex');
@@ -84,6 +84,8 @@ export async function submitKyc(
 
   const encKey = getKycFilesKey();
 
+  const fullNameStr = (input.fullName || '').trim() || 'User';
+  const encName = encryptAesGcm(fullNameStr, encKey);
   const encId = encryptAesGcm(idNumber, encKey);
   const docImage = input.documentImage || 'placeholder_document_data';
   const encImage = encryptAesGcm(docImage, encKey);
@@ -130,8 +132,9 @@ export async function submitKyc(
          id, user_id, country, document_type,
          id_number_encrypted, id_number_iv, id_number_tag,
          document_image_encrypted, document_image_iv, document_image_tag,
+         full_name_encrypted, full_name_iv, full_name_tag,
          status
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'review')`,
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'review')`,
       [
         kycFileId,
         user.id,
@@ -142,7 +145,10 @@ export async function submitKyc(
         encId.tag,
         encImage.encrypted,
         encImage.iv,
-        encImage.tag
+        encImage.tag,
+        encName.encrypted,
+        encName.iv,
+        encName.tag
       ]
     );
 
@@ -296,14 +302,32 @@ export async function listKycFiles(_staff: { id: string }) {
   });
 }
 
+export function decryptAesGcm(encryptedHex: string, ivHex: string, tagHex: string, keyBuffer: Buffer): string {
+  try {
+    const decipher = createDecipheriv('aes-256-gcm', keyBuffer, Buffer.from(ivHex, 'hex'));
+    decipher.setAuthTag(Buffer.from(tagHex, 'hex'));
+    let decrypted = decipher.update(encryptedHex, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return decrypted;
+  } catch {
+    throw new KycError('Decryption failed for document data', 500);
+  }
+}
+
 export async function readKycFile(staff: { id: string }, fileId: string, reason: string) {
   if (!reason || reason.trim().length < 5) {
     throw new KycError('سبب الوصول إلى وثيقة الهوية مطلوب بحد أدنى 5 أحرف.', 400);
   }
   return await withTx(async (client) => {
     const res = await client.query(
-      `SELECT id, user_id, country, document_type, status, created_at, updated_at
-       FROM kyc_files WHERE id = $1`,
+      `SELECT k.id, k.user_id, k.country, k.document_type, k.status, k.created_at, k.updated_at,
+              k.id_number_encrypted, k.id_number_iv, k.id_number_tag,
+              k.document_image_encrypted, k.document_image_iv, k.document_image_tag,
+              k.full_name_encrypted, k.full_name_iv, k.full_name_tag,
+              p.display_name AS full_name, p.email
+       FROM kyc_files k
+       LEFT JOIN profiles p ON k.user_id = p.id
+       WHERE k.id = $1 OR k.user_id = $1`,
       [fileId]
     );
     if (res.rowCount === 0) {
@@ -311,18 +335,38 @@ export async function readKycFile(staff: { id: string }, fileId: string, reason:
     }
     const row = res.rows[0];
 
-    // Log staff access
+    const encKey = getKycFilesKey();
+    let idNumber = '••••';
+    let fullName = row.full_name || 'User';
+    let documentImage: string | null = null;
+
+    if (row.full_name_encrypted && row.full_name_iv && row.full_name_tag) {
+      fullName = decryptAesGcm(row.full_name_encrypted, row.full_name_iv, row.full_name_tag, encKey);
+    }
+
+    if (row.id_number_encrypted && row.id_number_iv && row.id_number_tag) {
+      idNumber = decryptAesGcm(row.id_number_encrypted, row.id_number_iv, row.id_number_tag, encKey);
+    }
+
+    if (row.document_image_encrypted && row.document_image_iv && row.document_image_tag) {
+      documentImage = decryptAesGcm(row.document_image_encrypted, row.document_image_iv, row.document_image_tag, encKey);
+    }
+
     await client.query(
       `INSERT INTO kyc_access_log (staff_id, kyc_file_id, action, reason)
-       VALUES ($1, $2, 'read_metadata', $3)`,
-      [staff.id, fileId, reason.trim()]
+       VALUES ($1, $2, 'read_detail', $3)`,
+      [staff.id, row.id, reason.trim()]
     );
 
     return {
       id: row.id,
       userId: row.user_id,
+      fullName,
+      email: row.email || '',
       country: row.country,
       documentType: row.document_type,
+      idNumber,
+      documentImage,
       status: row.status,
       createdAt: new Date(row.created_at).getTime(),
       updatedAt: new Date(row.updated_at).getTime(),

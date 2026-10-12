@@ -21,6 +21,7 @@ import { submitKyc, getKycStatus, verifyKycCustomer, listKycFiles, readKycFile }
 import { supportAssistantCapability, supportAssistantReply, escalateSupportTicket } from './support.ts';
 import { operationQueues, readAudit, readTickets } from './control-operations.ts';
 import { controlAction, controlRead } from './control-center.ts';
+import { controlRbacMiddleware } from './control-rbac.ts';
 
 import {
   getTradingAccounts,
@@ -424,7 +425,10 @@ api.post('/invitations/verify', async (req: Request, res: Response) => {
   }
 });
 
-// Control Center endpoints
+// Control Center endpoints & RBAC
+api.use('/control', controlRbacMiddleware());
+api.use('/admin', controlRbacMiddleware());
+
 api.get('/control/session', async (req: Request, res: Response) => {
   try {
     res.json({
@@ -479,6 +483,40 @@ api.post('/control/action', async (req: Request, res: Response) => {
 api.get('/control/staff', async (req: Request, res: Response) => {
   try {
     const result = await controlRead(req.user!, 'staff');
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message, code: err.code });
+  }
+});
+
+api.get('/control/kyc-detail', controlRbacMiddleware('kyc.documents'), async (req: Request, res: Response) => {
+  try {
+    const id = String(req.query.id || req.query.documentId || req.query.target || '');
+    const reason = String(req.query.reason || 'Staff document inspection');
+    const result = await readKycFile(req.user!, id, reason);
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message, code: err.code });
+  }
+});
+
+api.get('/control/kyc-document', controlRbacMiddleware('kyc.documents'), async (req: Request, res: Response) => {
+  try {
+    const id = String(req.query.id || req.query.documentId || req.query.target || '');
+    const reason = String(req.query.reason || 'Staff document inspection');
+    const result = await readKycFile(req.user!, id, reason);
+
+    if (req.headers.accept?.includes('image/') && result.documentImage?.startsWith('data:image/')) {
+      const parts = result.documentImage.split(',');
+      const mime = parts[0].match(/:(.*?);/)?.[1] || 'image/png';
+      const buf = Buffer.from(parts[1], 'base64');
+      res.setHeader('Content-Type', mime);
+      res.setHeader('Cache-Control', 'no-store');
+      return res.send(buf);
+    }
+
+    res.setHeader('Cache-Control', 'no-store');
     res.json(result);
   } catch (err: any) {
     res.status(err.status || 400).json({ error: err.message, code: err.code });
