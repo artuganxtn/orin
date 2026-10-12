@@ -126,7 +126,14 @@ export async function submitKyc(
       [kycReqId, user.id, customerKey]
     );
 
-    // 3. Insert kyc file securely
+    // 3. Ensure migration 008 columns exist then insert kyc file securely
+    await client.query(`
+      ALTER TABLE kyc_files
+        ADD COLUMN IF NOT EXISTS full_name_encrypted TEXT,
+        ADD COLUMN IF NOT EXISTS full_name_iv TEXT,
+        ADD COLUMN IF NOT EXISTS full_name_tag TEXT
+    `).catch(() => {});
+
     await client.query(
       `INSERT INTO kyc_files (
          id, user_id, country, document_type,
