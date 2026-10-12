@@ -339,6 +339,35 @@ export async function controlAction(u: Identity, input: Data) {
       const reference = String(payload.reference || 'adj-ref-' + randomUUID());
       const approvalId = requestId.startsWith('req-') ? requestId.replace('req-', 'appr-') : 'appr-' + requestId;
 
+      // Super admin adjustments execute double-entry journal immediately
+      const isSuperAdmin = u.role === 'admin';
+      if (isSuperAdmin && action !== 'finance.propose') {
+        const journalId = 'jnl-' + randomUUID();
+        const sysBucket = 'system:adjustment';
+
+        await client.query(
+          `INSERT INTO journals (id, kind, reference, created_at)
+           VALUES ($1, 'adjustment', $2, NOW())`,
+          [journalId, reference]
+        );
+
+        await client.query(
+          `INSERT INTO journal_entries (journal_id, user_id, account_id, bucket, amount_cents)
+           VALUES ($1, $2, $3, 'cash', $4),
+                  ($1, NULL, NULL, $5, $6)`,
+          [journalId, realUserId, realAccountId, deltaCents, sysBucket, -deltaCents]
+        );
+
+        await client.query(
+          `INSERT INTO approvals (id, kind, user_id, account_id, delta_cents, before_cents, after_cents, status, reason, reference, requested_by, approved_by, approved_at, created_at)
+           VALUES ($1, 'adjustment', $2, $3, $4, $5, $6, 'approved', $7, $8, $9, NULL, NOW(), NOW())`,
+          [approvalId, realUserId, realAccountId, deltaCents, beforeCents, afterCents, reason, reference, u.id]
+        );
+
+        return { ok: true, approvalId, status: 'approved', deltaCents, beforeCents, afterCents, journalId };
+      }
+
+      // Finance staff proposals create pending approval for two-person rule
       await client.query(
         `INSERT INTO approvals (id, kind, user_id, account_id, delta_cents, before_cents, after_cents, status, reason, reference, requested_by, created_at)
          VALUES ($1, 'adjustment', $2, $3, $4, $5, $6, 'pending', $7, $8, $9, NOW())`,

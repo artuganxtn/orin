@@ -211,7 +211,7 @@ export function ControlCenter({ path = '/admin', navigate, request = apiFetch, r
             const result = await read('/api/control/action', { method: 'POST', body: JSON.stringify({ action: edit.action, target, revision: edit.revision, requestId: command.current, reason: fd.get('reason'), data: payload }) });
             setEdit(null);
             setRow(null);
-            setMessage(preview ? 'معاينة فقط — لم تُرسل أي عملية إلى ORIN.' : result.code ? `تم إنشاء الكود ${result.code} وتسجيل شروطه. نوع العقد: افتراضي.` : 'تم حفظ العملية وتسجيلها في سجل التدقيق.');
+            setMessage(preview ? 'معاينة فقط — لم تُرسل أي عملية إلى ORIN.' : result.status === 'pending' ? 'تم تقديم الطلب بنجاح — بانتظار موافقة المسؤول الثاني (الموافقات المالية).' : result.code ? `تم إنشاء الكود ${result.code} وتسجيل شروطه.` : 'تم تنفيذ العملية بنجاح وتحديث البيانات في سجل التدقيق.');
             await load();
         }
         catch (e) {

@@ -78,19 +78,21 @@ const closeWithBalRes = await request(app)
 assert.equal(closeWithBalRes.status, 409, `Expected 409 for account close with balance > 0, got ${closeWithBalRes.status}`);
 console.log('✔ Closing account with non-zero balance rejected with 409!');
 
-// D.2 Debit balance to zero via finance propose + approve
+// D.2 Debit balance to zero via account.balance
 const proposeDebit = await request(app)
   .post('/api/control/action')
   .set('Authorization', `Bearer ${superToken}`)
   .send({ action: 'account.balance', target: closeAccId, data: { uid: closeUser, accountId: closeAccId, balance: 0 } });
 assert.equal(proposeDebit.status, 200);
-const approvalId = proposeDebit.body.approvalId;
 
-const approveDebit = await request(app)
-  .post('/api/control/action')
-  .set('Authorization', `Bearer ${admin2Token}`)
-  .send({ action: 'finance.approve', target: approvalId });
-assert.equal(approveDebit.status, 200);
+if (proposeDebit.body.status === 'pending') {
+  const approvalId = proposeDebit.body.approvalId;
+  const approveDebit = await request(app)
+    .post('/api/control/action')
+    .set('Authorization', `Bearer ${admin2Token}`)
+    .send({ action: 'finance.approve', target: approvalId });
+  assert.equal(approveDebit.status, 200);
+}
 
 const accZero = await client.query('SELECT balance_cents FROM accounts WHERE id = $1', [closeAccId]);
 assert.equal(Number(accZero.rows[0].balance_cents), 0);
