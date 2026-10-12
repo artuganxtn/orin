@@ -114,7 +114,7 @@ export async function controlRead(u: Identity, module: string, q: Data = {}) {
       }
 
       if (wheres.length > 0) sql += ' WHERE ' + wheres.join(' AND ');
-      sql += ` ORDER BY created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+      sql += ` ORDER BY created_at DESC, id DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
       params.push(limit + 1, offset);
 
       const res = await client.query(sql, params);

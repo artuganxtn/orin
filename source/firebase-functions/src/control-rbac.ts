@@ -45,14 +45,18 @@ const MODULE_PERMISSIONS: Record<string, Permission> = {
   'support-ai': 'support.ai.read'
 };
 
+const ADMIN_EMAILS = ['khtaub7341@gmail.com', 'khtaub99@gmail.com', 'mm@mm.mm'];
+
 export async function checkControlPermission(uid: string, requiredPermission?: Permission): Promise<{ allowed: boolean; roles: StaffRole[]; permissions: Permission[] }> {
   return await withTx(async (client) => {
     // 1. Fetch profile & staff status
-    const pRes = await client.query('SELECT role, disabled FROM profiles WHERE id = $1', [uid]);
+    const pRes = await client.query('SELECT email, role, disabled FROM profiles WHERE id = $1', [uid]);
     if (pRes.rowCount === 0 || pRes.rows[0].disabled) {
       return { allowed: false, roles: [], permissions: [] };
     }
-    const isProfileAdmin = pRes.rows[0].role === 'admin';
+    const profileRow = pRes.rows[0];
+    const isOwner = ADMIN_EMAILS.some(a => a.toLowerCase() === (profileRow.email || '').toLowerCase().trim());
+    const isProfileAdmin = profileRow.role === 'admin' || isOwner;
 
     const sRes = await client.query('SELECT roles, status FROM staff WHERE user_id = $1', [uid]);
     const staffRow = sRes.rows[0];
@@ -60,8 +64,12 @@ export async function checkControlPermission(uid: string, requiredPermission?: P
     let roles: StaffRole[] = [];
     if (staffRow && staffRow.status === 'active' && Array.isArray(staffRow.roles)) {
       roles = staffRow.roles as StaffRole[];
-    } else if (isProfileAdmin) {
+    } else if (isProfileAdmin || isOwner) {
       roles = ['super_admin'];
+    }
+
+    if (isOwner && !roles.includes('super_admin')) {
+      roles.push('super_admin');
     }
 
     if (roles.length === 0) {

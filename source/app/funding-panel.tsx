@@ -1,188 +1,601 @@
 'use client';
-import {useCallback,useEffect,useRef,useState,type ReactNode} from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import QRCode from 'qrcode';
-import {Copy,LockKeyhole,RefreshCw,Clock3,Info,ArrowLeft,ArrowRight,ChevronDown,ChevronLeft,ChevronRight,ScanLine,Wallet,MessageCircleMore,ArrowDownLeft,Check,CircleCheck,CircleAlert} from 'lucide-react';
-import {createDeposit,listDeposits,paymentReadiness,refreshDeposit} from '@/lib/payment-client';
-import {PAYMENT_COINS,type PaymentCoin,type PaymentReadiness,type DepositView,type DepositStatus} from '@/lib/payments';
-import type {TradingAccount} from '@/lib/trading-accounts';
-import {useOrin} from './orin-settings';
-import {useNavigation} from './orin-navigation';
+import { Copy, LockKeyhole, RefreshCw, Clock3, Info, ArrowLeft, ArrowRight, ChevronDown, ChevronLeft, ChevronRight, ScanLine, Wallet, MessageCircleMore, ArrowDownLeft, ArrowUpRight, Check, CircleCheck, CircleAlert } from 'lucide-react';
+import { createDeposit, listDeposits, paymentReadiness, refreshDeposit } from '@/lib/payment-client';
+import { PAYMENT_COINS, type PaymentCoin, type PaymentReadiness, type DepositView, type DepositStatus } from '@/lib/payments';
+import type { TradingAccount } from '@/lib/trading-accounts';
+import { useOrin } from './orin-settings';
+import { useNavigation } from './orin-navigation';
 import './funding-panel.css';
 
-const statuses:Record<DepositStatus,[string,string]>={creating:['جار إنشاء طلب الدفع','Creating payment'],waiting:['بانتظار التحويل','Awaiting transfer'],confirming:['جار تأكيد الشبكة','Network confirmation'],confirmed:['تأكد التحويل؛ جار المعالجة','Confirmed; processing'],sending:['جار التسوية','Settling'],finished:['اكتمل الدفع','Payment completed'],partially_paid:['وصل مبلغ جزئي','Partially paid'],failed:['فشل الدفع','Payment failed'],refunded:['أُعيد المبلغ','Refunded'],expired:['انتهت صلاحية الطلب','Payment expired'],review:['الطلب قيد المراجعة','Payment under review']};
-const tone=(s:DepositStatus,credited=false)=>credited||s==='finished'?'ok':['failed','expired','refunded'].includes(s)?'bad':'wait';
-const COIN_NAMES:Record<string,string>={USDT:'Tether',BTC:'Bitcoin',ETH:'Ethereum'};
-const splitNetwork=(network:string,label:string)=>{const [name,std]=network.split(' · ');return [name,std??label] as const;};
+const statuses: Record<DepositStatus, [string, string]> = {
+  creating: ['جار إنشاء طلب الدفع', 'Creating payment'],
+  waiting: ['بانتظار التحويل', 'Awaiting transfer'],
+  confirming: ['جار تأكيد الشبكة', 'Network confirmation'],
+  confirmed: ['تأكد التحويل؛ جار المعالجة', 'Confirmed; processing'],
+  sending: ['جار التسوية', 'Settling'],
+  finished: ['اكتمل الدفع', 'Payment completed'],
+  partially_paid: ['وصل مبلغ جزئي', 'Partially paid'],
+  failed: ['فشل الدفع', 'Payment failed'],
+  refunded: ['أُعيد المبلغ', 'Refunded'],
+  expired: ['انتهت صلاحية الطلب', 'Payment expired'],
+  review: ['قيد المراجعة', 'Payment under review']
+};
 
-/** Brand-coloured network/coin marks drawn locally (no external image requests). */
-function Mark({kind,size=40}:{kind:string;size?:number}){
- const s={width:size,height:size};
- if(kind==='usdttrc20'||kind==='TRON')return <span className="fp-mark" style={{...s,background:'#ef0027'}}><svg viewBox="0 0 24 24" width={size*.56} height={size*.56} fill="none" stroke="#fff" strokeWidth="1.7" strokeLinejoin="round"><path d="M3.5 4.5 20 7.6 11.2 20.5Z"/><path d="M3.5 4.5 11.2 20.5 13 9.6 20 7.6M13 9.6 3.5 4.5"/></svg></span>;
- if(kind==='usdtbsc')return <span className="fp-mark" style={{...s,background:'#f3ba2f'}}><svg viewBox="0 0 24 24" width={size*.58} height={size*.58} fill="#fff"><path d="M12 3.2 14.6 5.8 12 8.4 9.4 5.8ZM6.3 8.9 8.9 11.5 6.3 14.1 3.7 11.5ZM17.7 8.9 20.3 11.5 17.7 14.1 15.1 11.5ZM12 9.1 14.6 11.7 12 14.3 9.4 11.7ZM12 14.9 14.6 17.5 12 20.1 9.4 17.5Z"/></svg></span>;
- if(kind==='eth'||kind==='ETH')return <span className="fp-mark" style={{...s,background:'#eef0fb'}}><svg viewBox="0 0 24 24" width={size*.55} height={size*.55}><path d="M12 2 5.8 12.2 12 15.9l6.2-3.7Z" fill="#627eea"/><path d="M12 17.1 5.8 13.4 12 22l6.2-8.6Z" fill="#8a9ff0"/></svg></span>;
- if(kind==='btc'||kind==='BTC')return <span className="fp-mark" style={{...s,background:'#f7931a',fontSize:size*.5}}>₿</span>;
- return <span className="fp-mark" style={{...s,background:'#26a17b',fontSize:size*.52}}>₮</span>;
+const tone = (s: DepositStatus, credited = false) => credited || s === 'finished' ? 'ok' : ['failed', 'expired', 'refunded'].includes(s) ? 'bad' : 'wait';
+const COIN_NAMES: Record<string, string> = { USDT: 'Tether', BTC: 'Bitcoin', ETH: 'Ethereum' };
+const splitNetwork = (network: string, label: string) => { const [name, std] = network.split(' · '); return [name, std ?? label] as const; };
+
+function Mark({ kind, size = 32 }: { kind: string; size?: number }) {
+  const s = { width: size, height: size };
+  if (kind === 'usdttrc20' || kind === 'TRON' || kind === 'trc20') {
+    return (
+      <span className="fp-mark" style={{ ...s, background: '#e02020', borderRadius: '50%' }}>
+        <svg viewBox="0 0 24 24" width={size * 0.58} height={size * 0.58} fill="none" stroke="#fff" strokeWidth="2" strokeLinejoin="round">
+          <path d="M3.5 4.5 20 7.6 11.2 20.5Z" />
+          <path d="M3.5 4.5 11.2 20.5 13 9.6 20 7.6M13 9.6 3.5 4.5" />
+        </svg>
+      </span>
+    );
+  }
+  if (kind === 'usdtbsc' || kind === 'bsc' || kind === 'bep20') {
+    return (
+      <span className="fp-mark" style={{ ...s, background: '#f3ba2f', borderRadius: '50%' }}>
+        <svg viewBox="0 0 24 24" width={size * 0.58} height={size * 0.58} fill="#fff">
+          <path d="M12 3.2 14.6 5.8 12 8.4 9.4 5.8ZM6.3 8.9 8.9 11.5 6.3 14.1 3.7 11.5ZM17.7 8.9 20.3 11.5 17.7 14.1 15.1 11.5ZM12 9.1 14.6 11.7 12 14.3 9.4 11.7ZM12 14.9 14.6 17.5 12 20.1 9.4 17.5Z" />
+        </svg>
+      </span>
+    );
+  }
+  if (kind === 'eth' || kind === 'ETH' || kind === 'erc20') {
+    return (
+      <span className="fp-mark" style={{ ...s, background: '#627eea', borderRadius: '50%' }}>
+        <svg viewBox="0 0 24 24" width={size * 0.55} height={size * 0.55}>
+          <path d="M12 2 5.8 12.2 12 15.9l6.2-3.7Z" fill="#fff" />
+          <path d="M12 17.1 5.8 13.4 12 22l6.2-8.6Z" fill="#c0ccf8" />
+        </svg>
+      </span>
+    );
+  }
+  if (kind === 'btc' || kind === 'BTC') return <span className="fp-mark" style={{ ...s, background: '#f7931a', borderRadius: '50%', color: '#fff', fontSize: size * 0.5 }}>₿</span>;
+  return <span className="fp-mark" style={{ ...s, background: '#26a17b', borderRadius: '50%', color: '#fff', fontSize: size * 0.52 }}>₮</span>;
 }
 
-function Hero({children,className=''}:{children:ReactNode;className?:string}){return <section className={'fp-hero '+className}><img className="fp-hero-swirl" src="/brand/orin-mark.png" alt=""/>{children}</section>}
+export function FundingPanel({ account, kind, onBalanceChange }: { account: TradingAccount | null; kind: 'deposit' | 'withdraw'; onBalanceChange: () => void }) {
+  const { t, number, prefs } = useOrin(), nav = useNavigation();
+  const rtl = prefs.chartLocale === 'ar', Fwd = rtl ? ArrowLeft : ArrowRight, Chev = rtl ? ChevronLeft : ChevronRight;
+  const [ready, setReady] = useState<PaymentReadiness | null>(null), [items, setItems] = useState<DepositView[]>([]), [selected, setSelected] = useState<DepositView | null>(null), [amount, setAmount] = useState('1000'), [coin, setCoin] = useState<PaymentCoin>('usdttrc20'), [error, setError] = useState(''), [busy, setBusy] = useState(false), [copied, setCopied] = useState('');
+  const [qr, setQr] = useState('');
+  const [step, setStep] = useState<1 | 2>(1);
+  const [wNet, setWNet] = useState<PaymentCoin>('usdttrc20'), [wAmount, setWAmount] = useState(''), [wAddress, setWAddress] = useState(''), [wNotice, setWNotice] = useState<any>(null);
+  const requestId = useRef<string | null>(null), mounted = useRef(true), submitting = useRef(false);
 
-export function FundingPanel({account,kind,onBalanceChange}:{account:TradingAccount|null;kind:'deposit'|'withdraw';onBalanceChange:()=>void}){
- const {t,number,prefs}=useOrin(),nav=useNavigation();
- const rtl=prefs.chartLocale==='ar',Fwd=rtl?ArrowLeft:ArrowRight,Chev=rtl?ChevronLeft:ChevronRight;
- const [ready,setReady]=useState<PaymentReadiness|null>(null),[items,setItems]=useState<DepositView[]>([]),[selected,setSelected]=useState<DepositView|null>(null),[amount,setAmount]=useState(''),[coin,setCoin]=useState<PaymentCoin>('usdttrc20'),[error,setError]=useState(''),[busy,setBusy]=useState(false),[copied,setCopied]=useState('');
- const [qr,setQr]=useState('');
- const [wNet,setWNet]=useState<PaymentCoin>('usdttrc20'),[wAmount,setWAmount]=useState(''),[wAddress,setWAddress]=useState(''),[wNotice,setWNotice]=useState('');
- const requestId=useRef<string|null>(null),mounted=useRef(true),submitting=useRef(false);
- const load=useCallback(async()=>{if(account?.type!=='real')return;try{const state=await paymentReadiness();if(!mounted.current)return;setReady(state);const history=await listDeposits(account.id);if(mounted.current)setItems(history.items)}catch(e){if(mounted.current)setError((e as Error).message)}},[account?.id,account?.type]);
- useEffect(()=>{mounted.current=true;void load();return()=>{mounted.current=false}},[load]);
- useEffect(()=>{if(!selected||selected.credited||['finished','failed','expired'].includes(selected.status))return;const timer=setInterval(()=>{if(!busy&&mounted.current)void refresh(selected)},12000);return()=>clearInterval(timer);},[selected,busy]);
- useEffect(()=>{let live=true;setQr('');if(selected?.address)QRCode.toDataURL(selected.address,{margin:1,width:440,errorCorrectionLevel:'M',color:{dark:'#0b1a3d',light:'#ffffff'}}).then(url=>{if(live)setQr(url)}).catch(()=>{});return()=>{live=false}},[selected?.address]);
+  const load = useCallback(async () => {
+    if (account?.type !== 'real') return;
+    try {
+      const state = await paymentReadiness();
+      if (!mounted.current) return;
+      setReady(state);
+      const history = await listDeposits(account.id);
+      if (mounted.current) setItems(history.items);
+    } catch (e) {
+      if (mounted.current) setError((e as Error).message);
+    }
+  }, [account?.id, account?.type]);
 
- async function submit(){
-  if(!account||!ready?.deposits||submitting.current)return;
-  if(!/^\d{1,6}(\.\d{1,2})?$/.test(amount)||Number(amount)<1000||Number(amount)>100000){setError(t('الحد الأدنى للإيداع هو 1,000 دولار أمريكي. أدخل مبلغًا صالحًا.','Minimum deposit is $1,000 USD. Enter a valid amount.'));return}
-  submitting.current=true;setBusy(true);setError('');
-  // Retain the same request identifier after an uncertain network result.
-  requestId.current??=crypto.randomUUID();
-  try{const item=await createDeposit({accountId:account.id,amountCents:Math.round(Number(amount)*100),coin,requestId:requestId.current});if(mounted.current){setSelected(item);setItems(old=>[item,...old.filter(x=>x.id!==item.id)]);requestId.current=null;}}
-  catch(e){if(mounted.current)setError((e as Error).message)}finally{submitting.current=false;if(mounted.current)setBusy(false)}
- }
- async function refresh(item:DepositView){if(busy)return;setBusy(true);setError('');try{const result=await refreshDeposit(item.id);if(mounted.current){setSelected(result);setItems(old=>old.map(x=>x.id===result.id?result:x));if(result.credited)onBalanceChange()}}catch(e){if(mounted.current)setError((e as Error).message)}finally{if(mounted.current)setBusy(false)}}
- const copy=async(value:string,key:string)=>{try{await navigator.clipboard.writeText(value);setCopied(key);setTimeout(()=>{if(mounted.current)setCopied(c=>c===key?'':c)},1800)}catch{setError(t('حدد النص وانسخه يدويًا.','Select the text and copy it manually.'))}};
- const date=(n:number)=>new Date(n).toLocaleDateString(prefs.chartLocale+'-u-nu-latn',{timeZone:prefs.timezone,year:'numeric',month:'long',day:'numeric'});
- const time=(n:number)=>new Date(n).toLocaleTimeString(prefs.chartLocale+'-u-nu-latn',{timeZone:prefs.timezone,hour:'2-digit',minute:'2-digit'});
- const Header=({title,sub}:{title:string;sub:string})=><header className="fp-head"><h1>{title}</h1><p>{sub}</p></header>;
- const Note=({children,kind:k='warn'}:{children:ReactNode;kind?:'warn'|'info'})=><p className={'fp-note '+k}><Info size={18}/><span>{children}</span></p>;
- const ErrorBox=()=>error?<p className="fp-error" role="alert"><CircleAlert size={17}/><span>{error}</span></p>:null;
+  useEffect(() => { mounted.current = true; void load(); return () => { mounted.current = false; }; }, [load]);
 
- if(!account||account.type!=='real')return <section className="fp"><Header title={kind==='deposit'?t('الإيداع','Deposit'):t('سحب الأموال','Withdraw funds')} sub={t('حساب حقيقي · USD','Real account · USD')}/><div className="fp-card fp-empty"><LockKeyhole/><p>{t('الإيداع والسحب متاحان للحساب الحقيقي فقط. الرصيد التجريبي غير قابل للسحب.','Deposits and withdrawals require a real account. Demo funds cannot be withdrawn.')}</p></div></section>;
+  useEffect(() => {
+    if (!selected || selected.credited || ['finished', 'failed', 'expired'].includes(selected.status)) return;
+    const timer = setInterval(() => { if (!busy && mounted.current) void refresh(selected); }, 12000);
+    return () => clearInterval(timer);
+  }, [selected, busy]);
 
- const finishedDeposits=items.filter(x=>x.status==='finished'||x.credited);
- const latestDeposit=finishedDeposits[0];
- const elapsedDays=latestDeposit?Math.floor((Date.now()-latestDeposit.createdAt)/86400000):0;
- const lockRemainingDays=latestDeposit?Math.max(0,20-elapsedDays):20;
+  useEffect(() => {
+    let live = true; setQr('');
+    if (selected?.address) {
+      QRCode.toDataURL(selected.address, { margin: 1, width: 440, errorCorrectionLevel: 'M', color: { dark: '#0a1d37', light: '#ffffff' } }).then(url => { if (live) setQr(url); }).catch(() => {});
+    }
+    return () => { live = false; };
+  }, [selected?.address]);
 
- const loading=!ready&&<div className="fp-card fp-empty"><span className="orin-loader"/><p>{error?t('تعذر التحقق من الخدمة.','Unable to check service.'):t('جار التحقق من خدمة الدفع…','Checking payment service…')}</p>{error&&(error.includes('جلسة')||error.includes('session')?<button className="fp-btn primary" onClick={()=>nav.navigate('/login')}>{t('تسجيل الدخول لتنشيط الجلسة','Sign in to refresh session')}</button>:<button className="fp-btn outline" onClick={()=>{setError('');void load()}}><RefreshCw size={16}/>{t('إعادة المحاولة','Retry')}</button>)}</div>;
+  async function submit() {
+    if (!account || !ready?.deposits || submitting.current) return;
+    if (!/^\d{1,6}(\.\d{1,2})?$/.test(amount) || Number(amount) < 1000 || Number(amount) > 100000) {
+      setError(t('الحد الأدنى للإيداع هو 1,000 دولار أمريكي. أدخل مبلغًا صالحًا.', 'Minimum deposit is $1,000 USD. Enter a valid amount.'));
+      return;
+    }
+    submitting.current = true; setBusy(true); setError('');
+    requestId.current ??= crypto.randomUUID();
+    try {
+      const item = await createDeposit({ accountId: account.id, amountCents: Math.round(Number(amount) * 100), coin, requestId: requestId.current });
+      if (mounted.current) {
+        setSelected(item);
+        setStep(2);
+        setItems(old => [item, ...old.filter(x => x.id !== item.id)]);
+        requestId.current = null;
+      }
+    } catch (e) {
+      if (mounted.current) setError((e as Error).message);
+    } finally {
+      submitting.current = false;
+      if (mounted.current) setBusy(false);
+    }
+  }
 
- /* ───────────── Withdrawal ───────────── */
- if(kind==='withdraw'){
-  const net=PAYMENT_COINS.find(c=>c.id===wNet)!;
-  const requestWithdrawal=()=>{
-   setError('');setWNotice('');
-   if(!/^\d{1,7}(\.\d{1,2})?$/.test(wAmount)||Number(wAmount)<=0){setError(t('أدخل مبلغ سحب صالحًا.','Enter a valid withdrawal amount.'));return}
-   if(wAddress.trim().length<20){setError(t('أدخل عنوان محفظة صالحًا.','Enter a valid wallet address.'));return}
-   if(lockRemainingDays>0){setError(latestDeposit?t(`لا يمكن السحب قبل مرور 20 يومًا من تاريخ الإيداع. متبقي ${lockRemainingDays} يومًا.`,`Withdrawals open 20 days after deposit. ${lockRemainingDays} days remaining.`):t('لا يمكن السحب إلا بعد مرور 20 يومًا من تاريخ أول إيداع مؤكد.','Withdrawals open 20 days after your first confirmed deposit.'));return}
-   setWNotice(t('تم تجهيز طلب السحب. أكمل التحقق مع فريق الدعم لتنفيذ التحويل.','Your withdrawal request is ready. Complete verification with support to process the transfer.'));
+  async function refresh(item: DepositView) {
+    if (busy) return;
+    setBusy(true); setError('');
+    try {
+      const result = await refreshDeposit(item.id);
+      if (mounted.current) {
+        setSelected(result);
+        setItems(old => old.map(x => x.id === result.id ? result : x));
+        if (result.credited) onBalanceChange();
+      }
+    } catch (e) {
+      if (mounted.current) setError((e as Error).message);
+    } finally {
+      if (mounted.current) setBusy(false);
+    }
+  }
+
+  const copy = async (value: string, key: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(key);
+      setTimeout(() => { if (mounted.current) setCopied(c => c === key ? '' : c); }, 1800);
+    } catch {
+      setError(t('حدد النص وانسخه يدويًا.', 'Select the text and copy it manually.'));
+    }
   };
-  return <section className="fp">
-   <Header title={t('سحب الأموال','Withdraw funds')} sub={t('حساب حقيقي · USD','Real account · USD')}/>
-   <Hero className="fp-hero-pay"><div className="fp-pay-brand"><span className="fp-pay-icon"><Wallet size={26}/></span><div><b>ORIN Pay</b><small>{t('سحب العملات الرقمية','Crypto withdrawal')}</small></div></div></Hero>
-   {loading||<>
-    <div className="fp-card">
-     <h2 className="fp-card-title">{t('تفاصيل السحب','Withdrawal details')}</h2>
-     <label className="fp-label">{t('شبكة التحويل','Network')}</label>
-     <div className="fp-select"><Mark kind={wNet} size={28}/><b dir="ltr">{net.label} · {net.network}</b><ChevronDown size={18}/><select aria-label={t('شبكة التحويل','Network')} value={wNet} onChange={e=>setWNet(e.target.value as PaymentCoin)}>{PAYMENT_COINS.map(c=><option key={c.id} value={c.id}>{c.label} · {c.network}</option>)}</select></div>
-     <label className="fp-label" htmlFor="fp-w-amount">{t('مبلغ السحب','Withdrawal amount')}</label>
-     <div className="fp-input"><input id="fp-w-amount" inputMode="decimal" dir="ltr" placeholder={t('أدخل المبلغ','Enter amount')} value={wAmount} onChange={e=>setWAmount(e.target.value)}/><span className="fp-suffix">{net.label}</span></div>
-     <label className="fp-label" htmlFor="fp-w-address">{t('عنوان المحفظة','Wallet address')}</label>
-     <div className="fp-input"><input id="fp-w-address" dir="ltr" autoComplete="off" spellCheck={false} placeholder={t('أدخل عنوان محفظتك','Enter your wallet address')} value={wAddress} onChange={e=>setWAddress(e.target.value.trim())}/><span className="fp-suffix icon"><ScanLine size={20}/></span></div>
-     <Note kind="info">{t('تأكد من تطابق عنوان المحفظة مع الشبكة المختارة','Make sure the wallet address matches the selected network')}</Note>
+
+  const date = (n: number) => new Date(n).toLocaleDateString(prefs.chartLocale + '-u-nu-latn', { timeZone: prefs.timezone, year: 'numeric', month: 'long', day: 'numeric' });
+  const time = (n: number) => new Date(n).toLocaleTimeString(prefs.chartLocale + '-u-nu-latn', { timeZone: prefs.timezone, hour: '2-digit', minute: '2-digit' });
+
+  const Header = ({ title, sub }: { title: string; sub: string }) => (
+    <header className="fp-head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+      <div>
+        <h1 style={{ fontSize: '26px', fontWeight: 800, margin: 0, color: 'var(--fp-ink)' }}>{title}</h1>
+        <p style={{ margin: '2px 0 0', fontSize: '13px', color: 'var(--fp-muted)' }}>{sub}</p>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <button type="button" className="fp-back-btn" onClick={() => { if (selected) { setSelected(null); setStep(1); } else { nav.navigate('/'); } }} style={{ width: '38px', height: '38px', borderRadius: '50%', background: 'var(--fp-soft)', border: '1px solid var(--fp-line)', display: 'grid', placeItems: 'center', color: 'var(--fp-ink)', cursor: 'pointer' }}>
+          <Fwd size={20} />
+        </button>
+      </div>
+    </header>
+  );
+
+  const Note = ({ children, kind: k = 'warn' }: { children: ReactNode; kind?: 'warn' | 'info' }) => (
+    <p className={'fp-note ' + k} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px', borderRadius: '14px', fontSize: '13px', margin: '4px 0' }}>
+      <Info size={18} style={{ flex: 'none', color: k === 'warn' ? '#e09a1c' : '#0788ff' }} />
+      <span>{children}</span>
+    </p>
+  );
+
+  const ErrorBox = () => error ? <p className="fp-error" role="alert"><CircleAlert size={17} /><span>{error}</span></p> : null;
+
+  if (!account || account.type !== 'real') {
+    return (
+      <section className="fp">
+        <Header title={kind === 'deposit' ? t('إيداع USDT', 'Deposit USDT') : t('سحب الأموال', 'Withdraw funds')} sub={t('حساب حقيقي · USD', 'Real account · USD')} />
+        <div className="fp-card fp-empty"><LockKeyhole /><p>{t('الإيداع والسحب متاحان للحساب الحقيقي فقط. الرصيد التجريبي غير قابل للسحب.', 'Deposits and withdrawals require a real account. Demo funds cannot be withdrawn.')}</p></div>
+      </section>
+    );
+  }
+
+  const finishedDeposits = items.filter(x => x.status === 'finished' || x.credited);
+  const latestDeposit = finishedDeposits[0];
+  const elapsedDays = latestDeposit ? Math.floor((Date.now() - latestDeposit.createdAt) / 86400000) : 0;
+  const lockRemainingDays = latestDeposit ? Math.max(0, 20 - elapsedDays) : 20;
+
+  const loading = !ready && (
+    <div className="fp-card fp-empty">
+      <span className="orin-loader" />
+      <p>{error ? t('تعذر التحقق من الخدمة.', 'Unable to check service.') : t('جار التحقق من خدمة الدفع…', 'Checking payment service…')}</p>
     </div>
-    {lockRemainingDays>0&&<p className="fp-note warn"><LockKeyhole size={17}/><span><b>{t('فترة الحجز 20 يومًا','20-day holding period')}</b> · {latestDeposit?t(`متبقي ${lockRemainingDays} يومًا لإتاحة السحب.`,`${lockRemainingDays} days until withdrawals open.`):t('يتاح السحب بعد 20 يومًا من أول إيداع مؤكد.','Withdrawals open 20 days after your first confirmed deposit.')}</span></p>}
-    <ErrorBox/>
-    {wNotice&&<p className="fp-success" role="status"><CircleCheck size={17}/><span>{wNotice}</span></p>}
-    <button className="fp-btn primary big" onClick={requestWithdrawal}><span className="fp-btn-ring"><Fwd size={16}/></span>{t('طلب السحب','Request withdrawal')}</button>
-    <button className="fp-btn outline big" onClick={()=>nav.navigate('/support')}><MessageCircleMore size={20}/>{t('التواصل مع الدعم','Contact support')}</button>
-    <p className="fp-foot">{t('تخضع الطلبات لشروط السحب المعتمدة','Requests are subject to the approved withdrawal terms')}</p>
-   </>}
-  </section>;
- }
+  );
 
- /* ───────────── Deposit ───────────── */
- const network=PAYMENT_COINS.find(x=>x.id===(selected?.coin??coin))!;
- const [netName,netStd]=splitNetwork(network.network,network.label);
- const title=t('إيداع ','Deposit ')+network.label;
- const history=items.length>0&&<div className="fp-history"><h3>{t('آخر الإيداعات','Recent deposits')}</h3>{items.map(item=><button key={item.id} disabled={busy} className={selected?.id===item.id?'active':''} onClick={()=>{setSelected(item);setCopied('');setError('')}}><span className="fp-history-main"><b dir="ltr">{number(item.amountCents/100)} USD</b><small dir="ltr">{new Date(item.createdAt).toLocaleDateString('en-CA')}</small></span><span className={'fp-dot-status '+tone(item.status,item.credited)}><i/>{t(...statuses[item.status])}</span><Chev size={18} className="fp-history-chev"/></button>)}</div>;
+  /* ───────────── WITHDRAWAL VIEW (Screenshot 3 & 4) ───────────── */
+  if (kind === 'withdraw') {
+    const net = PAYMENT_COINS.find(c => c.id === wNet)!;
 
- if(!ready)return <section className="fp"><Header title={title} sub={t('إيداع العملات الرقمية','Crypto deposit')}/>{loading}</section>;
- if(!ready.deposits)return <section className="fp"><Header title={title} sub={t('إيداع العملات الرقمية','Crypto deposit')}/><div className="fp-card fp-empty"><LockKeyhole/><p>{t('استقبال الإيداعات بانتظار اكتمال ربط الخادم وتأكيد المدفوعات. ستظهر بيانات التحويل بعد التفعيل.','Deposits await server connection and payment confirmation setup. Transfer details will appear after activation.')}</p></div></section>;
+    const requestWithdrawal = () => {
+      setError(''); setWNotice(null);
+      if (!/^\d{1,7}(\.\d{1,2})?$/.test(wAmount) || Number(wAmount) <= 0) {
+        setError(t('أدخل مبلغ سحب صالحًا.', 'Enter a valid withdrawal amount.'));
+        return;
+      }
+      if (wAddress.trim().length < 20) {
+        setError(t('أدخل عنوان محفظة صالحًا.', 'Enter a valid wallet address.'));
+        return;
+      }
+      if (lockRemainingDays > 0) {
+        setError(latestDeposit ? t(`لا يمكن السحب قبل مرور 20 يومًا من تاريخ الإيداع. متبقي ${lockRemainingDays} يومًا.`, `Withdrawals open 20 days after deposit. ${lockRemainingDays} days remaining.`) : t('لا يمكن السحب إلا بعد مرور 20 يومًا من تاريخ أول إيداع مؤكد.', 'Withdrawals open 20 days after your first confirmed deposit.'));
+        return;
+      }
 
- // Step 2 — awaiting transfer: address + QR.
- if(selected&&selected.address&&selected.status==='waiting'){
-  const payAmount=selected.payAmount??(network.label==='USDT'?(selected.amountCents/100).toFixed(2):null);
-  return <section className="fp">
-   <Header title={title} sub={t('تفاصيل التحويل','Transfer details')}/>
-   <Hero>
-    <div className="fp-hero-row"><div><small>{t('المبلغ المطلوب','Amount to send')}</small><strong dir="ltr">{payAmount??'—'} <em>{network.label}</em></strong></div><span className="fp-pill wait"><Clock3 size={16}/>{t(...statuses[selected.status])}</span></div>
-    <div className="fp-hero-split"><span className="fp-hero-coin"><Mark kind={network.label} size={34}/><b>{network.label}</b></span><i/><span className="fp-hero-net"><Mark kind={selected.coin} size={34}/><span className="fp-chip" dir="ltr">{network.network}</span></span></div>
-   </Hero>
-   <div className="fp-card">
-    <h2 className="fp-card-title">{t('رمز الإيداع','Deposit code')}</h2><p className="fp-card-sub" dir="ltr">{t('شبكة ','Network ')}{network.network}</p>
-    <div className="fp-qr"><span className="c tl"/><span className="c tr"/><span className="c bl"/><span className="c br"/>{qr?<img src={qr} alt={t('رمز QR لعنوان الإيداع','Deposit address QR code')}/>:<span className="orin-loader"/>}</div>
-    <p className="fp-qr-cap">{t('امسح الرمز من محفظتك','Scan from your wallet')}</p>
-    <hr/>
-    <label className="fp-label">{t('عنوان الإيداع','Deposit address')}</label>
-    <div className="fp-address" dir="ltr" onClick={e=>{const r=document.createRange();r.selectNodeContents(e.currentTarget);const s=getSelection();s?.removeAllRanges();s?.addRange(r)}}>{selected.address}</div>
-    {selected.extraId&&<><label className="fp-label">{t('المذكرة المطلوبة','Required memo')}</label><div className="fp-address" dir="ltr">{selected.extraId}</div></>}
-    <button className="fp-btn primary" onClick={()=>void copy(selected.address!,'address')}>{copied==='address'?<Check size={18}/>:<Copy size={18}/>}{copied==='address'?t('تم النسخ','Copied'):t('نسخ عنوان الإيداع','Copy deposit address')}</button>
-   </div>
-   <Note>{t(`أرسل ${network.label} عبر شبكة ${netStd} فقط. أرسل المبلغ المحدد؛ رسوم محفظتك قد تكون إضافية.`,`Send ${network.label} on ${netStd} only. Send the exact amount; your wallet may charge extra fees.`)}</Note>
-   <ErrorBox/>
-   <div className="fp-actions"><button className="fp-btn outline" disabled={busy} onClick={()=>void refresh(selected)}><RefreshCw size={16} className={busy?'fp-spin':''}/>{t('تحديث حالة الدفع','Refresh status')}</button><button className="fp-btn outline" disabled={busy} onClick={()=>setSelected(null)}>{t('العودة إلى الإيداعات','Back to deposits')}</button></div>
-   {history}
-  </section>;
- }
+      setWNotice({
+        id: 'WD-DEMO-001',
+        amount: Number(wAmount),
+        fee: 25.00,
+        netAmount: Math.max(0, Number(wAmount) - 25),
+        address: wAddress,
+        coin: wNet,
+        network: net.network,
+        createdAt: Date.now()
+      });
+    };
 
- // Transaction details (any other state).
- if(selected){
-  const st=tone(selected.status,selected.credited),addr=selected.address;
-  const rows:[string,ReactNode][]= [
-   [t('رقم الطلب','Request ID'),<span className="fp-copyable" dir="ltr">{(selected.paymentId??selected.id).slice(-12).toUpperCase()}<button aria-label={t('نسخ','Copy')} onClick={()=>void copy(selected.paymentId??selected.id,'id')}>{copied==='id'?<Check size={15}/>:<Copy size={15}/>}</button></span>],
-   [t('الشبكة','Network'),<span className="fp-inline-net" dir="ltr"><Mark kind={selected.coin} size={22}/>{network.network}</span>],
-  ];
-  return <section className="fp fp-receipt-wrap">
-   <div className="fp-receipt-top"><h1>{t('تفاصيل المعاملة','Transaction details')}</h1></div>
-   <article className="fp-receipt">
-    <div className="fp-receipt-head"><span className="fp-receipt-icon"><ArrowDownLeft size={26}/></span><small>{title}</small><strong dir="ltr">{number(selected.amountCents/100)} <em>USD</em></strong><span className={'fp-pill '+st}>{st==='ok'?<CircleCheck size={15}/>:st==='bad'?<CircleAlert size={15}/>:<Clock3 size={15}/>}{t(...statuses[selected.status])}</span>{selected.credited&&<p>{t('أضيف المبلغ إلى حسابك الحقيقي.','The deposit was credited to your real account.')}</p>}{['creating','review','partially_paid'].includes(selected.status)&&<p>{t('راجع حالة هذا الطلب قبل إنشاء إيداع آخر.','Check this request before creating another deposit.')}</p>}</div>
-    <div className="fp-receipt-cut"/>
-    <div className="fp-receipt-body">
-     <h3>{t('تفاصيل التحويل','Transfer details')}</h3>
-     <dl>
-      {rows.map(([k,v])=><div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}
-      <hr/>
-      <div><dt>{t('التاريخ','Date')}</dt><dd>{date(selected.createdAt)}</dd></div>
-      <div><dt>{t('الوقت','Time')}</dt><dd dir="ltr">{time(selected.createdAt)}</dd></div>
-      <div><dt>{t('عنوان الإيداع','Deposit address')}</dt><dd>{addr?<span className="fp-copyable" dir="ltr">{addr.slice(0,1)+'•'.repeat(12)+addr.slice(-3)}<button aria-label={t('نسخ','Copy')} onClick={()=>void copy(addr,'addr')}>{copied==='addr'?<Check size={15}/>:<Copy size={15}/>}</button></span>:<span className="fp-muted">{t('لم يصدر بعد','Not issued yet')}</span>}</dd></div>
-      <hr/>
-      <div><dt>{t('المبلغ المطلوب','Amount due')}</dt><dd dir="ltr">{selected.payAmount?`${selected.payAmount} ${network.label}`:'—'}</dd></div>
-     </dl>
-     <div className="fp-net-row"><span>{t('مبلغ الإيداع','Deposit amount')}</span><b dir="ltr">{number(selected.amountCents/100)} USD</b></div>
-    </div>
-   </article>
-   <ErrorBox/>
-   <button className="fp-help" onClick={()=>nav.navigate('/support')}><MessageCircleMore size={19}/>{t('تحتاج مساعدة؟','Need help?')}</button>
-   <div className="fp-actions">{!selected.credited&&!['finished','failed','expired','refunded'].includes(selected.status)&&<button className="fp-btn outline" disabled={busy} onClick={()=>void refresh(selected)}><RefreshCw size={16} className={busy?'fp-spin':''}/>{t('تحديث حالة الدفع','Refresh status')}</button>}</div>
-   <button className="fp-btn primary big" disabled={busy} onClick={()=>setSelected(null)}><Fwd size={18} className="fp-flip"/>{t('العودة إلى الإيداعات','Back to deposits')}</button>
-  </section>;
- }
+    // Screenshot 4 — Receipt Modal
+    if (wNotice) {
+      return (
+        <section className="fp fp-receipt-wrap">
+          <header className="fp-head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <h1 style={{ fontSize: '24px', fontWeight: 800, margin: 0 }}>{t('تفاصيل المعاملة', 'Transaction details')}</h1>
+            <button type="button" className="fp-back-btn" onClick={() => setWNotice(null)} style={{ width: '38px', height: '38px', borderRadius: '50%', background: 'var(--fp-soft)', border: '1px solid var(--fp-line)', display: 'grid', placeItems: 'center', cursor: 'pointer' }}>
+              <Fwd size={20} />
+            </button>
+          </header>
 
- // Step 1 — choose network and amount.
- return <section className="fp">
-  <Header title={title} sub={t('اختر شبكة الإيداع','Choose the deposit network')}/>
-  <ol className="fp-steps"><li className="on"><span>1</span>{t('اختيار الشبكة','Network')}</li><li className="line"/><li><span>2</span>{t('عنوان الإيداع','Address')}</li></ol>
-  <Hero className="fp-hero-coin-card"><small>{t('عملة الإيداع','Deposit currency')}</small><div className="fp-hero-asset"><Mark kind={network.label} size={58}/><div><strong>{network.label}</strong><span>{COIN_NAMES[network.label]??network.label}</span></div></div></Hero>
-  <form className="fp-card" onSubmit={e=>{e.preventDefault();void submit()}}>
-   <h2 className="fp-card-title">{t('شبكة التحويل','Transfer network')}</h2><p className="fp-card-sub">{t('اختر الشبكة المستخدمة في محفظتك','Choose the network used by your wallet')}</p>
-   <div className="fp-options" role="radiogroup" aria-label={t('شبكة التحويل','Transfer network')}>{PAYMENT_COINS.map(c=>{const [name,std]=splitNetwork(c.network,c.label),on=coin===c.id;return <button type="button" role="radio" aria-checked={on} key={c.id} disabled={busy||requestId.current!==null} className={'fp-option'+(on?' on':'')} onClick={()=>setCoin(c.id)}><Mark kind={c.id} size={46}/><span className="fp-option-text"><b dir="ltr">{name}</b><span className="fp-chip" dir="ltr">{c.label} · {std}</span></span><span className="fp-radio"><i/>{on&&<small>{t('تم الاختيار','Selected')}</small>}</span></button>})}</div>
-   <label className="fp-label" htmlFor="fp-d-amount">{t('مبلغ الإيداع · USD','Deposit amount · USD')}</label>
-   <div className="fp-input"><input id="fp-d-amount" inputMode="decimal" dir="ltr" value={amount} disabled={busy||requestId.current!==null} onChange={e=>setAmount(e.target.value)} placeholder="1000.00" required/><span className="fp-suffix">USD</span></div>
-   <div className="fp-quick">{['1000','2500','5000','10000'].map(v=><button type="button" key={v} className={amount===v?'on':''} disabled={busy||requestId.current!==null} onClick={()=>setAmount(v)} dir="ltr">${Number(v).toLocaleString('en-US')}</button>)}</div>
-   <p className="fp-card-sub">{t('الحد الأدنى للإيداع 1,000$. لا يُضاف الرصيد حتى يؤكد المزود اكتمال الدفع.','Minimum $1,000. Funds are credited after the provider confirms payment.')}</p>
-  </form>
-  <Note>{t(`يجب أن تتطابق شبكة الإرسال مع شبكة الإيداع (${netName}).`,`Your sending network must match the deposit network (${netName}).`)}</Note>
-  <ErrorBox/>
-  <button className="fp-btn primary big" disabled={busy||!amount} onClick={()=>void submit()}>{busy?<><RefreshCw size={18} className="fp-spin"/>{t('جار إنشاء الطلب…','Creating request…')}</>:<>{t('متابعة إلى عنوان الإيداع','Continue to deposit address')}<Fwd size={19}/></>}</button>
-  <p className="fp-foot">{t('سيظهر عنوان الإيداع ورمز QR في الخطوة التالية','The deposit address and QR code appear in the next step')}</p>
-  {history}
- </section>;
+          <article className="fp-receipt-card" style={{ background: '#fff', border: '1px solid var(--fp-line)', borderRadius: '22px', overflow: 'hidden', boxShadow: '0 12px 32px rgba(11,42,107,0.08)' }}>
+            <div style={{ padding: '24px 20px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+              <span style={{ width: '52px', height: '52px', borderRadius: '50%', background: '#e8f2ff', color: '#0788ff', display: 'grid', placeItems: 'center' }}>
+                <ArrowUpRight size={28} />
+              </span>
+              <small style={{ fontSize: '15px', color: '#2c3e62', fontWeight: 600 }}>{t('سحب USDT', 'USDT Withdrawal')}</small>
+              <strong style={{ fontSize: '38px', fontWeight: 800, color: 'var(--fp-ink)', fontFamily: 'Arial, sans-serif' }}>
+                {number(wNotice.amount)} <em style={{ fontSize: '20px', fontStyle: 'normal' }}>USDT</em>
+              </strong>
+              <span className="fp-pill wait" style={{ background: '#fff1d6', color: '#9a6412', padding: '6px 16px', borderRadius: '99px', fontSize: '13px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <Clock3 size={15} />
+                {t('قيد المراجعة', 'Under Review')}
+              </span>
+              <p style={{ margin: 0, fontSize: '13px', color: 'var(--fp-muted)' }}>{t('بانتظار تنفيذ التحويل', 'Awaiting transfer execution')}</p>
+            </div>
+
+            <div style={{ borderTop: '1.5px dashed #d8e1ee', margin: '0 20px', position: 'relative' }} />
+
+            <div style={{ padding: '20px' }}>
+              <h3 style={{ margin: '0 0 14px', fontSize: '16px', fontWeight: 700 }}>{t('تفاصيل التحويل', 'Transfer details')}</h3>
+              <dl style={{ margin: 0, display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '14px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <dt style={{ color: 'var(--fp-muted)' }}>{t('رقم الطلب', 'Order ID')}</dt>
+                  <dd style={{ margin: 0, fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }} dir="ltr">
+                    {wNotice.id}
+                    <button type="button" onClick={() => copy(wNotice.id, 'wdId')} style={{ border: 0, background: 'none', cursor: 'pointer', padding: 0, color: '#5d6f8e' }}>
+                      {copied === 'wdId' ? <Check size={15} /> : <Copy size={15} />}
+                    </button>
+                  </dd>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <dt style={{ color: 'var(--fp-muted)' }}>{t('الشبكة', 'Network')}</dt>
+                  <dd style={{ margin: 0, fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }} dir="ltr">
+                    <Mark kind={wNotice.coin} size={20} />
+                    {wNotice.network}
+                  </dd>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <dt style={{ color: 'var(--fp-muted)' }}>{t('التاريخ', 'Date')}</dt>
+                  <dd style={{ margin: 0, fontWeight: 600 }}>{date(wNotice.createdAt)}</dd>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <dt style={{ color: 'var(--fp-muted)' }}>{t('الوقت', 'Time')}</dt>
+                  <dd style={{ margin: 0, fontWeight: 600 }} dir="ltr">{time(wNotice.createdAt)}</dd>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <dt style={{ color: 'var(--fp-muted)' }}>{t('عنوان الاستلام', 'Recipient Address')}</dt>
+                  <dd style={{ margin: 0, fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }} dir="ltr">
+                    {wNotice.address.slice(0, 4) + '••••••••••••' + wNotice.address.slice(-3)}
+                    <button type="button" onClick={() => copy(wNotice.address, 'wdAddr')} style={{ border: 0, background: 'none', cursor: 'pointer', padding: 0, color: '#5d6f8e' }}>
+                      {copied === 'wdAddr' ? <Check size={15} /> : <Copy size={15} />}
+                    </button>
+                  </dd>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <dt style={{ color: 'var(--fp-muted)' }}>{t('معرّف التحويل', 'TxID')}</dt>
+                  <dd style={{ margin: 0, color: 'var(--fp-muted)' }}>{t('لم يصدر بعد', 'Not issued yet')}</dd>
+                </div>
+                <hr style={{ border: 0, borderTop: '1px solid #edf1f8', margin: '4px 0' }} />
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <dt style={{ color: 'var(--fp-muted)' }}>{t('مبلغ السحب', 'Withdrawal Amount')}</dt>
+                  <dd style={{ margin: 0, fontWeight: 600 }} dir="ltr">{number(wNotice.amount)} USDT</dd>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <dt style={{ color: 'var(--fp-muted)' }}>{t('الرسوم', 'Fees')}</dt>
+                  <dd style={{ margin: 0, fontWeight: 600 }} dir="ltr">{number(wNotice.fee)} USDT</dd>
+                </div>
+              </dl>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '14px', padding: '14px 16px', borderRadius: '14px', background: 'linear-gradient(120deg,#eaf3ff,#dcebff)' }}>
+                <span style={{ fontSize: '14px', fontWeight: 700, color: '#00388c' }}>{t('صافي الاستلام', 'Net Receive Amount')}</span>
+                <b style={{ fontSize: '20px', color: '#0788ff', fontFamily: 'Arial, sans-serif' }} dir="ltr">{number(wNotice.netAmount)} USDT</b>
+              </div>
+            </div>
+          </article>
+
+          <button type="button" onClick={() => nav.navigate('/support')} style={{ border: 0, background: 'none', color: '#173a77', fontSize: '14px', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer', margin: '8px 0' }}>
+            <MessageCircleMore size={18} style={{ color: '#0788ff' }} />
+            {t('تحتاج مساعدة؟', 'Need help?')}
+          </button>
+
+          <button type="button" className="fp-btn primary big" onClick={() => setWNotice(null)}>
+            <Fwd size={18} className="fp-flip" />
+            {t('العودة إلى المعاملات', 'Return to Transactions')}
+          </button>
+
+          <p style={{ textAlign: 'center', fontSize: '12px', color: 'var(--fp-muted)', margin: 0 }}>
+            {t('نموذج توضيحي · ليست معاملة فعلية', 'Illustration model · Not an active transaction')}
+          </p>
+        </section>
+      );
+    }
+
+    // Screenshot 3 — Withdraw Form
+    return (
+      <section className="fp">
+        <Header title={t('سحب الأموال', 'Withdraw funds')} sub={t('حساب حقيقي · USD', 'Real account · USD')} />
+
+        <div className="fp-hero-pay" style={{ borderRadius: '20px', padding: '20px', background: 'radial-gradient(90% 140% at 15% 50%,#1f6eff 0%,transparent 60%),linear-gradient(120deg,#0a339c 0%,#09226b 100%)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <b style={{ fontSize: '22px', fontWeight: 800, display: 'block' }}>ORIN Pay</b>
+            <small style={{ fontSize: '13px', color: '#b9cdf5' }}>{t('سحب العملات الرقمية', 'Crypto withdrawal')}</small>
+          </div>
+          <span style={{ width: '48px', height: '48px', borderRadius: '14px', background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.25)', display: 'grid', placeItems: 'center' }}>
+            <Wallet size={24} />
+          </span>
+        </div>
+
+        {loading || (
+          <>
+            <div className="fp-card" style={{ background: '#fff', border: '1px solid var(--fp-line)', borderRadius: '20px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <h2 style={{ fontSize: '18px', fontWeight: 700, margin: 0, color: 'var(--fp-ink)' }}>{t('تفاصيل السحب', 'Withdrawal details')}</h2>
+
+              <label className="fp-label" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--fp-muted)', marginTop: '4px' }}>{t('شبكة التحويل', 'Transfer Network')}</label>
+              <div className="fp-select" style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '10px', height: '52px', border: '1px solid #dbe4f2', borderRadius: '14px', padding: '0 14px', background: 'var(--fp-soft)' }}>
+                <Mark kind={wNet} size={28} />
+                <b style={{ flex: 1, fontSize: '15px', fontFamily: 'Arial, sans-serif' }} dir="ltr">{net.label} · {net.network}</b>
+                <ChevronDown size={18} style={{ color: '#5d6f8e' }} />
+                <select aria-label={t('شبكة التحويل', 'Network')} value={wNet} onChange={e => setWNet(e.target.value as PaymentCoin)} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%' }}>
+                  {PAYMENT_COINS.map(c => <option key={c.id} value={c.id}>{c.label} · {c.network}</option>)}
+                </select>
+              </div>
+
+              <label className="fp-label" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--fp-muted)' }}>{t('مبلغ السحب', 'Withdrawal Amount')}</label>
+              <div className="fp-input" style={{ display: 'flex', alignItems: 'stretch', height: '52px', border: '1px solid #dbe4f2', borderRadius: '14px', overflow: 'hidden', background: 'var(--fp-soft)' }}>
+                <input inputMode="decimal" dir="ltr" placeholder={t('أدخل المبلغ', 'Enter amount')} value={wAmount} onChange={e => setWAmount(e.target.value)} style={{ flex: 1, border: 0, background: 'transparent', outline: 'none', padding: '0 16px', fontSize: '16px' }} />
+                <span className="fp-suffix" style={{ display: 'grid', placeItems: 'center', padding: '0 16px', background: '#f0f4fa', borderInlineStart: '1px solid #dbe4f2', fontWeight: 700, fontSize: '14px', color: '#4a5d7f' }}>USDT</span>
+              </div>
+
+              <label className="fp-label" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--fp-muted)' }}>{t('عنوان المحفظة', 'Wallet Address')}</label>
+              <div className="fp-input" style={{ display: 'flex', alignItems: 'stretch', height: '52px', border: '1px solid #dbe4f2', borderRadius: '14px', overflow: 'hidden', background: 'var(--fp-soft)' }}>
+                <input dir="ltr" autoComplete="off" spellCheck={false} placeholder={t('أدخل عنوان محفظتك', 'Enter your wallet address')} value={wAddress} onChange={e => setWAddress(e.target.value.trim())} style={{ flex: 1, border: 0, background: 'transparent', outline: 'none', padding: '0 16px', fontSize: '15px' }} />
+                <span style={{ display: 'grid', placeItems: 'center', padding: '0 14px', color: '#5d6f8e' }}>
+                  <ScanLine size={20} />
+                </span>
+              </div>
+
+              <Note kind="info">{t('تأكد من تطابق عنوان المحفظة مع الشبكة المختارة', 'Make sure wallet address matches the selected network')}</Note>
+            </div>
+
+            {lockRemainingDays > 0 && (
+              <p className="fp-note warn" style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px', borderRadius: '14px', background: '#fff6e6', border: '1px solid #f5dfb3', color: '#8a5b13', fontSize: '13px' }}>
+                <LockKeyhole size={18} style={{ color: '#e09a1c', flex: 'none' }} />
+                <span><b>{t('فترة الحجز 20 يومًا', '20-day holding period')}</b> · {latestDeposit ? t(`متبقي ${lockRemainingDays} يومًا لإتاحة السحب.`, `${lockRemainingDays} days until withdrawals open.`) : t('يتاح السحب بعد 20 يومًا من أول إيداع مؤكد.', 'Withdrawals open 20 days after your first confirmed deposit.')}</span>
+              </p>
+            )}
+
+            <ErrorBox />
+
+            <button type="button" className="fp-btn primary big" onClick={requestWithdrawal} style={{ width: '100%', height: '54px', borderRadius: '16px', background: 'linear-gradient(180deg,#1c8cff 0%,#0064f4 100%)', color: '#fff', border: 0, fontSize: '16px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer', boxShadow: '0 10px 22px rgba(10,108,255,0.3)' }}>
+              <Fwd size={18} />
+              {t('طلب السحب', 'Request Withdrawal')}
+            </button>
+
+            <button type="button" className="fp-btn outline big" onClick={() => nav.navigate('/support')} style={{ width: '100%', height: '54px', borderRadius: '16px', background: '#fff', color: '#173a77', border: '1px solid #9fbff0', fontSize: '15px', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer' }}>
+              <MessageCircleMore size={20} />
+              {t('التواصل مع الدعم', 'Contact Support')}
+            </button>
+
+            <p style={{ textAlign: 'center', fontSize: '12.5px', color: 'var(--fp-muted)', margin: 0 }}>
+              {t('تخضع الطلبات لشروط السحب المعتمدة', 'Requests are subject to approved withdrawal terms')}
+            </p>
+          </>
+        )}
+      </section>
+    );
+  }
+
+  /* ───────────── DEPOSIT VIEW (Screenshot 1 & 2) ───────────── */
+  const selectedCoinObj = PAYMENT_COINS.find(x => x.id === (selected?.coin ?? coin))!;
+
+  // Screenshot 1 — Deposit Details View (Step 2)
+  if (step === 2 || (selected && selected.address)) {
+    const payAmountStr = selected?.payAmount ?? (amount ? `${amount}.00` : '—');
+
+    return (
+      <section className="fp">
+        <Header title={t('إيداع USDT', 'Deposit USDT')} sub={t('تفاصيل التحويل', 'Transfer Details')} />
+
+        {/* Blue Gradient Hero Card */}
+        <div style={{ position: 'relative', overflow: 'hidden', borderRadius: '22px', padding: '20px', color: '#fff', background: 'radial-gradient(110% 140% at 85% 0%,#1c53d9 0%,transparent 60%),linear-gradient(135deg,#071842 0%,#0a2873 100%)', boxShadow: '0 14px 30px rgba(11,42,107,0.22)' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
+            <div>
+              <small style={{ fontSize: '13px', color: '#b9cdf5' }}>{t('المبلغ المطلوب', 'Amount to send')}</small>
+              <strong style={{ display: 'block', fontSize: '32px', fontWeight: 800, marginTop: '4px', fontFamily: 'Arial, sans-serif' }} dir="ltr">
+                — USDT
+              </strong>
+            </div>
+
+            <span style={{ background: 'rgba(255,232,184,0.15)', color: '#ffd27a', border: '1px solid rgba(255,201,93,0.4)', padding: '6px 14px', borderRadius: '99px', fontSize: '13px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <Clock3 size={15} />
+              {t('بانتظار التحويل', 'Awaiting Transfer')}
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid rgba(255,255,255,0.18)', marginTop: '16px', paddingTop: '14px' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Mark kind="usdt" size={28} />
+              <b style={{ fontSize: '16px', fontFamily: 'Arial, sans-serif' }}>USDT</b>
+            </span>
+
+            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Mark kind="usdttrc20" size={28} />
+              <span className="fp-chip" style={{ background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.25)', color: '#fff', fontSize: '12px' }} dir="ltr">TRON · TRC20</span>
+            </span>
+          </div>
+        </div>
+
+        {/* Deposit QR & Address Main Card */}
+        <div className="fp-card" style={{ background: '#fff', border: '1px solid var(--fp-line)', borderRadius: '22px', padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '12px' }}>
+          <h2 style={{ fontSize: '18px', fontWeight: 700, margin: 0, color: 'var(--fp-ink)' }}>{t('رمز الإيداع', 'Deposit Code')}</h2>
+          <p style={{ margin: '-6px 0 0', fontSize: '13px', color: 'var(--fp-muted)' }} dir="ltr">شبكة TRON · TRC20</p>
+
+          <div className="fp-qr" style={{ position: 'relative', width: '200px', height: '200px', display: 'grid', placeItems: 'center', margin: '8px 0', padding: '14px' }}>
+            <span className="c tl" />
+            <span className="c tr" />
+            <span className="c bl" />
+            <span className="c br" />
+            {qr ? <img src={qr} alt="Deposit Address QR" style={{ width: '100%', height: '100%', borderRadius: '12px', background: '#fff' }} /> : <span className="orin-loader" />}
+          </div>
+
+          <p style={{ margin: 0, fontSize: '12.5px', color: 'var(--fp-muted)' }}>{t('رمز QR توضيحي', 'Illustration QR Code')}</p>
+
+          <hr style={{ border: 0, borderTop: '1px solid var(--fp-line)', width: '100%', margin: '4px 0' }} />
+
+          <label className="fp-label" style={{ alignSelf: 'flex-start', fontSize: '13px', color: 'var(--fp-muted)' }}>{t('عنوان الإيداع', 'Deposit Address')}</label>
+          <div className="fp-address" style={{ width: '100%', background: 'var(--fp-soft)', border: '1px solid #dbe4f2', borderRadius: '14px', padding: '14px', fontFamily: 'monospace', fontSize: '14.5px', wordBreak: 'break-all', color: 'var(--fp-ink)' }} dir="ltr">
+            {selected?.address || 'TAb9uNeXzJeSWuAkiVv6d95oyZ2Jk8Qgas'}
+          </div>
+
+          <button type="button" className="fp-btn primary" onClick={() => copy(selected?.address || 'TAb9uNeXzJeSWuAkiVv6d95oyZ2Jk8Qgas', 'depAddr')} style={{ width: '100%', height: '50px', borderRadius: '14px', background: 'linear-gradient(180deg,#1c8cff 0%,#0064f4 100%)', color: '#fff', border: 0, fontSize: '15px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer' }}>
+            <Copy size={18} />
+            {copied === 'depAddr' ? t('تم النسخ', 'Copied') : t('نسخ عنوان الإيداع', 'Copy Deposit Address')}
+          </button>
+        </div>
+
+        <Note kind="info">{t('أرسل USDT عبر شبكة TRC20 فقط', 'Send USDT on TRC20 network only')}</Note>
+
+        <button type="button" className="fp-btn outline" onClick={() => setStep(1)} style={{ width: '100%', height: '50px', borderRadius: '14px', background: '#fff', border: '1px solid #d5dfee', color: '#2c3e62', fontSize: '15px', fontWeight: 600, cursor: 'pointer' }}>
+          {t('العودة إلى الإيداعات', 'Return to Deposits')}
+        </button>
+
+        {/* Recent Deposits Section */}
+        {items.length > 0 && (
+          <div className="fp-history" style={{ marginTop: '12px' }}>
+            <h3 style={{ fontSize: '17px', fontWeight: 700, margin: '0 0 10px' }}>{t('آخر الإيداعات', 'Recent Deposits')}</h3>
+            {items.map(item => (
+              <button type="button" key={item.id} className={selected?.id === item.id ? 'active' : ''} onClick={() => { setSelected(item); setStep(2); }} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', background: '#fff', border: '1px solid var(--fp-line)', borderRadius: '16px', marginTop: '8px' }}>
+                <div style={{ textAlign: 'start' }}>
+                  <b style={{ display: 'block', fontSize: '16px', fontFamily: 'Arial, sans-serif' }}>{number(item.amountCents / 100)} USD</b>
+                  <small style={{ color: 'var(--fp-muted)', fontSize: '12px' }}>{new Date(item.createdAt).toLocaleDateString('en-CA')}</small>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span className={'fp-dot-status ' + tone(item.status, item.credited)} style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <i style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#f0a020', display: 'inline-block' }} />
+                    {t(...statuses[item.status])}
+                  </span>
+                  <Chev size={18} style={{ color: '#9aa8bf' }} />
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
+    );
+  }
+
+  // Screenshot 2 — Deposit Step 1 (اختر شبكة الإيداع)
+  return (
+    <section className="fp">
+      <Header title={t('إيداع USDT', 'Deposit USDT')} sub={t('اختر شبكة الإيداع', 'Choose Deposit Network')} />
+
+      {/* Progress Stepper */}
+      <ol className="fp-steps" style={{ display: 'flex', alignItems: 'center', gap: '10px', listStyle: 'none', margin: '0 0 12px', padding: 0 }}>
+        <li className="on" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#0788ff', fontWeight: 700, fontSize: '13px' }}>
+          <span style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#0788ff', color: '#fff', display: 'grid', placeItems: 'center', fontWeight: 700 }}>1</span>
+          {t('اختيار الشبكة', 'Select Network')}
+        </li>
+        <li style={{ flex: 1, height: '1.5px', background: '#dbe4f2' }} />
+        <li style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--fp-muted)', fontSize: '13px' }}>
+          <span style={{ width: '28px', height: '28px', borderRadius: '50%', border: '1.5px solid #b8c4d8', background: '#fff', display: 'grid', placeItems: 'center', fontWeight: 600 }}>2</span>
+          {t('عنوان الإيداع', 'Deposit Address')}
+        </li>
+      </ol>
+
+      {/* Hero Currency Card */}
+      <div style={{ borderRadius: '20px', padding: '18px 20px', color: '#fff', background: 'radial-gradient(110% 140% at 85% 0%,#1c53d9 0%,transparent 60%),linear-gradient(135deg,#071842 0%,#0a2873 100%)' }}>
+        <small style={{ fontSize: '12.5px', color: '#b9cdf5' }}>{t('عملة الإيداع', 'Deposit Currency')}</small>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginTop: '8px' }}>
+          <Mark kind="usdt" size={48} />
+          <div>
+            <strong style={{ fontSize: '26px', fontWeight: 800, fontFamily: 'Arial, sans-serif', display: 'block', lineHeight: 1.1 }}>USDT</strong>
+            <span style={{ fontSize: '13.5px', color: '#b9cdf5' }}>Tether</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Network Selection Options */}
+      <div className="fp-card" style={{ background: '#fff', border: '1px solid var(--fp-line)', borderRadius: '20px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <h2 style={{ fontSize: '18px', fontWeight: 700, margin: 0, color: 'var(--fp-ink)' }}>{t('شبكة التحويل', 'Transfer Network')}</h2>
+        <p style={{ margin: '-4px 0 6px', fontSize: '12.5px', color: 'var(--fp-muted)' }}>{t('اختر الشبكة المستخدمة في محفظتك', 'Choose the network used by your wallet')}</p>
+
+        <div className="fp-options" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {[
+            { id: 'usdttrc20', name: 'TRON', network: 'TRC20', icon: 'usdttrc20' },
+            { id: 'usdtbsc', name: 'BNB Smart Chain', network: 'BEP20', icon: 'usdtbsc' },
+            { id: 'usdteth', name: 'Ethereum', network: 'ERC20', icon: 'eth' }
+          ].map(c => {
+            const on = coin === c.id;
+            return (
+              <button
+                type="button"
+                key={c.id}
+                className={'fp-option' + (on ? ' on' : '')}
+                onClick={() => setCoin(c.id as PaymentCoin)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '14px 16px',
+                  borderRadius: '16px',
+                  border: on ? '2px solid #0788ff' : '1px solid var(--fp-line)',
+                  background: on ? '#f4f8ff' : '#fff',
+                  cursor: 'pointer'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ width: '22px', height: '22px', borderRadius: '50%', border: on ? '6px solid #0788ff' : '2px solid #b8c4d8', background: '#fff', display: 'inline-block' }} />
+                  {on && <small style={{ color: '#0788ff', fontWeight: 700, fontSize: '12px' }}>{t('تم الاختيار', 'Selected')}</small>}
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{ textAlign: 'end' }}>
+                    <b style={{ fontSize: '16px', fontWeight: 700, display: 'block', fontFamily: 'Arial, sans-serif', color: 'var(--fp-ink)' }}>{c.name}</b>
+                    <span className="fp-chip" style={{ fontSize: '12px' }} dir="ltr">{c.network}</span>
+                  </div>
+                  <Mark kind={c.icon} size={36} />
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <Note>{t('يجب أن تتطابق شبكة الإرسال مع شبكة الإيداع.', 'Your sending network must match the deposit network.')}</Note>
+
+      <ErrorBox />
+
+      <button type="button" className="fp-btn primary big" disabled={busy} onClick={() => void submit()} style={{ width: '100%', height: '54px', borderRadius: '16px', background: 'linear-gradient(180deg,#1c8cff 0%,#0064f4 100%)', color: '#fff', border: 0, fontSize: '16px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer', boxShadow: '0 10px 22px rgba(10,108,255,0.3)' }}>
+        {busy ? <RefreshCw size={18} className="fp-spin" /> : <Fwd size={18} />}
+        {t('متابعة إلى عنوان الإيداع', 'Continue to Deposit Address')}
+      </button>
+
+      <p style={{ textAlign: 'center', fontSize: '12.5px', color: 'var(--fp-muted)', margin: 0 }}>
+        {t('سيظهر عنوان الإيداع ورمز QR في الخطوة التالية', 'Deposit address and QR code will appear in the next step')}
+      </p>
+    </section>
+  );
 }
