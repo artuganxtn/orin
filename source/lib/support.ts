@@ -27,7 +27,7 @@ export function supportText(value:string){const text=value.trim();if(!text||text
 export type PendingMessage={id:string;text:string;createdAt:number;state:'queued'|'sending'|'failed'};
 export function readOutbox(uid:string):PendingMessage[]{try{return JSON.parse(localStorage.getItem('orin-support-outbox:'+uid)??'[]').filter((m:PendingMessage)=>typeof m.id==='string'&&typeof m.text==='string'&&m.text.length<=2000).slice(-50).map((m:PendingMessage)=>({...m,state:'queued'}))}catch{return []}}
 export function saveOutbox(uid:string,messages:PendingMessage[]){localStorage.setItem('orin-support-outbox:'+uid,JSON.stringify(messages.slice(-50)))}
-function assistantResult(value:unknown):SupportAssistantResult{if(!value||typeof value!=='object'||!['answered','pending','handoff','unavailable'].includes(String((value as {status?:unknown}).status)))throw new Error('Invalid support response');return value as SupportAssistantResult}
+function assistantResult(value:unknown):SupportAssistantResult{if(!value||typeof value!=='object')throw new Error('Invalid support response');const st=String((value as {status?:unknown}).status||'ready');if(!['answered','pending','handoff','unavailable','ready','ok'].includes(st))throw new Error('Invalid support response');return value as SupportAssistantResult}
 /** Reads genuine server events; never simulates word-by-word output from a final string. */
 export async function readSupportAssistantResponse(response:Response,options:SupportAssistantOptions={}):Promise<SupportAssistantResult>{
  if(!response.ok)throw new Error('خدمة الرد غير متاحة حاليًا. / Support reply is currently unavailable.');
