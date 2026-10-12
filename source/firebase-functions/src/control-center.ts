@@ -294,22 +294,25 @@ export async function controlAction(u: Identity, input: Data) {
 
   // 4. Account Balance / Finance Propose
   if (action === 'account.balance' || action === 'account.adjust' || action === 'finance.propose') {
-    const uid = String(payload.uid || payload.userId || target);
-    let accountId = String(payload.accountId || '');
+    const rawTarget = String(target || payload.accountId || payload.uid || payload.userId || '');
 
     return await withTx(async (client) => {
-      if (!accountId) {
-        const accRes = await client.query("SELECT id FROM accounts WHERE user_id = $1 AND type = 'real' LIMIT 1", [uid]);
-        if (accRes.rowCount === 0) throw new ApiError('Real account not found for user', 404);
-        accountId = accRes.rows[0].id;
-      }
-
       const accRes = await client.query(
-        'SELECT id, balance_cents, reserved_cents, type FROM accounts WHERE id = $1 FOR UPDATE',
-        [accountId]
+        "SELECT id, user_id, balance_cents, reserved_cents, type FROM accounts WHERE id = $1 OR user_id = $1 ORDER BY (CASE WHEN type = 'real' THEN 0 ELSE 1 END) ASC LIMIT 1 FOR UPDATE",
+        [rawTarget]
       );
-      if (accRes.rowCount === 0) throw new ApiError('Account not found', 404);
+      if (accRes.rowCount === 0) throw new ApiError('Account not found for user', 404);
       const acc = accRes.rows[0];
+      const realAccountId = acc.id;
+      const realUserId = acc.user_id;
+
+      await client.query(
+        `INSERT INTO profiles (id, email, display_name)
+         VALUES ($1, $2, 'User')
+         ON CONFLICT (id) DO NOTHING`,
+        [realUserId, `${realUserId}@orin.test`]
+      );
+
       const beforeCents = Number(acc.balance_cents);
 
       let deltaCents = 0;
@@ -335,10 +338,11 @@ export async function controlAction(u: Identity, input: Data) {
 
       const reference = String(payload.reference || 'adj-ref-' + randomUUID());
       const approvalId = requestId.startsWith('req-') ? requestId.replace('req-', 'appr-') : 'appr-' + requestId;
+
       await client.query(
         `INSERT INTO approvals (id, kind, user_id, account_id, delta_cents, before_cents, after_cents, status, reason, reference, requested_by, created_at)
          VALUES ($1, 'adjustment', $2, $3, $4, $5, $6, 'pending', $7, $8, $9, NOW())`,
-        [approvalId, uid, accountId, deltaCents, beforeCents, afterCents, reason, reference, u.id]
+        [approvalId, realUserId, realAccountId, deltaCents, beforeCents, afterCents, reason, reference, u.id]
       );
 
       return { ok: true, approvalId, status: 'pending', deltaCents, beforeCents, afterCents };
@@ -661,8 +665,7 @@ export async function controlAction(u: Identity, input: Data) {
 
   // 13. Reward Propose (reward.propose)
   if (action === 'reward.propose') {
-    const uid = String(payload.uid || target);
-    const accountId = String(payload.accountId || '');
+    const rawTarget = String(target || payload.accountId || payload.uid || payload.userId || '');
     const amountCents = Number(payload.amountCents || payload.deltaCents || 0);
     if (!Number.isSafeInteger(amountCents) || amountCents <= 0) {
       throw new ApiError('Valid reward amount required', 400);
@@ -670,16 +673,30 @@ export async function controlAction(u: Identity, input: Data) {
     const reference = String(payload.reference || 'rew-ref-' + randomUUID());
 
     return await withTx(async (client) => {
-      const accRes = await client.query('SELECT id, balance_cents FROM accounts WHERE id = $1 AND user_id = $2', [accountId, uid]);
+      const accRes = await client.query(
+        "SELECT id, user_id, balance_cents FROM accounts WHERE id = $1 OR user_id = $1 ORDER BY (CASE WHEN type = 'real' THEN 0 ELSE 1 END) ASC LIMIT 1 FOR UPDATE",
+        [rawTarget]
+      );
       if (accRes.rowCount === 0) throw new ApiError('Account not found', 404);
-      const beforeCents = Number(accRes.rows[0].balance_cents);
+      const acc = accRes.rows[0];
+      const realAccountId = acc.id;
+      const realUserId = acc.user_id;
+
+      await client.query(
+        `INSERT INTO profiles (id, email, display_name)
+         VALUES ($1, $2, 'User')
+         ON CONFLICT (id) DO NOTHING`,
+        [realUserId, `${realUserId}@orin.test`]
+      );
+
+      const beforeCents = Number(acc.balance_cents);
       const afterCents = beforeCents + amountCents;
       const approvalId = requestId.startsWith('req-') ? requestId.replace('req-', 'rew-appr-') : 'rew-appr-' + requestId;
 
       await client.query(
         `INSERT INTO approvals (id, kind, reward_kind, user_id, account_id, delta_cents, before_cents, after_cents, status, reason, reference, requested_by, created_at)
          VALUES ($1, 'referral_reward', 'referral', $2, $3, $4, $5, $6, 'pending', $7, $8, $9, NOW())`,
-        [approvalId, uid, accountId, amountCents, beforeCents, afterCents, reason, reference, u.id]
+        [approvalId, realUserId, realAccountId, amountCents, beforeCents, afterCents, reason, reference, u.id]
       );
 
       return { ok: true, approvalId, status: 'pending', amountCents };
