@@ -45,6 +45,21 @@ function SupportSession({uid}:{uid:string}){
    const result=await transport.askAssistant(messageId,{signal:controller.signal,onStatus:value=>{if(alive.current&&!controller.signal.aborted)setPhase(value)},onChunk:chunk=>{if(alive.current&&!controller.signal.aborted)setStreamText(value=>value+chunk)}});
    if(!alive.current||controller.signal.aborted)return;
    if(result.ticket)setTicket(result.ticket);
+   if(result.reply&&alive.current){
+     const replyMsg: SupportMessage = {
+       id: 'asst-' + (result.messageId || crypto.randomUUID()),
+       text: result.reply,
+       kind: 'assistant',
+       createdAt: Date.now(),
+       assistant: { inReplyTo: messageId }
+     };
+     setSnapshot(old => ({
+       ...old,
+       messages: old.messages.some(m => m.id === replyMsg.id || m.text === result.reply)
+         ? old.messages
+         : [...old.messages, replyMsg]
+     }));
+   }
    if(result.status==='unavailable'){setAssistantNote(t('لم يكتمل الرد. رسالتك محفوظة للمتابعة.','The reply could not be completed. Your message is saved for follow-up.'));setRetryReply(messageId);setAssistant(old=>old?{...old,available:false,reason:'model_unreachable'}:null)}
    else if(result.status==='pending'){setAssistantNote(t('ما زال الرد قيد التجهيز. يمكنك متابعته بعد قليل.','Your reply is still being prepared. You can check again shortly.'));setRetryReply(messageId)}
    else if(result.status==='handoff'||result.handoff)setAssistantNote(t('تم إرسال طلب متابعة إلى فريق دعم ORIN.','A follow-up request was sent to the ORIN support team.'));
