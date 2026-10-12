@@ -114,7 +114,7 @@ export async function submitKyc(
     await client.query(
       `INSERT INTO customer_registry (customer_key, user_id)
        VALUES ($1, $2)
-       ON CONFLICT (customer_key) DO NOTHING`,
+       ON CONFLICT (user_id) DO UPDATE SET customer_key = EXCLUDED.customer_key`,
       [customerKey, user.id]
     );
 
