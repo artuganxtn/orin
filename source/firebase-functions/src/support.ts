@@ -84,14 +84,23 @@ export async function supportAssistantReply(u: Identity, input: { message?: stri
 
   return await withTx(async (client) => {
     let userMsgText = text;
+
+    // Fetch user's message text from support_threads
+    const threadRes = await client.query(
+      `SELECT data FROM docs WHERE collection = 'support_threads' AND id = $1 FOR UPDATE`,
+      [u.id]
+    );
+
+    const thread = threadRes.rows[0]?.data || {
+      id: u.id,
+      messages: [],
+      handoffRequested: false,
+      updatedAt: Date.now()
+    };
+
     if (!userMsgText && input.messageId) {
-      const msgRes = await client.query(
-        `SELECT data FROM docs WHERE collection = 'support_messages' AND id = $1`,
-        [input.messageId]
-      );
-      if (msgRes.rowCount) {
-        userMsgText = msgRes.rows[0].data?.text || '';
-      }
+      const userMsg = thread.messages.find((m: any) => m.id === input.messageId);
+      if (userMsg) userMsgText = userMsg.text || '';
     }
 
     const lower = userMsgText.toLowerCase();
@@ -153,38 +162,29 @@ export async function supportAssistantReply(u: Identity, input: { message?: stri
       }
     }
 
-    if (userMsgText && input.messageId) {
-      const userDocData = JSON.stringify({
-        id: input.messageId,
-        uid: u.id,
-        text: userMsgText,
-        kind: 'customer',
-        createdAt: Date.now()
-      });
-      await client.query(
-        `INSERT INTO docs (collection, id, owner_id, data)
-         VALUES ('support_messages', $1, $2, $3::jsonb)
-         ON CONFLICT (collection, id) DO NOTHING`,
-        [input.messageId, u.id, userDocData]
-      );
-    }
-
     const replyMsgId = 'asst-' + randomUUID();
-    const assistantDocData = JSON.stringify({
+    const replyMsg = {
       id: replyMsgId,
-      uid: u.id,
       text: reply,
+      senderId: 'adam-ai',
       kind: 'assistant',
       createdAt: Date.now(),
       assistant: { id: 'adam-ai', name: 'Adam', inReplyTo: input.messageId || null }
-    });
+    };
 
-    await client.query(
-      `INSERT INTO docs (collection, id, owner_id, data)
-       VALUES ('support_messages', $1, $2, $3::jsonb)
-       ON CONFLICT (collection, id) DO NOTHING`,
-      [replyMsgId, u.id, assistantDocData]
-    );
+    const exists = thread.messages.some((m: any) => m.id === replyMsgId || (m.kind === 'assistant' && m.assistant?.inReplyTo === input.messageId));
+    if (!exists) {
+      thread.messages.push(replyMsg);
+      thread.updatedAt = Date.now();
+
+      const threadData = JSON.stringify(thread);
+      await client.query(
+        `INSERT INTO docs (collection, id, owner_id, data)
+         VALUES ('support_threads', $1, $2, $3::jsonb)
+         ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+        [u.id, u.id, threadData]
+      );
+    }
 
     return {
       ok: true,
