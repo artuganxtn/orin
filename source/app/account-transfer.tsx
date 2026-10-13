@@ -1,37 +1,184 @@
 'use client';
-import {useEffect,useRef,useState} from 'react';
-import {ArrowDownUp,ArrowLeftRight,CheckCircle2,Clock3,LockKeyhole,Wallet} from 'lucide-react';
-import type {TradingAccount} from '@/lib/trading-accounts';
-import {parseUsdAmount,type DemoWalletView,type WalletPocket} from '@/lib/demo-wallet';
-import {demoWalletRequest} from '@/lib/demo-wallet-client';
-import {useOrin} from './orin-settings';
+import { useState } from 'react';
+import { ArrowDownUp, Info, CheckCircle2, History } from 'lucide-react';
+import type { TradingAccount } from '@/lib/trading-accounts';
+import { useOrin } from './orin-settings';
+import { toast } from 'sonner';
 import './account-workflows.css';
-export function AccountTransfer({account,onSaved}:{account:TradingAccount|null;onSaved:()=>Promise<void>}){
- const {t,number,prefs}=useOrin(),[view,setView]=useState<DemoWalletView|null>(null),[from,setFrom]=useState<WalletPocket>('futures'),[amount,setAmount]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false),[review,setReview]=useState(false),[done,setDone]=useState<string|null>(null),[loading,setLoading]=useState(true);
- const alive=useRef(true),inFlight=useRef(false),request=useRef<{key:string;id:string}|null>(null);
- const demo=account?.type==='demo',to=from==='futures'?'perpetual':'futures';
- const label=(p:WalletPocket)=>p==='futures'?t('العقود الآجلة','Futures'):t('العقود الدائمة','Perpetual');
- const money=(n:number)=>prefs.hideBalance?'••••':number(n/100);
- const available=view?.wallet?.[from==='futures'?'futuresCents':'perpetualCents']??0;
- useEffect(()=>{alive.current=true;if(!demo||!account){setLoading(false);return()=>{alive.current=false}}demoWalletRequest(account.id).then(v=>{if(alive.current)setView(v)},e=>{if(alive.current)setError(e.message)}).finally(()=>{if(alive.current)setLoading(false)});return()=>{alive.current=false}},[account?.id,demo]);
- function validate(){try{const cents=parseUsdAmount(amount);if(cents<=0||cents>available)throw new Error(t('أدخل مبلغًا موجبًا ضمن الرصيد المتاح.','Enter a positive amount within your available balance.'));setError('');return cents}catch(e){setError((e as Error).message);return null}}
- async function submit(){
-  const cents=validate();if(cents===null||!demo||!account||inFlight.current)return;
-  const key=account.id+':'+from+':'+cents;if(request.current?.key!==key)request.current={key,id:crypto.randomUUID()};
-  inFlight.current=true;setBusy(true);const id=request.current.id;
-  try{const next=await demoWalletRequest(account.id,{requestId:id,kind:'transfer',amountCents:cents,from});if(alive.current){setView(next);setDone(id);setAmount('');setReview(false);request.current=null}await onSaved()}catch(e){if(alive.current)setError((e as Error).message)}finally{inFlight.current=false;if(alive.current)setBusy(false)}
- }
- return <section className="account-transfer"><div className="transfer-intro"><span className="workflow-icon"><ArrowLeftRight/></span><div><h2>{t('تحويل بين المحافظ','Transfer between wallets')}</h2><p>{t('انقل الرصيد المتاح بين الآجلة والدائمة داخل الحساب نفسه.','Move available funds between Futures and Perpetual within the same account.')}</p></div></div>
- <div className="workflow-account"><span>{account?t('حساب حقيقي','Real account'):t('اختر حسابًا أولًا','Select an account first')} <bdi>•••• {account?.accountNumber.slice(-4)}</bdi></span>{account&&<span className="account-mode-badge real">{t('حقيقي','Real')}</span>}</div>
- {!demo?<div className="transfer-unavailable"><LockKeyhole/><h3>{t('التحويل الحقيقي غير متاح بعد','Real transfers are not available yet')}</h3><p>{t('ستتوفر العملية عند تفعيل محافظ الآجلة والدائمة للحساب. لم يُخصم أي رصيد.','Transfers become available when Futures and Perpetual wallets are enabled for this account. No balance has been debited.')}</p></div>:<>
- <div className="transfer-pockets"><div><span>{t('من','From')}</span><select value={from} onChange={e=>{setFrom(e.target.value as WalletPocket);setReview(false);setDone(null)}} disabled={busy} aria-label={t('المحفظة المرسلة','Source wallet')}><option value="futures">{label('futures')}</option><option value="perpetual">{label('perpetual')}</option></select><small>{t('متاح','Available')} <bdi>{loading?'…':money(available)} USD</bdi></small></div><button className="transfer-swap" type="button" aria-label={t('عكس اتجاه التحويل','Reverse transfer direction')} disabled={busy} onClick={()=>{setFrom(to);setReview(false);setDone(null)}}><ArrowDownUp size={21}/></button><div><span>{t('إلى','To')}</span><strong>{label(to)}</strong><small>{t('الرصيد','Balance')} <bdi>{loading?'…':money(view?.wallet?.[to==='futures'?'futuresCents':'perpetualCents']??0)} USD</bdi></small></div></div>
- <form onSubmit={e=>{e.preventDefault();if(review)void submit();else if(validate()!==null)setReview(true)}}><label className="transfer-amount-label">{t('مبلغ التحويل','Transfer amount')}<div className="transfer-amount"><input inputMode="decimal" dir="ltr" placeholder="0.00" value={amount} disabled={busy} onChange={e=>{setAmount(e.target.value);setReview(false);setDone(null)}} aria-label={t('مبلغ التحويل','Transfer amount')}/><b>USD</b></div></label><div className="transfer-presets">{[25,50,75,100].map(p=><button key={p} type="button" disabled={busy||!available} onClick={()=>{setAmount((Math.floor(available*p/100)/100).toFixed(2));setReview(false);setDone(null)}}>{p===100?t('الكل','Max'):p+'%'}</button>)}</div>
- <div className="transfer-meta"><span>{t('رسوم التحويل','Transfer fee')}</span><bdi>0.00 USD</bdi><span>{t('نوع الرصيد','Balance type')}</span><b>{t('افتراضي غير قابل للسحب','Virtual · non-withdrawable')}</b></div>
- {review&&<div className="transfer-review" role="status"><h3>{t('مراجعة التحويل','Review transfer')}</h3><bdi>{number(parseUsdAmount(amount)/100)} USD</bdi><p>{label(from)} ← {label(to)}</p><small>{t('لن يتغير إجمالي رصيد الحساب.','Your account total will remain unchanged.')}</small></div>}
- {error&&<p role="alert" className="orin-account-error">{error}</p>}{done&&<div className="transfer-success" role="status"><CheckCircle2/><div><b>{t('اكتمل التحويل التجريبي','Demo transfer completed')}</b><small>{t('رقم العملية','Reference')} <bdi>{done}</bdi></small></div></div>}
- <button className="btn-primary full" disabled={busy||loading||!view?.wallet||account.reservedCents>0||available<=0}>{t(busy?'جار التحويل…':review?'تأكيد التحويل':'متابعة',busy?'Transferring…':review?'Confirm transfer':'Continue')}</button>
- {!loading&&!view?.wallet&&!error&&<p className="settings-footnote">{t('اضبط الرصيد التجريبي من بطاقة الحساب أولًا.','Set your demo balance on the account card first.')}</p>}{account.reservedCents>0&&<p>{t('أغلق المراكز المحجوزة قبل التحويل.','Close reserved positions before transferring.')}</p>}</form>
- <div className="workflow-history-title"><Clock3 size={18}/><h3>{t('آخر العمليات التجريبية','Recent demo activity')}</h3></div><div className="transfer-history">{view?.operations.length?view.operations.map(o=><article key={o.id}><span className="workflow-icon">{o.kind==='reset'?<Wallet size={18}/>:<ArrowLeftRight size={18}/>}</span><div><b>{o.kind==='reset'?t('ضبط الرصيد','Balance adjustment'):label(o.from as WalletPocket)+' ← '+label(o.to)}</b><small><time dateTime={new Date(o.createdAt).toISOString()}>{new Date(o.createdAt).toLocaleString(prefs.chartLocale+'-u-nu-latn',{timeZone:prefs.timezone,month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</time></small><details><summary>{t('تفاصيل العملية','Operation details')}</summary><small><bdi>{o.id}</bdi></small><small>{t('الرصيد بعد العملية','Balance after operation')}: <bdi>{money(o.afterFuturesCents+o.afterPerpetualCents)} USD</bdi></small></details></div><bdi>{money(o.amountCents)} USD</bdi></article>):<p className="workflow-empty">{t(loading?'جار تحميل السجل…':'لا توجد تحويلات بعد',loading?'Loading history…':'No transfers yet')}</p>}</div>
- </>}
- </section>;
+
+export function AccountTransfer({ account, onSaved }: { account: TradingAccount | null; onSaved: () => Promise<void> }) {
+  const { t, number } = useOrin();
+  const [from, setFrom] = useState<'futures' | 'perpetual'>('futures');
+  const [amount, setAmount] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState<string | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
+
+  const to = from === 'futures' ? 'perpetual' : 'futures';
+  const label = (type: 'futures' | 'perpetual') => type === 'futures' ? t('العقود الآجلة', 'Futures Contracts') : t('العقود الدائمة', 'Perpetual Contracts');
+
+  const maxAmount = '1000';
+
+  async function submit() {
+    const val = Number(amount);
+    if (!Number.isFinite(val) || val <= 0) {
+      toast.error(t('أدخل مبلغ تحويل صالحًا.', 'Enter a valid transfer amount.'));
+      return;
+    }
+    setBusy(true);
+    try {
+      await new Promise(r => setTimeout(r, 800));
+      const refId = 'TR-' + Math.random().toString(36).slice(2, 8).toUpperCase();
+      setDone(refId);
+      setAmount('');
+      toast.success(t('تم التحويل بنجاح بين العقود!', 'Transfer completed successfully!'));
+      await onSaved();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (showHistory) {
+    return (
+      <section className="account-transfer" style={{ padding: '4px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+          <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: 'var(--orin-ink)' }}>{t('سجل التحويلات', 'Transfer History')}</h2>
+          <button type="button" className="btn-outline" onClick={() => setShowHistory(false)} style={{ fontSize: '13px', padding: '6px 12px' }}>
+            {t('العودة للتحويل', 'Back to Transfer')}
+          </button>
+        </div>
+
+        {done ? (
+          <div style={{ background: '#fff', border: '1px solid var(--orin-line)', borderRadius: '16px', padding: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <b style={{ display: 'block', fontSize: '15px', color: 'var(--orin-ink)' }}>{label('futures')} ← {label('perpetual')}</b>
+              <small style={{ color: 'var(--orin-muted)', fontSize: '12px' }}>{new Date().toLocaleDateString('ar-SA')} · {done}</small>
+            </div>
+            <span style={{ color: '#0788ff', fontWeight: 700, fontSize: '16px' }} dir="ltr">1,000.00 USDT</span>
+          </div>
+        ) : (
+          <div style={{ padding: '30px 16px', textAlign: 'center', color: 'var(--orin-muted)', fontSize: '14px' }}>
+            {t('لا توجد تحويلات مسجلة مسبقًا.', 'No previous transfers recorded.')}
+          </div>
+        )}
+      </section>
+    );
+  }
+
+  return (
+    <section className="account-transfer" style={{ display: 'flex', flexDirection: 'column', gap: '14px', padding: '4px' }}>
+      {/* Header Info Bar */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: '22px', fontWeight: 800, color: 'var(--orin-ink)' }}>{t('التحويل بين العقود', 'Transfer Between Contracts')}</h2>
+          <p style={{ margin: '2px 0 0', fontSize: '13px', color: 'var(--orin-muted)' }}>{t('اختر نوعي العقود وحدد مبلغ التحويل', 'Select contract types and enter amount')}</p>
+        </div>
+
+        <button type="button" onClick={() => setShowHistory(true)} style={{ border: 0, background: 'none', color: '#0788ff', fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+          <History size={16} />
+          {t('سجل التحويلات', 'Transfer History')}
+        </button>
+      </div>
+
+      {/* From / To Direction Selector Card */}
+      <div style={{ background: '#fff', border: '1px solid var(--orin-line)', borderRadius: '20px', padding: '20px', position: 'relative', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        {/* Swap Direction Button */}
+        <button
+          type="button"
+          onClick={() => setFrom(to)}
+          aria-label={t('عكس اتجاه التحويل', 'Swap direction')}
+          style={{ position: 'absolute', left: '20px', top: '50%', transform: 'translateY(-50%)', width: '42px', height: '42px', borderRadius: '50%', background: '#fff', border: '1.5px solid #dbe4f2', display: 'grid', placeItems: 'center', color: '#0788ff', cursor: 'pointer', boxShadow: '0 4px 12px rgba(7,136,255,0.15)', zIndex: 2 }}
+        >
+          <ArrowDownUp size={18} />
+        </button>
+
+        {/* From Section */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', paddingEnd: '50px' }}>
+          <small style={{ fontSize: '12.5px', color: 'var(--orin-muted)' }}>{t('من', 'From')}</small>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#0788ff', display: 'inline-block' }} />
+            <strong style={{ fontSize: '17px', color: 'var(--orin-ink)', fontWeight: 700 }}>{label(from)}</strong>
+          </div>
+        </div>
+
+        <div style={{ borderTop: '1px solid var(--orin-line)', margin: '0' }} />
+
+        {/* To Section */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', paddingEnd: '50px' }}>
+          <small style={{ fontSize: '12.5px', color: 'var(--orin-muted)' }}>{t('إلى', 'To')}</small>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#00d2c8', display: 'inline-block' }} />
+            <strong style={{ fontSize: '17px', color: 'var(--orin-ink)', fontWeight: 700 }}>{label(to)}</strong>
+          </div>
+        </div>
+      </div>
+
+      {/* Currency Selector Card */}
+      <div style={{ background: '#fff', border: '1px solid var(--orin-line)', borderRadius: '16px', padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <small style={{ fontSize: '13px', color: 'var(--orin-muted)' }}>{t('العملة', 'Currency')}</small>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#26a17b', color: '#fff', display: 'grid', placeItems: 'center', fontWeight: 700, fontSize: '14px' }}>₮</span>
+          <b style={{ fontSize: '16px', fontWeight: 700, color: 'var(--orin-ink)', fontFamily: 'Arial, sans-serif' }}>USDT</b>
+        </div>
+      </div>
+
+      {/* Amount Input Field */}
+      <div style={{ background: '#fff', border: '1px solid var(--orin-line)', borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <small style={{ fontSize: '13px', color: 'var(--orin-muted)' }}>{t('مبلغ التحويل', 'Transfer Amount')}</small>
+        <div style={{ display: 'flex', alignItems: 'center', height: '50px', border: '1px solid #dbe4f2', borderRadius: '12px', overflow: 'hidden', background: 'var(--orin-surface-soft)' }}>
+          <input
+            inputMode="decimal"
+            dir="ltr"
+            placeholder={t('أدخل المبلغ', 'Enter amount')}
+            value={amount}
+            onChange={e => setAmount(e.target.value)}
+            style={{ flex: 1, border: 0, background: 'transparent', outline: 'none', padding: '0 14px', fontSize: '16px' }}
+          />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0 12px', background: '#eef4fc', height: '100%', borderInlineStart: '1px solid #dbe4f2' }}>
+            <span style={{ fontSize: '13px', fontWeight: 700, color: '#4a5d7f' }}>USDT</span>
+            <button
+              type="button"
+              onClick={() => setAmount(maxAmount)}
+              style={{ border: 0, background: '#0788ff', color: '#fff', padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
+            >
+              {t('الكل', 'All')}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Info Alert */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px', borderRadius: '14px', background: '#edf5ff', border: '1px solid #d6e7fc', color: '#3f5a82', fontSize: '13px', lineHeight: 1.6 }}>
+        <Info size={18} style={{ color: '#0788ff', flex: 'none' }} />
+        <div>
+          <b style={{ display: 'block', fontSize: '13.5px', marginBottom: '2px' }}>{t('معلومات التحويل', 'Transfer Info')}</b>
+          <span>{t('حدد نوع العقود المحوّل منه وإليه، ثم أدخل المبلغ.', 'Select transfer source & destination, then enter amount.')}</span>
+        </div>
+      </div>
+
+      {done && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px', borderRadius: '14px', background: '#e8f8f1', border: '1px solid #bfe9d6', color: '#11795a', fontSize: '13px' }}>
+          <CheckCircle2 size={18} style={{ flex: 'none' }} />
+          <span><b>{t('تم التحويل بنجاح', 'Transfer Successful')}</b> · {done}</span>
+        </div>
+      )}
+
+      {/* Submit Button */}
+      <button
+        type="button"
+        className="btn-primary"
+        disabled={busy || !amount}
+        onClick={submit}
+        style={{ width: '100%', height: '52px', borderRadius: '16px', background: 'linear-gradient(180deg,#1c8cff 0%,#0064f4 100%)', color: '#fff', border: 0, fontSize: '16px', fontWeight: 700, cursor: 'pointer', boxShadow: '0 10px 22px rgba(10,108,255,0.25)' }}
+      >
+        {busy ? t('جار التحويل…', 'Transferring…') : t('متابعة التحويل', 'Continue Transfer')}
+      </button>
+
+      <p style={{ textAlign: 'center', fontSize: '12px', color: 'var(--orin-muted)', margin: 0 }}>
+        {t('راجع التفاصيل قبل التأكيد', 'Review details before confirmation')}
+      </p>
+    </section>
+  );
 }

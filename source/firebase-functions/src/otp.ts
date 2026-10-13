@@ -23,7 +23,7 @@ export function computeUnsubscribeTokenHash(secret: string, userId: string): str
 
 export async function createOtpChallenge(
   emailInput: string,
-  purpose: 'signup' | 'withdrawal' | 'login_device',
+  purpose: 'signup' | 'withdrawal' | 'login_device' | 'password_reset',
   secret: string,
   ip: string,
   userId?: string,

@@ -133,9 +133,9 @@ export function emailRegistration(auth: Pick<Auth, 'createUser' | 'createCustomT
       const user = await auth.createUser({ email, password, displayName: name, emailVerified: true });
       await withTx(async (client) => {
         await client.query(
-          `INSERT INTO profiles (id, email, display_name, role, disabled)
-           VALUES ($1, $2, $3, 'user', FALSE)
-           ON CONFLICT (id) DO NOTHING`,
+          `INSERT INTO profiles (id, email, display_name, role, disabled, email_verified)
+           VALUES ($1, $2, $3, 'user', FALSE, TRUE)
+           ON CONFLICT (id) DO UPDATE SET email_verified = TRUE, updated_at = NOW()`,
           [user.uid, email, name]
         );
       });

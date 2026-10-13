@@ -189,7 +189,7 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
   const finishedDeposits = items.filter(x => x.status === 'finished' || x.credited);
   const latestDeposit = finishedDeposits[0];
   const elapsedDays = latestDeposit ? Math.floor((Date.now() - latestDeposit.createdAt) / 86400000) : 0;
-  const lockRemainingDays = latestDeposit ? Math.max(0, 20 - elapsedDays) : 20;
+  const lockRemainingDays = latestDeposit ? Math.max(0, 29 - elapsedDays) : 29;
 
   const loading = !ready && (
     <div className="fp-card fp-empty">
@@ -213,7 +213,7 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
         return;
       }
       if (lockRemainingDays > 0) {
-        setError(latestDeposit ? t(`لا يمكن السحب قبل مرور 20 يومًا من تاريخ الإيداع. متبقي ${lockRemainingDays} يومًا.`, `Withdrawals open 20 days after deposit. ${lockRemainingDays} days remaining.`) : t('لا يمكن السحب إلا بعد مرور 20 يومًا من تاريخ أول إيداع مؤكد.', 'Withdrawals open 20 days after your first confirmed deposit.'));
+        setError(latestDeposit ? t(`لا يمكن السحب قبل مرور 29 يومًا من تاريخ الإيداع. متبقي ${lockRemainingDays} يومًا.`, `Withdrawals open 29 days after deposit. ${lockRemainingDays} days remaining.`) : t('لا يمكن السحب إلا بعد مرور 29 يومًا من تاريخ أول إيداع مؤكد.', 'Withdrawals open 29 days after your first confirmed deposit.'));
         return;
       }
 
@@ -383,7 +383,7 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
             {lockRemainingDays > 0 && (
               <p className="fp-note warn" style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px', borderRadius: '14px', background: '#fff6e6', border: '1px solid #f5dfb3', color: '#8a5b13', fontSize: '13px' }}>
                 <LockKeyhole size={18} style={{ color: '#e09a1c', flex: 'none' }} />
-                <span><b>{t('فترة الحجز 20 يومًا', '20-day holding period')}</b> · {latestDeposit ? t(`متبقي ${lockRemainingDays} يومًا لإتاحة السحب.`, `${lockRemainingDays} days until withdrawals open.`) : t('يتاح السحب بعد 20 يومًا من أول إيداع مؤكد.', 'Withdrawals open 20 days after your first confirmed deposit.')}</span>
+                <span><b>{t('فترة الحجز 29 يومًا', '29-day holding period')}</b> · {latestDeposit ? t(`متبقي ${lockRemainingDays} يومًا لإتاحة السحب.`, `${lockRemainingDays} days until withdrawals open.`) : t('يتاح السحب بعد 29 يومًا من أول إيداع مؤكد.', 'Withdrawals open 29 days after your first confirmed deposit.')}</span>
               </p>
             )}
 

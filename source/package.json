@@ -21,6 +21,7 @@
     "preview:firebase-spark": "firebase hosting:channel:deploy spark-review --expires 7d --project orin-99951 --config firebase.spark.json",
     "build:firebase-security": "node scripts/build-dist.mjs security",
     "build:server": "node scripts/build-dist.mjs server",
+    "mail:preview": "node scripts/preview-email-templates.mjs",
     "build:render": "node scripts/build-dist.mjs render",
     "deploy:render-hosting": "firebase deploy --project orin-99951 --config firebase.hosting.json --only hosting,firestore:rules,firestore:indexes",
     "deploy:production": "firebase deploy --project orin-99951 --only functions,firestore,hosting",

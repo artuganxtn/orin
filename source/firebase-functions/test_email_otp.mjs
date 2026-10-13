@@ -78,13 +78,14 @@ await client.query(`
 
 // TEST 1: WRONG CODE X5 LOCKS CHALLENGE
 console.log('\n--- TEST 1: Wrong Code x5 Locks Challenge ---');
-const challenge1 = await createOtpChallenge(testEmail, 'signup', testSecret, '127.0.0.1');
+const testEmailLock = 'otp.lock.' + Date.now() + '@javl900.com';
+const challenge1 = await createOtpChallenge(testEmailLock, 'signup', testSecret, '127.0.0.1');
 
 const wrongCode = challenge1.code === '000000' ? '111111' : '000000';
 
 for (let i = 1; i <= 5; i++) {
   try {
-    await verifyOtpChallenge(challenge1.challengeId, testEmail, wrongCode, 'signup', testSecret);
+    await verifyOtpChallenge(challenge1.challengeId, testEmailLock, wrongCode, 'signup', testSecret);
     assert.fail('Should have failed on wrong code');
   } catch (err) {
     if (err instanceof assert.AssertionError) throw err;
@@ -93,7 +94,7 @@ for (let i = 1; i <= 5; i++) {
 }
 
 try {
-  await verifyOtpChallenge(challenge1.challengeId, testEmail, challenge1.code, 'signup', testSecret);
+  await verifyOtpChallenge(challenge1.challengeId, testEmailLock, challenge1.code, 'signup', testSecret);
   assert.fail('Should have failed on locked challenge');
 } catch (err) {
   assert.equal(err.code, 'code-locked');
@@ -102,8 +103,11 @@ try {
 
 // TEST 2: RESEND COOLDOWN
 console.log('\n--- TEST 2: Resend 60s Cooldown ---');
+const testEmailCool = 'otp.cool.' + Date.now() + '@javl900.com';
+await createOtpChallenge(testEmailCool, 'signup', testSecret, '127.0.0.1');
+
 try {
-  await createOtpChallenge(testEmail, 'signup', testSecret, '127.0.0.1');
+  await createOtpChallenge(testEmailCool, 'signup', testSecret, '127.0.0.1');
   assert.fail('Should fail due to 60s cooldown');
 } catch (err) {
   assert.equal(err.code, 'cooldown-active');
@@ -112,10 +116,9 @@ try {
 
 // TEST 3: PROOF CONSUMED ONCE
 console.log('\n--- TEST 3: Proof Consumed Once ---');
-// Clean rates for new test email
-const testEmail2 = 'otp.e2e2@javl900.com';
-const challenge3 = await createOtpChallenge(testEmail2, 'signup', testSecret, '127.0.0.2');
-const verification3 = await verifyOtpChallenge(challenge3.challengeId, testEmail2, challenge3.code, 'signup', testSecret);
+const testEmail3 = 'otp.p3.' + Date.now() + '@javl900.com';
+const challenge3 = await createOtpChallenge(testEmail3, 'signup', testSecret, '127.0.0.2');
+const verification3 = await verifyOtpChallenge(challenge3.challengeId, testEmail3, challenge3.code, 'signup', testSecret);
 assert.ok(verification3.proofId);
 
 const consumed1 = await withTx(async (c) => consumeOtpProof(verification3.proofId, 'anonymous', 'signup', 'unbound', c));
@@ -127,11 +130,12 @@ console.log('✔ Proof consumed exactly once and replay rejected.');
 
 // TEST 4: BOUND HASH MISMATCH (WITHDRAWAL A REJECTED FOR WITHDRAWAL B)
 console.log('\n--- TEST 4: Withdrawal A Proof Rejected for Withdrawal B ---');
+const testEmail4 = 'otp.p4.' + Date.now() + '@javl900.com';
 const boundHashA = computeWithdrawalBoundHash(testUser, 10000, 'USDT', 'TAb9uNeXzJeSWuAkiVv6d95oyZ2Jk8Qgas');
 const boundHashB = computeWithdrawalBoundHash(testUser, 20000, 'USDT', 'TBdifferentAddressX1234567890');
 
-const challengeWd = await createOtpChallenge('wd@javl900.com', 'withdrawal', testSecret, '127.0.0.3', testUser, boundHashA);
-const verifyWd = await verifyOtpChallenge(challengeWd.challengeId, 'wd@javl900.com', challengeWd.code, 'withdrawal', testSecret, boundHashA);
+const challengeWd = await createOtpChallenge(testEmail4, 'withdrawal', testSecret, '127.0.0.3', testUser, boundHashA);
+const verifyWd = await verifyOtpChallenge(challengeWd.challengeId, testEmail4, challengeWd.code, 'withdrawal', testSecret, boundHashA);
 
 const consumedWrongBound = await withTx(async (c) => consumeOtpProof(verifyWd.proofId, testUser, 'withdrawal', boundHashB, c));
 assert.equal(consumedWrongBound, false, 'Proof for Withdrawal A rejected when attempting Withdrawal B');
@@ -159,7 +163,8 @@ console.log('✔ Outbox row not created when transaction rolls back.');
 console.log('\n--- TEST 6: Outbox Enqueue & Processing ---');
 clearTestMemoryOutbox();
 
-await enqueueEmail('sent@javl900.com', 'welcome', 'ar', { name: 'Success User' }, 'welcome:sent-1');
+const sentDedupeKey = 'welcome:sent-' + Date.now();
+await enqueueEmail('sent@javl900.com', 'welcome', 'ar', { name: 'Success User' }, sentDedupeKey);
 const outboxProc = await processEmailOutboxOnce();
 assert.equal(outboxProc.processed, 1);
 assert.equal(testMemoryOutbox.length, 1);
@@ -182,6 +187,50 @@ for (const r of ledgerCheck.rows) {
 }
 assert.equal(ledgerMismatches, 0, 'Ledger invariant must remain 0 mismatches');
 console.log('✔ Double-entry ledger invariant verified: 0 mismatches across all accounts.');
+
+// TEST 8: EMAIL UNVERIFIED USER REJECTION (GATE CHECK)
+console.log('\n--- TEST 8: Email Unverified User Gate Check ---');
+
+await client.query(`
+  INSERT INTO profiles (id, email, display_name, role, email_verified)
+  VALUES ('usr-unverified-1', 'unverified@javl900.com', 'Unverified User', 'user', FALSE)
+  ON CONFLICT (id) DO UPDATE SET email_verified = FALSE;
+`);
+
+const { authMiddleware } = await import('./lib/auth-middleware.js');
+
+let resUnverifiedCode = 0;
+let resUnverifiedJson = {};
+let reqUnverified = {
+  headers: { authorization: 'Bearer test-token-usr-unverified-1:unverified@javl900.com' },
+  path: '/lab'
+};
+let resUnverified = {
+  status: (code) => { resUnverifiedCode = code; return resUnverified; },
+  json: (data) => { resUnverifiedJson = data; }
+};
+
+await authMiddleware(reqUnverified, resUnverified, () => {});
+assert.equal(resUnverifiedCode, 403, 'Unverified email user rejected with 403');
+assert.equal(resUnverifiedJson.code, 'email_unverified');
+console.log('✔ Unverified email user correctly rejected with 403 email_unverified.');
+
+// TEST 9: SERVER PASSWORD RESET FLOW & SESSION REVOCATION
+console.log('\n--- TEST 9: Server Password Reset Flow ---');
+
+clearTestMemoryOutbox();
+const resetEmail = 'reset.test@javl900.com';
+const challengeReset = await createOtpChallenge(resetEmail, 'password_reset', testSecret, '127.0.0.1', testUser);
+await enqueueEmail(resetEmail, 'password_reset_code', 'ar', { code: challengeReset.code }, `reset:${challengeReset.challengeId}`);
+await processEmailOutboxOnce();
+
+const resetEmailSent = testMemoryOutbox.find(m => m.template === 'password_reset_code');
+assert.ok(resetEmailSent, 'Password reset code email enqueued and sent');
+assert.equal(resetEmailSent.to, resetEmail);
+
+const verifyReset = await verifyOtpChallenge(challengeReset.challengeId, resetEmail, challengeReset.code, 'password_reset', testSecret);
+assert.ok(verifyReset.proofId);
+console.log('✔ Password reset code verified successfully via server OTP flow.');
 
 client.release();
 await pool.end();

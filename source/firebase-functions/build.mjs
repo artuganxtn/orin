@@ -10,6 +10,7 @@ await build({
     'src/contracts.ts',
     'src/withdrawals.ts',
     'src/kyc.ts',
+    'src/auth-middleware.ts',
     'src/otp.ts',
     'src/mail/transport.ts',
     'src/mail/templates.ts',

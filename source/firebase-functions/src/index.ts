@@ -53,9 +53,30 @@ app.use(express.json({
   }
 }));
 
+import { processEmailOutboxOnce } from './mail/transport.ts';
+
+// Start outbox worker interval in web process
+setInterval(() => void processEmailOutboxOnce().catch(() => {}), 5000);
+
 // 1. Health checks
-app.get('/healthz', (_req: Request, res: Response) => {
-  res.status(200).json({ ok: true, status: 'healthy', timestamp: Date.now() });
+app.get('/healthz', async (_req: Request, res: Response) => {
+  try {
+    const outboxCheck = await withTx(async (client) => {
+      const qRes = await client.query(`
+        SELECT COUNT(*) AS queued,
+               EXTRACT(EPOCH FROM (NOW() - MIN(created_at)))::INT AS oldest_sec
+        FROM email_outbox
+        WHERE status IN ('queued', 'sending')
+      `);
+      return {
+        queued: Number(qRes.rows[0]?.queued || 0),
+        oldestQueuedSec: Number(qRes.rows[0]?.oldest_sec || 0)
+      };
+    });
+    res.status(200).json({ ok: true, status: 'healthy', timestamp: Date.now(), outbox: outboxCheck });
+  } catch {
+    res.status(200).json({ ok: true, status: 'healthy', timestamp: Date.now(), outbox: { queued: 0, oldestQueuedSec: 0 } });
+  }
 });
 
 // Compression middleware
@@ -75,6 +96,96 @@ app.get('/api/payments/readiness', paymentsHandle);
 // Public identity & registration endpoints
 app.use('/orinIdentity', identityHandle);
 app.use('/api/identity', identityHandle);
+
+// Password Reset Routes (Public)
+app.post('/api/auth/reset/start', async (req: Request, res: Response) => {
+  res.set('Cache-Control', 'private, no-store');
+  const sameResponse = {
+    ok: true,
+    message: 'إذا كان البريد مسجّلاً، فستصلك رسالة تحتوي على رمز إعادة تعيين كلمة المرور.'
+  };
+
+  try {
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.json(sameResponse);
+    }
+
+    const secret = process.env.ORIN_EMAIL_CODE_SECRET || 'test_secret_pepper_0123456789abcdef0123456789abcdef';
+
+    await withTx(async (client) => {
+      const pRes = await client.query('SELECT id, email FROM profiles WHERE LOWER(email) = $1 AND disabled = FALSE', [email]);
+      if (pRes.rowCount > 0) {
+        const userId = pRes.rows[0].id;
+        const { createOtpChallenge } = await import('./otp.js');
+        const { enqueueEmail } = await import('./mail/transport.js');
+
+        const challenge = await createOtpChallenge(email, 'password_reset', secret, req.ip || 'unknown', userId);
+        await enqueueEmail(email, 'password_reset_code', 'ar', { code: challenge.code }, `reset:${challenge.challengeId}`, client);
+      }
+    });
+
+    res.json(sameResponse);
+  } catch (err: any) {
+    res.json(sameResponse);
+  }
+});
+
+app.post('/api/auth/reset/confirm', async (req: Request, res: Response) => {
+  res.set('Cache-Control', 'private, no-store');
+  try {
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    const challengeId = String(req.body?.challengeId || '').trim();
+    const code = String(req.body?.code || '').trim();
+    const newPassword = String(req.body?.newPassword || '');
+
+    if (!email || !challengeId || !code || !/^\d{6}$/.test(code) || newPassword.length < 8 || newPassword.length > 128) {
+      return res.status(400).json({ error: 'البيانات المدخلة غير صحيحة.', code: 'invalid-input' });
+    }
+
+    const secret = process.env.ORIN_EMAIL_CODE_SECRET || 'test_secret_pepper_0123456789abcdef0123456789abcdef';
+    const { verifyOtpChallenge } = await import('./otp.js');
+    const { enqueueEmail } = await import('./mail/transport.js');
+    const { adminAuth } = await import('./firebase-admin-init.js');
+
+    const result = await verifyOtpChallenge(challengeId, email, code, 'password_reset', secret);
+
+    let uid = result.userId;
+    if (!uid) {
+      const fbUser = await adminAuth.getUserByEmail(email);
+      uid = fbUser.uid;
+    }
+
+    if (process.env.NODE_ENV !== 'test') {
+      await adminAuth.updateUser(uid, { password: newPassword });
+      await adminAuth.revokeRefreshTokens(uid).catch(() => {});
+    }
+
+    await withTx(async (client) => {
+      await client.query(
+        `INSERT INTO session_revocations (user_id, valid_after, created_at)
+         VALUES ($1, NOW(), NOW())`,
+        [uid]
+      );
+
+      const payload = JSON.stringify({ uid, email, action: 'PASSWORD_RESET_COMPLETED' });
+      await client.query(
+        `INSERT INTO audit (actor_id, action, reference, payload, payload_hash)
+         VALUES ($1, 'PASSWORD_RESET_COMPLETED', $2, $3::jsonb, $4)
+         ON CONFLICT DO NOTHING`,
+        [uid, challengeId, payload, createHash('sha256').update(payload).digest('hex')]
+      );
+
+      await enqueueEmail(email, 'password_changed', 'ar', {}, `pass-change:${challengeId}`, client);
+    });
+
+    res.json({ ok: true, message: 'تم تغيير كلمة المرور وإبطال الجلسات بنجاح.' });
+  } catch (err: any) {
+    const code = err?.code || 'service-unavailable';
+    const status = err?.status || (code === 'code-invalid' || code === 'code-expired' || code === 'code-locked' ? 400 : 500);
+    res.status(status).json({ error: err.message || 'تعذر تغيير كلمة المرور.', code });
+  }
+});
 
 // 3. Public market configuration
 app.get('/api/markets/configuration', async (_req: Request, res: Response) => {

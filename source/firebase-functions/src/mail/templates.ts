@@ -74,6 +74,21 @@ export function renderEmailTemplate(
     return { subject, html, text };
   }
 
+  if (template === 'password_reset_code') {
+    const code = String(payload.code || '000000');
+    const subject = isAr ? 'رمز إعادة تعيين كلمة المرور - ORIN' : 'ORIN Password Reset Code';
+    const html = baseLayout(
+      subject,
+      `<h2>${isAr ? 'إعادة تعيين كلمة المرور' : 'Reset Your Password'}</h2>
+       <p>${isAr ? 'استخدم رمز التأكيد التالي لإعادة تعيين كلمة المرور الخاصة بحسابك في منصة ORIN:' : 'Use the following verification code to reset your ORIN account password:'}</p>
+       <div class="code-box">${escapeHtml(code)}</div>
+       <p style="font-size:13px;color:#8ba5cb;">${isAr ? 'الرمز صالح لمدة 10 دقائق واستخدام واحد فقط. إذا لم تطلب إعادة التعيين، يرجى تجاهل هذه الرسالة.' : 'The code is valid for 10 minutes for single use. If you did not request a password reset, please ignore this email.'}</p>`,
+      locale
+    );
+    const text = `${subject}\n\n${isAr ? 'رمز إعادة تعيين كلمة المرور:' : 'Password reset code:'} ${code}\n${isAr ? 'صالح لمدة 10 دقائق.' : 'Valid for 10 minutes.'}`;
+    return { subject, html, text };
+  }
+
   if (template === 'welcome') {
     const name = escapeHtml(payload.name || 'User');
     const subject = isAr ? 'أهلاً بك في منصة ORIN للتداول المعتمد' : 'Welcome to ORIN Trading Platform';

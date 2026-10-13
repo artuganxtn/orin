@@ -38,6 +38,7 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
       uid = parts[0].replace('test-token-', '');
       email = parts[1] || `${uid}@orin.top`;
       name = parts[3] || uid;
+      verified = parts[5] === 'true';
       if (parts[4]) {
         tokenIatMs = Number(parts[4]);
       } else if (req.headers['x-test-token-iat']) {
@@ -58,6 +59,7 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
     let isBlocked = false;
     let blockReason = '';
     let validAfterMs = 0;
+    let profileEmailVerified = false;
 
     await withTx(async (client) => {
       // Upsert default profile row
@@ -89,6 +91,7 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
         `SELECT
            p.role AS profile_role,
            p.disabled AS profile_disabled,
+           COALESCE(p.email_verified, FALSE) AS profile_email_verified,
            s.roles AS staff_roles,
            s.status AS staff_status,
            a.status AS access_status,
@@ -104,6 +107,7 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
       if (queryRes.rowCount && queryRes.rowCount > 0) {
         const row = queryRes.rows[0];
         isDisabled = row.profile_disabled === true;
+        profileEmailVerified = row.profile_email_verified === true;
         if (row.access_status && row.access_status !== 'active') {
           isBlocked = true;
           blockReason = row.access_reason || 'الوصول إلى الحساب محظور.';
@@ -145,6 +149,15 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
     // 3. Reject if token issued before session_revocations.valid_after
     if (validAfterMs > 0 && tokenIatMs < validAfterMs) {
       return res.status(401).json({ error: 'انتهت الجلسة. أعد تسجيل الدخول.' });
+    }
+
+    // 4. Reject with 403 code email_unverified if email not verified in token AND not verified in profiles
+    const isExemptPath = req.path.startsWith('/security/logout') || req.path.startsWith('/identity/') || req.path.startsWith('/email/unsubscribe');
+    if (!verified && !profileEmailVerified && !isExemptPath) {
+      return res.status(403).json({
+        error: 'يرجى تأكيد البريد الإلكتروني أولاً. / Email verification required.',
+        code: 'email_unverified'
+      });
     }
 
     req.user = { id: uid, email, name, verified, role };
