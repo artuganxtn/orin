@@ -4,6 +4,7 @@ import { ApiError, type Identity, type Data } from './store.ts';
 import { computeCustomerKey, verifyKycCustomer, idLast4, getKycFilesKey, decryptAesGcm } from './kyc.ts';
 import { proposeWithdrawalApproval, approveWithdrawal, markWithdrawalPaid } from './withdrawals.ts';
 import { MARKET_SYMBOLS } from '../../lib/market-symbols.js';
+import { adminAuth } from './firebase-admin-init.ts';
 
 export { computeCustomerKey };
 const hash = (text: string) => createHash('sha256').update(text).digest('hex');
@@ -214,13 +215,15 @@ export async function controlRead(u: Identity, module: string, q: Data = {}) {
     }
 
     if (module === 'users') {
-      let sql = 'SELECT id, email, display_name AS "displayName", role, disabled, created_at AS "createdAt" FROM profiles';
+      let sql = 'SELECT id, email, display_name AS "displayName", role, disabled, email_verified AS "emailVerified", created_at AS "createdAt" FROM profiles';
       const wheres: string[] = [];
       const params: any[] = [];
 
       if (statusFilter !== 'all') {
         if (statusFilter === 'active') wheres.push('disabled = FALSE');
         else if (statusFilter === 'disabled' || statusFilter === 'suspended') wheres.push('disabled = TRUE');
+        else if (statusFilter === 'verified') wheres.push('email_verified = TRUE');
+        else if (statusFilter === 'unverified') wheres.push('(email_verified IS NULL OR email_verified = FALSE)');
         else { params.push(statusFilter); wheres.push(`role = $${params.length}`); }
       }
 
@@ -237,6 +240,7 @@ export async function controlRead(u: Identity, module: string, q: Data = {}) {
       const hasMore = res.rows.length > limit;
       const rows = res.rows.slice(0, limit).map(r => ({
         ...r,
+        emailVerified: !!r.emailVerified,
         status: r.disabled ? 'disabled' : 'active',
         createdAt: new Date(r.createdAt).getTime()
       }));
@@ -1212,6 +1216,232 @@ export async function controlAction(u: Identity, input: Data) {
       );
 
       return { ok: true, status, userId };
+    });
+  }
+
+  // 17b. Manual Verify / Activate Account without OTP (user.verify)
+  if (action === 'user.verify') {
+    const rawTarget = String(target || payload.userId || payload.uid || payload.email || '').trim();
+    if (!rawTarget) {
+      throw new ApiError('معرف المستخدم أو البريد الإلكتروني مطلوب. / User ID or email is required', 400);
+    }
+
+    return await withTx(async (client) => {
+      const pRes = await client.query(
+        'SELECT id, email, display_name, disabled, email_verified FROM profiles WHERE id = $1 OR LOWER(email) = LOWER($1)',
+        [rawTarget]
+      );
+
+      let userId = '';
+      let userEmail = '';
+
+      if (pRes.rowCount && pRes.rowCount > 0) {
+        const p = pRes.rows[0];
+        userId = p.id;
+        userEmail = p.email;
+
+        await client.query(
+          `UPDATE profiles
+           SET email_verified = TRUE, disabled = FALSE, updated_at = NOW()
+           WHERE id = $1`,
+          [userId]
+        );
+      } else {
+        const chRes = await client.query(
+          "SELECT id, data FROM docs WHERE collection = 'orinEmailChallenges' AND (id = $1 OR LOWER(data->>'email') = LOWER($1)) ORDER BY updated_at DESC LIMIT 1",
+          [rawTarget]
+        );
+        if (chRes.rowCount && chRes.rowCount > 0) {
+          userEmail = chRes.rows[0].data?.email;
+        } else if (rawTarget.includes('@')) {
+          userEmail = rawTarget.toLowerCase();
+        }
+
+        if (!userEmail) {
+          throw new ApiError('المستخدم غير موجود. / User record not found.', 404);
+        }
+
+        let fbUser: any = null;
+        try {
+          fbUser = await adminAuth.getUserByEmail(userEmail);
+          userId = fbUser.uid;
+        } catch {
+          const displayName = payload.displayName || userEmail.split('@')[0];
+          const tempPassword = payload.password || ('Orin!' + randomBytes(6).toString('hex'));
+          fbUser = await adminAuth.createUser({
+            email: userEmail,
+            displayName,
+            password: tempPassword,
+            emailVerified: true
+          });
+          userId = fbUser.uid;
+        }
+
+        await client.query(
+          `INSERT INTO profiles (id, email, display_name, role, disabled, email_verified)
+           VALUES ($1, $2, $3, 'user', FALSE, TRUE)
+           ON CONFLICT (id) DO UPDATE SET email_verified = TRUE, disabled = FALSE, updated_at = NOW()`,
+          [userId, userEmail, fbUser.displayName || userEmail.split('@')[0]]
+        );
+      }
+
+      if (userId) {
+        await adminAuth.updateUser(userId, { emailVerified: true, disabled: false }).catch(() => {});
+      }
+
+      const realAccRes = await client.query("SELECT id FROM accounts WHERE user_id = $1 AND type = 'real'", [userId]);
+      if (realAccRes.rowCount === 0) {
+        const accId = `acc-${userId.slice(0, 16)}`;
+        const accNum = `${Math.floor(100000000000 + Math.random() * 899999999999)}`;
+        await client.query(
+          `INSERT INTO accounts (id, user_id, account_number, type, currency, status, balance_cents)
+           VALUES ($1, $2, $3, 'real', 'USD', 'active', 0)
+           ON CONFLICT DO NOTHING`,
+          [accId, userId, accNum]
+        );
+      }
+
+      let activeOtpCode: string | null = null;
+      if (userEmail) {
+        const challengeRes = await client.query(
+          "SELECT id, data FROM docs WHERE collection = 'orinEmailChallenges' AND LOWER(data->>'email') = LOWER($1) ORDER BY updated_at DESC LIMIT 1",
+          [userEmail]
+        );
+        if (challengeRes.rowCount && challengeRes.rowCount > 0) {
+          const chRow = challengeRes.rows[0];
+          activeOtpCode = chRow.data?.code || null;
+          await client.query(
+            `UPDATE docs
+             SET data = jsonb_set(jsonb_set(data, '{admin_verified}', 'true'), '{delivery}', '"sent"'), updated_at = NOW()
+             WHERE collection = 'orinEmailChallenges' AND id = $1`,
+            [chRow.id]
+          );
+        }
+      }
+
+      const auditPayload = JSON.stringify({ actorId: u.id, action, userId, userEmail, reason });
+      await client.query(
+        `INSERT INTO audit (actor_id, action, reference, payload, payload_hash)
+         VALUES ($1, 'USER_MANUAL_VERIFY', $2, $3::jsonb, $4)
+         ON CONFLICT (action, reference) DO NOTHING`,
+        [u.id, userId + '-' + Date.now(), auditPayload, hash(auditPayload)]
+      );
+
+      const msg = activeOtpCode
+        ? `تم تفعيل وتأكيد الحساب يدويًا بنجاح بدون OTP. (كود OTP الحالي إذا احتاجه المستخدم: ${activeOtpCode})`
+        : 'تم تفعيل وتأكيد الحساب وتوثيق البريد الإلكتروني يدويًا بنجاح بدون OTP.';
+
+      return {
+        ok: true,
+        verified: true,
+        userId,
+        email: userEmail,
+        pendingOtpCode: activeOtpCode,
+        message: msg
+      };
+    });
+  }
+
+  // 17c. Manual Account Creation by Admin without OTP (user.create)
+  if (action === 'user.create') {
+    const rawEmail = String(payload.email || target || '').trim().toLowerCase();
+    if (!rawEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail)) {
+      throw new ApiError('البريد الإلكتروني غير صالح. / Valid email is required.', 400);
+    }
+
+    const displayName = String(payload.displayName || payload.name || rawEmail.split('@')[0]).trim();
+    const password = String(payload.password || '').trim() || ('Orin!' + randomBytes(6).toString('hex'));
+
+    if (password.length < 8) {
+      throw new ApiError('كلمة المرور يجب أن تكون 8 أحرف على الأقل. / Password must be at least 8 characters.', 400);
+    }
+
+    return await withTx(async (client) => {
+      let fbUser: any = null;
+      let isExisting = false;
+
+      try {
+        fbUser = await adminAuth.getUserByEmail(rawEmail);
+        isExisting = true;
+        await adminAuth.updateUser(fbUser.uid, {
+          emailVerified: true,
+          disabled: false,
+          displayName,
+          ...(payload.password ? { password: payload.password } : {})
+        });
+      } catch {
+        fbUser = await adminAuth.createUser({
+          email: rawEmail,
+          displayName,
+          password,
+          emailVerified: true
+        });
+      }
+
+      const uid = fbUser.uid;
+
+      await client.query(
+        `INSERT INTO profiles (id, email, display_name, role, disabled, email_verified)
+         VALUES ($1, $2, $3, 'user', FALSE, TRUE)
+         ON CONFLICT (id) DO UPDATE SET
+           display_name = EXCLUDED.display_name,
+           email_verified = TRUE,
+           disabled = FALSE,
+           updated_at = NOW()`,
+        [uid, rawEmail, displayName]
+      );
+
+      const realAccRes = await client.query("SELECT id FROM accounts WHERE user_id = $1 AND type = 'real'", [uid]);
+      if (realAccRes.rowCount === 0) {
+        const realAccId = `acc-${uid.slice(0, 16)}`;
+        const realAccNum = `${Math.floor(100000000000 + Math.random() * 899999999999)}`;
+        await client.query(
+          `INSERT INTO accounts (id, user_id, account_number, type, currency, status, balance_cents)
+           VALUES ($1, $2, $3, 'real', 'USD', 'active', 0)
+           ON CONFLICT DO NOTHING`,
+          [realAccId, uid, realAccNum]
+        );
+      }
+
+      const demoAccRes = await client.query("SELECT id FROM accounts WHERE user_id = $1 AND type = 'demo'", [uid]);
+      if (demoAccRes.rowCount === 0) {
+        const demoAccId = `demo-${uid.slice(0, 16)}`;
+        const demoAccNum = `${Math.floor(100000000000 + Math.random() * 899999999999)}`;
+        await client.query(
+          `INSERT INTO accounts (id, user_id, account_number, type, currency, status, balance_cents)
+           VALUES ($1, $2, $3, 'demo', 'USD', 'active', 1000000)
+           ON CONFLICT DO NOTHING`,
+          [demoAccId, uid, demoAccNum]
+        );
+      }
+
+      await client.query(
+        `UPDATE docs
+         SET data = jsonb_set(jsonb_set(data, '{admin_verified}', 'true'), '{used}', 'true'), updated_at = NOW()
+         WHERE collection = 'orinEmailChallenges' AND LOWER(data->>'email') = LOWER($1)`,
+        [rawEmail]
+      );
+
+      const auditPayload = JSON.stringify({ actorId: u.id, action, userId: uid, email: rawEmail, isExisting, reason });
+      await client.query(
+        `INSERT INTO audit (actor_id, action, reference, payload, payload_hash)
+         VALUES ($1, 'USER_MANUAL_CREATE', $2, $3::jsonb, $4)
+         ON CONFLICT (action, reference) DO NOTHING`,
+        [u.id, uid + '-' + Date.now(), auditPayload, hash(auditPayload)]
+      );
+
+      const msg = isExisting
+        ? `تم تحديث وتفعيل الحساب ${rawEmail} وتوثيقه بنجاح بدون OTP.`
+        : `تم إنشاء الحساب ${rawEmail} وتفعيله وتوثيقه بنجاح بدون OTP.${payload.password ? '' : ' (كلمة المرور المؤقتة: ' + password + ')'}`;
+
+      return {
+        ok: true,
+        created: !isExisting,
+        verified: true,
+        userId: uid,
+        email: rawEmail,
+        message: msg
+      };
     });
   }
 

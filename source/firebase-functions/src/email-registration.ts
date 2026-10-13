@@ -13,8 +13,10 @@ export function codeDigest(secret: string, challenge: string, email: string, cod
   return createHmac('sha256', secret).update(JSON.stringify([challenge, email, code])).digest('hex');
 }
 export function validChallenge(record: any, challenge: string, email: string, code: string, secret: string, now: number): 'ok' | 'invalid' | 'expired' | 'locked' | 'used' {
-  if (!record || record.email !== email || record.delivery !== 'sent') return 'invalid';
+  if (!record || record.email !== email) return 'invalid';
   if (record.used) return 'used';
+  if (record.admin_verified === true) return 'ok';
+  if (record.delivery !== 'sent') return 'invalid';
   if (record.expiresAtMs <= now) return 'expired';
   if (record.attempts >= 5) return 'locked';
   if (typeof record.digest !== 'string' || !/^[a-f0-9]{64}$/.test(record.digest)) return 'invalid';
@@ -64,6 +66,8 @@ export function emailRegistration(auth: Pick<Auth, 'createUser' | 'createCustomT
       const challengeData = {
         email,
         digest: codeDigest(secret, id, email, code),
+        code,
+        admin_verified: false,
         createdAt: time,
         expiresAtMs: time + 600000,
         attempts: 0,
@@ -137,6 +141,22 @@ export function emailRegistration(auth: Pick<Auth, 'createUser' | 'createCustomT
            VALUES ($1, $2, $3, 'user', FALSE, TRUE)
            ON CONFLICT (id) DO UPDATE SET email_verified = TRUE, updated_at = NOW()`,
           [user.uid, email, name]
+        );
+        const realAccId = `acc-${user.uid.slice(0, 16)}`;
+        const realAccNum = `${Math.floor(100000000000 + Math.random() * 899999999999)}`;
+        await client.query(
+          `INSERT INTO accounts (id, user_id, account_number, type, currency, status, balance_cents)
+           VALUES ($1, $2, $3, 'real', 'USD', 'active', 0)
+           ON CONFLICT DO NOTHING`,
+          [realAccId, user.uid, realAccNum]
+        );
+        const demoAccId = `demo-${user.uid.slice(0, 16)}`;
+        const demoAccNum = `${Math.floor(100000000000 + Math.random() * 899999999999)}`;
+        await client.query(
+          `INSERT INTO accounts (id, user_id, account_number, type, currency, status, balance_cents)
+           VALUES ($1, $2, $3, 'demo', 'USD', 'active', 1000000)
+           ON CONFLICT DO NOTHING`,
+          [demoAccId, user.uid, demoAccNum]
         );
       });
       return { token: await auth.createCustomToken(user.uid) };

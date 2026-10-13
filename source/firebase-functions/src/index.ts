@@ -871,6 +871,11 @@ api.get('/control/user', async (req: Request, res: Response) => {
       if (pRes.rowCount === 0) throw Object.assign(new Error('User not found'), { status: 404 });
       const p = pRes.rows[0];
       const accRes = await client.query('SELECT * FROM accounts WHERE user_id = $1', [uid]);
+      const chRes = await client.query(
+        "SELECT id, data, updated_at FROM docs WHERE collection = 'orinEmailChallenges' AND LOWER(data->>'email') = LOWER($1) ORDER BY updated_at DESC LIMIT 1",
+        [p.email]
+      ).catch(() => ({ rows: [] }));
+      const pendingChallenge = chRes.rows[0]?.data;
       return {
         id: p.id,
         uid: p.id,
@@ -878,6 +883,13 @@ api.get('/control/user', async (req: Request, res: Response) => {
         displayName: p.display_name,
         role: p.role,
         disabled: p.disabled,
+        emailVerified: !!p.email_verified,
+        pendingOtp: pendingChallenge ? {
+          code: pendingChallenge.code || null,
+          adminVerified: !!pendingChallenge.admin_verified,
+          used: !!pendingChallenge.used,
+          expiresAt: pendingChallenge.expiresAtMs
+        } : null,
         accounts: accRes.rows.map(a => ({
           id: a.id,
           type: a.type,
