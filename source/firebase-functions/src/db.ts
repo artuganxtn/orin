@@ -19,6 +19,8 @@ export const pool = new Pool({
   max: 8,
 });
 
+export function getPool() { return pool; }
+
 pool.on('error', (err, _client) => {
   console.error('Unexpected error on idle PostgreSQL client', err);
 });

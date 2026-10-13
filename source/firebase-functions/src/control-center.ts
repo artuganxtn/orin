@@ -136,7 +136,8 @@ export async function controlRead(u: Identity, module: string, q: Data = {}) {
       let sql = `
         SELECT a.id, a.user_id AS "userId", p.email, p.display_name AS "displayName", a.id AS "accountId",
                a.account_number AS "accountNumber", a.type, a.balance_cents AS "cashCents",
-               a.bonus_cents AS "bonusCents", a.bonus_profit_cents AS "profitCents"
+               a.bonus_cents AS "bonusCents", a.bonus_profit_cents AS "profitCents",
+               (a.balance_cents + a.bonus_profit_cents) AS "withdrawableCents"
         FROM accounts a
         LEFT JOIN profiles p ON a.user_id = p.id
       `;
@@ -184,7 +185,7 @@ export async function controlRead(u: Identity, module: string, q: Data = {}) {
     } else if (module === 'trading') {
       sql = `SELECT pos.id, pos.user_id AS "userId", p.display_name AS "user", p.email, pos.contract_id AS "contractId", c.code AS "contractCode", c.asset, c.direction, pos.amount_cents AS "amountCents", pos.result_cents AS "resultCents", pos.status, pos.started_at AS "startedAt", pos.ends_at AS "endsAt" FROM positions pos LEFT JOIN profiles p ON pos.user_id = p.id LEFT JOIN contracts c ON pos.contract_id = c.id ORDER BY pos.started_at DESC`;
     } else if (module === 'contracts' || module === 'codes') {
-      sql = `SELECT id, code, title, asset, direction, duration_sec AS "durationSec", settlement_bps AS "settlementBps", status, hash, created_at AS "createdAt" FROM contracts ORDER BY created_at DESC`;
+      sql = `SELECT id, code, title, asset, direction, duration_sec AS "durationSec", settlement_bps AS "settlementBps", status, hash, opens_at AS "opensAt", closes_at AS "closesAt", created_at AS "createdAt" FROM contracts ORDER BY created_at DESC`;
     } else if (module === 'markets') {
       return { rows: MARKET_SYMBOLS.map((s, idx) => ({ id: s.pair, pair: s.pair, symbol: s.label, name: s.name, category: s.category, source: 'Coinbase / TradingView', enabled: true, order: idx + 1, updatedAt: Date.now() })), nextCursor: null, hasMore: false };
     } else if (module === 'bonus') {
@@ -201,6 +202,10 @@ export async function controlRead(u: Identity, module: string, q: Data = {}) {
       sql = `SELECT id, data, updated_at AS "updatedAt" FROM docs WHERE collection = 'system' ORDER BY updated_at DESC`;
     } else if (module === 'tickets') {
       sql = `SELECT id, owner_id AS "ownerId", data, updated_at AS "updatedAt" FROM docs WHERE collection = 'support_tickets' ORDER BY updated_at DESC`;
+    } else if (module === 'trade-slots' || module === 'trade_slots') {
+      sql = `SELECT id, name, local_time AS "localTime", timezone, days_of_week AS "daysOfWeek", asset, direction, duration_sec AS "durationSec", settlement_bps AS "settlementBps", eligibility, opens_offset_min AS "opensOffsetMin", closes_after_min AS "closesAfterMin", mode, enabled, updated_at AS "updatedAt" FROM trade_slots ORDER BY local_time ASC`;
+    } else if (module === 'scheduled-runs' || module === 'scheduled_runs') {
+      sql = `SELECT r.id, r.slot_id AS "slotId", s.name AS "slotName", r.run_date AS "runDate", r.status, r.contract_id AS "contractId", r.telegram_message_id AS "telegramMessageId", r.created_at AS "createdAt" FROM scheduled_runs r LEFT JOIN trade_slots s ON r.slot_id = s.id ORDER BY r.created_at DESC`;
     } else {
       return { rows: [], nextCursor: null, hasMore: false };
     }
@@ -290,6 +295,48 @@ export async function controlAction(u: Identity, input: Data) {
       );
       return { ok: true, revoked: true, contractId };
     });
+  }
+
+  // 3b. Trade Slot Save / Toggle / Run
+  if (action === 'trade.slot.save') {
+    const slotId = target || payload.id || 'slot-' + randomUUID();
+    const name = String(payload.name || 'صفقة جديدة');
+    const localTime = String(payload.localTime || payload.local_time || '16:00');
+    const timezone = String(payload.timezone || 'Europe/Istanbul');
+    const daysOfWeek = JSON.stringify(Array.isArray(payload.daysOfWeek) ? payload.daysOfWeek : [0, 1, 2, 3, 4, 5, 6]);
+    const asset = String(payload.asset || 'BTCUSD');
+    const direction = String(payload.direction || 'BUY');
+    const durationSec = Number(payload.durationSec || 60);
+    const settlementBps = Number(payload.settlementBps || 850);
+    const eligibility = String(payload.eligibility || 'all');
+    const mode = String(payload.mode || 'review') === 'auto' ? 'auto' : 'review';
+    const enabled = payload.enabled !== false && payload.enabled !== 'false';
+
+    return await withTx(async (client) => {
+      await client.query(
+        `INSERT INTO trade_slots (id, name, local_time, timezone, days_of_week, asset, direction, duration_sec, settlement_bps, eligibility, mode, enabled, updated_at)
+         VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10, $11, $12, NOW())
+         ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, local_time = EXCLUDED.local_time, timezone = EXCLUDED.timezone, days_of_week = EXCLUDED.days_of_week, asset = EXCLUDED.asset, direction = EXCLUDED.direction, duration_sec = EXCLUDED.duration_sec, settlement_bps = EXCLUDED.settlement_bps, eligibility = EXCLUDED.eligibility, mode = EXCLUDED.mode, enabled = EXCLUDED.enabled, updated_at = NOW()`,
+        [slotId, name, localTime, timezone, daysOfWeek, asset, direction, durationSec, settlementBps, eligibility, mode, enabled]
+      );
+      return { ok: true, slotId, mode, enabled };
+    });
+  }
+
+  if (action === 'trade.slot.toggle') {
+    const slotId = target || payload.slotId;
+    return await withTx(async (client) => {
+      const res = await client.query('UPDATE trade_slots SET enabled = NOT enabled, updated_at = NOW() WHERE id = $1 RETURNING enabled', [slotId]);
+      if (res.rowCount === 0) throw new ApiError('Trade slot not found', 404);
+      return { ok: true, slotId, enabled: res.rows[0].enabled };
+    });
+  }
+
+  if (action === 'trade.run.now') {
+    const slotId = target || payload.slotId;
+    const { processSchedulerSlotsOnce } = await import('./scheduler.js');
+    const res = await processSchedulerSlotsOnce(Date.now());
+    return { ok: true, slotId, ...res };
   }
 
   // 4. Account Balance / Finance Propose

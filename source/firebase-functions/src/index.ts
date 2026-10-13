@@ -58,6 +58,10 @@ app.get('/healthz', (_req: Request, res: Response) => {
   res.status(200).json({ ok: true, status: 'healthy', timestamp: Date.now() });
 });
 
+// Compression middleware
+import compression from 'compression';
+app.use(compression({ level: 6 }));
+
 app.get('/api/health', (_req: Request, res: Response) => {
   res.status(200).json({ ok: true, app: 'ORIN', backend: 'postgres', mode: 'production' });
 });
@@ -253,6 +257,35 @@ api.post('/admin/programs', async (req: Request, res: Response) => {
 });
 
 // Admin Users Directory & Management
+api.get('/bootstrap', async (req: Request, res: Response) => {
+  try {
+    const user = req.user!;
+    const [settingsRes, stateRes, configRes, kycRes] = await Promise.all([
+      getSettings(user),
+      state(user),
+      configuration(),
+      getKycStatus(user)
+    ]);
+
+    const etag = 'W/"' + createHash('sha1').update(JSON.stringify({ settingsRes, stateRes, configRes, kycRes })).digest('hex') + '"';
+    if (req.headers['if-none-match'] === etag) {
+      return res.status(304).end();
+    }
+
+    res.set('ETag', etag);
+    res.set('Cache-Control', 'private, no-cache');
+    res.json({
+      settings: settingsRes,
+      state: stateRes,
+      configuration: configRes,
+      kyc: kycRes,
+      timestamp: Date.now()
+    });
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message, code: err.code });
+  }
+});
+
 api.get('/admin/users', async (req: Request, res: Response) => {
   try {
     if (req.user?.role !== 'admin') {
@@ -919,9 +952,18 @@ const candidates = [
 ];
 let staticPath = candidates.find(p => existsSync(p));
 if (staticPath) {
-  app.use(express.static(staticPath));
+  app.use(express.static(staticPath, {
+    maxAge: '1y',
+    immutable: true,
+    setHeaders: (res, path) => {
+      if (path.endsWith('.html')) {
+        res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
+      }
+    }
+  }));
   app.use((req: Request, res: Response, next) => {
     if (req.path.startsWith('/api') || req.path === '/healthz') return next();
+    res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
     res.sendFile(resolve(staticPath!, 'index.html'));
   });
 }
@@ -933,6 +975,15 @@ export { validateProductionEnv };
 const PORT = Number(process.env.PORT || 10000);
 if (process.argv[1]?.endsWith('index.ts') || process.argv[1]?.endsWith('index.js')) {
   validateProductionEnv();
+  if (process.env.DATABASE_URL) {
+    const { runMigrations } = await import('./migrate.ts');
+    const migrationsDir = resolve(process.cwd(), '../migrations');
+    if (existsSync(migrationsDir)) {
+      runMigrations(process.env.DATABASE_URL, migrationsDir)
+        .then(() => console.log('[DATABASE] All migrations verified and applied successfully.'))
+        .catch(err => console.error('[DATABASE_MIGRATION_WARNING]', err.message));
+    }
+  }
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`ORIN Express backend running on http://0.0.0.0:${PORT}`);
   });

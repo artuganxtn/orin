@@ -3,7 +3,7 @@ import { withTx } from './db.ts';
 import { requireVerifiedKyc } from './kyc.ts';
 
 export class WithdrawalError extends Error {
-  constructor(message: string, public status = 400) {
+  constructor(message: string, public status = 400, public code = 'withdrawal_error') {
     super(message);
   }
 }
@@ -42,7 +42,21 @@ export async function requestWithdrawal(
 
     await requireVerifiedKyc(user, client);
 
-    // Earliest confirmed deposit must be at least 20 days old (20-day lock)
+    // Verify OTP proof bound to sha256(userId|amountCents|coin|address)
+    const { computeWithdrawalBoundHash, consumeOtpProof } = await import('./otp.js');
+    const boundHash = computeWithdrawalBoundHash(user.id, amountCents, coin, address);
+    const proofId = (input as any).proofId || (input as any).otpProofId;
+
+    if (!proofId) {
+      throw new WithdrawalError('رمز التأكيد للبريد الإلكتروني مطلوب للسحب / OTP proof required', 403, 'otp_required');
+    }
+
+    const proofConsumed = await consumeOtpProof(proofId, user.id, 'withdrawal', boundHash, client);
+    if (!proofConsumed) {
+      throw new WithdrawalError('رمز تأكيد السحب غير صالح أو مستخدم مسبقًا / Invalid or consumed OTP proof', 403, 'otp_required');
+    }
+
+    // Earliest confirmed deposit must be at least 29 days old (29-day lock)
     const depRes = await client.query(
       `SELECT MIN(created_at) AS earliest_deposit
        FROM deposits
@@ -51,11 +65,11 @@ export async function requestWithdrawal(
     );
     const earliestDeposit = depRes.rows[0]?.earliest_deposit;
     if (!earliestDeposit) {
-      throw new WithdrawalError('Debit adjustment requires earliest deposit to be at least 20 days old', 409);
+      throw new WithdrawalError('Debit adjustment requires earliest deposit to be at least 29 days old', 409);
     }
     const earliestMs = new Date(earliestDeposit).getTime();
-    if (nowMs - earliestMs < 20 * 86400 * 1000) {
-      throw new WithdrawalError('Debit adjustment requires earliest deposit to be at least 20 days old', 409);
+    if (nowMs - earliestMs < 29 * 86400 * 1000) {
+      throw new WithdrawalError('Debit adjustment requires earliest deposit to be at least 29 days old', 409);
     }
 
     // Verify account belongs to user

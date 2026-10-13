@@ -20,6 +20,7 @@ const MODULE_PERMISSIONS: Record<string, Permission> = {
   dashboard: 'dashboard.read',
   overview: 'dashboard.read',
   users: 'users.read',
+  user: 'users.read',
   kyc: 'kyc.read',
   accounts: 'accounts.read',
   wallets: 'wallet.read',
@@ -29,6 +30,8 @@ const MODULE_PERMISSIONS: Record<string, Permission> = {
   trading: 'trading.read',
   codes: 'trading.read',
   contracts: 'trading.read',
+  'trade-slots': 'contracts.manage',
+  'scheduled-runs': 'contracts.manage',
   markets: 'markets.manage',
   bonus: 'programs.read',
   referrals: 'programs.read',
@@ -42,6 +45,7 @@ const MODULE_PERMISSIONS: Record<string, Permission> = {
   staff: 'staff.manage',
   audit: 'audit.read',
   tickets: 'tickets.read',
+  support: 'tickets.read',
   'support-ai': 'support.ai.read'
 };
 
