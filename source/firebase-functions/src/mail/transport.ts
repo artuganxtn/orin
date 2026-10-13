@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { withTx, getPool } from '../db.ts';
 import { renderEmailTemplate } from './templates.ts';
 import { normalizeFromAddress, getMailer } from '../email-service.ts';
+import { ORIN_LOGO_BUFFER, ORIN_LOGO_CID } from './brand-logo.ts';
 
 export interface SentMemoryEmail {
   id: string;
@@ -116,10 +117,12 @@ export async function sendMailDirect(
     const from = getMailFromAddress();
     const domain = from.includes('@') ? from.split('@')[1].replace(/[<>]/g, '').trim() : 'javl900.com';
     const messageId = `<orin.${Date.now()}.${randomUUID().slice(0, 8)}@${domain}>`;
+    const replyTo = from.includes('<') ? from.replace(/^.*<([^>]+)>.*$/, '$1') : from;
 
     const info = await transporter.sendMail({
       from,
       to,
+      replyTo,
       subject,
       html,
       text,
@@ -127,11 +130,18 @@ export async function sendMailDirect(
       headers: {
         'Auto-Submitted': 'auto-generated',
         'X-Auto-Response-Suppress': 'All',
-        'X-Priority': '1',
-        'Importance': 'high',
         'List-Unsubscribe': '<https://orin-trader.top/settings/security>',
         'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
-      }
+      },
+      attachments: [
+        {
+          filename: 'orin-mark.png',
+          content: ORIN_LOGO_BUFFER,
+          cid: ORIN_LOGO_CID,
+          contentType: 'image/png',
+          contentDisposition: 'inline',
+        },
+      ],
     });
 
     console.log(`[MAIL_SENT_SMTP] Successfully sent "${subject}" to ${to} (MessageID: ${info.messageId})`);

@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import { ORIN_LOGO_BUFFER, ORIN_LOGO_CID } from './mail/brand-logo.ts';
 
 export interface SmtpConfig {
   host: string;
@@ -74,7 +75,7 @@ export function renderOtpEmailHtml(
   subtext = 'استخدم الرمز التالي لإتمام عملية تسجيل الدخول أو تأكيد حسابك على منصة ORIN:',
   enHeadline = 'Your ORIN verification code is:'
 ): string {
-  const logoUrl = 'https://orin-trader.top/brand/orin-mark.png';
+  const logoUrl = 'cid:' + ORIN_LOGO_CID;
   const appUrl = 'https://orin-trader.top';
 
   return `<!DOCTYPE html>
@@ -94,7 +95,7 @@ export function renderOtpEmailHtml(
           <!-- Header with Logo -->
           <tr>
             <td align="center" style="padding: 32px 24px 20px; border-bottom: 1px solid #f1f5f9; background-color: #ffffff;">
-              <img src="${logoUrl}" alt="ORIN Logo" width="56" height="56" style="display: block; width: 56px; height: 56px; margin: 0 auto 10px; border: 0;" />
+              <img src="${logoUrl}" alt="" width="56" height="56" style="display: block; width: 56px; height: 56px; margin: 0 auto 10px; border: 0; outline: none;" />
               <h1 style="margin: 0; font-size: 24px; font-weight: 800; color: #0f172a; letter-spacing: 2px;">ORIN</h1>
               <p style="margin: 4px 0 0; font-size: 11px; font-weight: 700; color: #0284c7; letter-spacing: 1.5px; text-transform: uppercase;">Certified Trading Platform</p>
             </td>
@@ -153,7 +154,7 @@ export function renderOtpEmailHtml(
  * Premium HTML template for Welcome Email (Clean White Mode)
  */
 export function renderWelcomeEmailHtml(name: string): string {
-  const logoUrl = 'https://orin-trader.top/brand/orin-mark.png';
+  const logoUrl = 'cid:' + ORIN_LOGO_CID;
   const appUrl = 'https://orin-trader.top';
 
   return `<!DOCTYPE html>
@@ -171,7 +172,7 @@ export function renderWelcomeEmailHtml(name: string): string {
           <!-- Header with Logo -->
           <tr>
             <td align="center" style="padding: 32px 24px 20px; border-bottom: 1px solid #f1f5f9; background: #ffffff;">
-              <img src="${logoUrl}" alt="ORIN Logo" width="56" height="56" style="display: block; width: 56px; height: 56px; border: 0; margin-bottom: 10px;" />
+              <img src="${logoUrl}" alt="" width="56" height="56" style="display: block; width: 56px; height: 56px; border: 0; margin-bottom: 10px; outline: none;" />
               <h1 style="margin: 0; font-size: 26px; font-weight: 800; color: #0f172a; letter-spacing: 2px;">ORIN</h1>
               <span style="display: block; font-size: 11px; color: #0284c7; font-weight: 700; letter-spacing: 1.5px; margin-top: 4px;">CERTIFIED TRADING PLATFORM</span>
             </td>
@@ -234,23 +235,32 @@ export async function sendOtpEmail(to: string, code: string, challengeId: string
   const mailer = getMailer();
   const from = config.from;
   const domain = from.includes('@') ? from.split('@')[1].replace(/[<>]/g, '').trim() : 'javl900.com';
+  const replyTo = config.user;
   const messageId = `<orin.otp.${Date.now()}.${Math.random().toString(36).substring(2, 9)}@${domain}>`;
 
   const mailOptions = {
     from,
     to,
+    replyTo,
     subject: `ORIN - رمز التحقق: ${code}`,
-    text: `رمز التحقق الخاص بك في منصة ORIN هو: ${code}\nينتهي خلال 10 دقائق.\nلا تشارك هذا الرمز مع أي شخص.\nYour ORIN verification code: ${code}. Valid for 10 minutes.`,
+    text: `رمز التحقق الخاص بك في منصة ORIN هو: ${code}\nصالح لمدة 10 دقائق فقط.\nلا تشارك هذا الرمز مع أي شخص.\nYour ORIN verification code: ${code}. Valid for 10 minutes only.`,
     html: renderOtpEmailHtml(code),
     messageId,
     headers: {
       'X-Entity-Ref-ID': challengeId,
       'Auto-Submitted': 'auto-generated',
       'X-Auto-Response-Suppress': 'All',
-      'X-Priority': '1',
-      'Importance': 'high',
       'List-Unsubscribe': '<https://orin-trader.top/settings/security>',
     },
+    attachments: [
+      {
+        filename: 'orin-mark.png',
+        content: ORIN_LOGO_BUFFER,
+        cid: ORIN_LOGO_CID,
+        contentType: 'image/png',
+        contentDisposition: 'inline',
+      },
+    ],
   };
 
   await mailer.sendMail(mailOptions);
@@ -264,11 +274,13 @@ export async function sendWelcomeEmail(to: string, name: string): Promise<void> 
   const mailer = getMailer();
   const from = config.from;
   const domain = from.includes('@') ? from.split('@')[1].replace(/[<>]/g, '').trim() : 'javl900.com';
+  const replyTo = config.user;
   const messageId = `<orin.welcome.${Date.now()}.${Math.random().toString(36).substring(2, 9)}@${domain}>`;
 
   const mailOptions = {
     from,
     to,
+    replyTo,
     subject: 'مرحبًا بك في منصة ORIN | Welcome to ORIN Trading',
     text: `أهلاً بك ${name} في ORIN!\nتم تفعيل حسابك بنجاح.\nيمكنك تسجيل الدخول وبدء التداول عبر https://orin-trader.top`,
     html: renderWelcomeEmailHtml(name),
@@ -278,6 +290,15 @@ export async function sendWelcomeEmail(to: string, name: string): Promise<void> 
       'X-Auto-Response-Suppress': 'All',
       'List-Unsubscribe': '<https://orin-trader.top/settings/security>',
     },
+    attachments: [
+      {
+        filename: 'orin-mark.png',
+        content: ORIN_LOGO_BUFFER,
+        cid: ORIN_LOGO_CID,
+        contentType: 'image/png',
+        contentDisposition: 'inline',
+      },
+    ],
   };
 
   await mailer.sendMail(mailOptions);

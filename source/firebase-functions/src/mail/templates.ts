@@ -1,4 +1,5 @@
 import { renderOtpEmailHtml } from '../email-service.ts';
+import { ORIN_LOGO_CID } from './brand-logo.ts';
 
 export interface RenderedEmail {
   subject: string;
@@ -28,7 +29,7 @@ function baseLayout(title: string, bodyContentHtml: string, locale: 'ar' | 'en' 
     .wrapper { padding: 40px 16px; background-color: #f1f5f9; }
     .container { max-width: 560px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 20px; overflow: hidden; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01); }
     .header { padding: 32px 24px 24px; text-align: center; border-bottom: 1px solid #f1f5f9; background: #ffffff; }
-    .header img { width: 52px; height: 52px; margin-bottom: 10px; display: inline-block; }
+    .header img { width: 56px; height: 56px; margin-bottom: 10px; display: block; margin: 0 auto 10px; border: 0; outline: none; }
     .header h1 { margin: 0; font-size: 26px; font-weight: 800; color: #0f172a; letter-spacing: 2px; }
     .header span { display: block; font-size: 11px; color: #0284c7; font-weight: 700; letter-spacing: 1.5px; margin-top: 4px; }
     .content { padding: 32px 32px 24px; font-size: 15px; line-height: 1.8; color: #334155; }
@@ -43,7 +44,7 @@ function baseLayout(title: string, bodyContentHtml: string, locale: 'ar' | 'en' 
   <div class="wrapper">
     <div class="container">
       <div class="header">
-        <img src="https://orin-trader.top/brand/orin-mark.png" alt="ORIN Logo" width="52" height="52">
+        <img src="cid:${ORIN_LOGO_CID}" alt="" width="56" height="56">
         <h1>ORIN</h1>
         <span>CERTIFIED TRADING PLATFORM</span>
       </div>
