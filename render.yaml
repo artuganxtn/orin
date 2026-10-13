@@ -1,75 +1,31 @@
 services:
   - type: web
-    name: orin-backend
-    runtime: node
+    name: orin-trader
+    env: node
+    region: singapore
     plan: starter
-    region: oregon
-    rootDir: source/firebase-functions
-    buildCommand: npm --prefix .. install --include=dev && npm install --include=dev && npm --prefix .. run build:render && npm run build
-    startCommand: npm start
-    healthCheckPath: /healthz
+    buildCommand: "npm --prefix source run build:render && npm --prefix source/firebase-functions run build"
+    startCommand: "node source/firebase-functions/lib/index.js"
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
         value: "10000"
-      - key: DATABASE_URL
-        sync: false
-      - key: KYC_HMAC_SECRET
-        sync: false
-      - key: KYC_FILES_KEY
-        sync: false
-      - key: FIREBASE_PROJECT
-        sync: false
-      - key: FIREBASE_SERVICE_ACCOUNT
-        sync: false
-      - key: ALLOWED_ORIGINS
-        sync: false
-      - key: ORIN_DEPOSITS_ENABLED
-        sync: false
-      - key: ORIN_NOWPAYMENTS_API_KEY
-        sync: false
-      - key: ORIN_NOWPAYMENTS_IPN_SECRET
-        sync: false
-      - key: ORIN_PAYMENTS_CALLBACK_URL
-        sync: false
-      - key: ORIN_SECURITY_MASTER_KEY
-        sync: false
-      - key: ORIN_ACCOUNT_SECURITY_ENABLED
-        sync: false
-      - key: ORIN_WEBAUTHN_ORIGIN
-        sync: false
-      - key: ORIN_WEBAUTHN_RP_ID
-        sync: false
-      - key: ORIN_EMAIL_CODES_ENABLED
-        sync: false
-      - key: ORIN_EMAIL_CODE_SECRET
-        sync: false
-      - key: ORIN_MAIL_API_KEY
-        sync: false
       - key: ORIN_MAIL_FROM
-        sync: false
+        value: support@javl900.com
       - key: SMTP_HOST
-        sync: false
+        value: smtp.titan.email
       - key: SMTP_PORT
-        sync: false
+        value: "465"
       - key: SMTP_SECURE
-        sync: false
+        value: "true"
       - key: SMTP_USER
-        sync: false
-      - key: SMTP_PASS
-        sync: false
-      - key: SMTP_FROM
-        sync: false
-      - key: TITAN_PASSWORD
-        sync: false
-      - key: ORIN_SUPPORT_AI_ENABLED
-        sync: false
-      - key: ORIN_SUPPORT_AI_PROVIDER
-        sync: false
-      - key: ORIN_SUPPORT_AI_MODEL
-        sync: false
-      - key: ORIN_SUPPORT_AI_TOKEN
-        sync: false
-      - key: ORIN_SUPPORT_AI_API_KEY
-        sync: false
+        value: support@javl900.com
+
+  - type: cron
+    name: orin-daily-reminders
+    env: node
+    region: singapore
+    schedule: "0 9 * * *"
+    buildCommand: "npm --prefix source/firebase-functions run build"
+    startCommand: "node source/scripts/send-daily-reminders.mjs"
