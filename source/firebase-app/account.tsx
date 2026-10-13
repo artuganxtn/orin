@@ -9,6 +9,7 @@ import {securityBackendConfigured,supportsPasskeys,loginWithPasskey,AccountSecur
 import {useUi,readUi} from './ui';
 import {passwordStrength,EMAIL_RETURN_ORIGIN,validEmail} from '../lib/account-validation';
 import {apiFetch} from '../lib/client-api';
+import {AppDownloadCard} from '../app/app-download-card';
 
 export const app=initializeApp((import.meta.env.DEV||import.meta.env.MODE==='android-qa')&&import.meta.env.VITE_FIREBASE_EMULATORS==='true'?{...firebaseConfig,projectId:'demo-orin-auth',apiKey:'fake-api-key'}:firebaseConfig);
 export const auth=getAuth(app),db=null;auth.languageCode='ar';
@@ -382,6 +383,7 @@ export function AuthForm({path,done}:{path:string;done:()=>void}){
    {mode==='login'&&securityBackendConfigured()&&supportsPasskeys()&&<button type="button" className="secondary" disabled={busy} onClick={async()=>{if(lock.current)return;lock.current=true;setBusy(true);setError('');try{await loginWithPasskey();done()}catch(e){setError(e instanceof AccountSecurityError?e.message:t('تعذر الدخول بمفتاح المرور.','Passkey sign-in was not completed.'))}finally{lock.current=false;setBusy(false)}}}><KeyRound size={18}/>{t('الدخول بمفتاح مرور','Sign in with passkey')}</button>}
    {mode==='login'&&<a href="/forgot-password" onClick={e=>{e.preventDefault();to('/forgot-password')}}>{t('نسيت كلمة المرور؟','Forgot password?')}</a>}
    <a className="auth-switch" href={mode==='login'?'/register':'/login'} onClick={e=>{e.preventDefault();to(mode==='login'?'/register':'/login')}}>{mode==='login'?t('ليس لديك حساب؟ إنشاء حساب','New to ORIN? Create account'):t('لديك حساب؟ تسجيل الدخول','Already have an account? Sign in')}</a>
+   <AppDownloadCard compact/>
   </form>
  </section>;
 }

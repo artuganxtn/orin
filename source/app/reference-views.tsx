@@ -24,6 +24,7 @@ import {sparkMode} from '@/lib/client-api';
 import {BalanceAccounts} from './balance-accounts';
 import type {AccountDirectory} from '@/lib/trading-accounts';
 import {HomeNotificationPreview} from './notification-center';
+import {AppDownloadCard} from './app-download-card';
 const TradingViewChart=lazy(()=>import('./tradingview-widget').then(m=>({default:m.TradingViewChart})));
 
 import {CoinIcon, AssetIcon} from './asset-icons';
@@ -136,6 +137,7 @@ export function ReferenceHome({state,prefs,selectedPair,onPairChange,onHideBalan
     <button type="button" onClick={onTransfer}><span><ArrowLeftRight/></span>{t('تحويل','Transfer')}</button>
     <button type="button" onClick={onInvite}><span><Users/></span>{t('دعوة صديق','Invite a friend')}</button>
   </div>
+  <AppDownloadCard/>
   {activePosition&&(
    <div className="home-active-trade-card">
     <div className="home-active-top">
