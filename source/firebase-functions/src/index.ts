@@ -200,9 +200,11 @@ app.post('/api/auth/reset/start', async (req: Request, res: Response) => {
     });
 
     if (challengeCreated) {
-      void processEmailOutboxOnce().catch((dispErr) => {
+      try {
+        await processEmailOutboxOnce();
+      } catch (dispErr: any) {
         console.error(`[AUTH_RESET_START] reason=immediate_dispatch_failed`, dispErr?.message || dispErr);
-      });
+      }
     }
 
     res.json(sameResponse);

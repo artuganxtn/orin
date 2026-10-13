@@ -74,6 +74,22 @@ export async function verifyMailConnectionAtStartup(): Promise<void> {
   }
 }
 
+export function getMailFromAddress(): string {
+  let from = (process.env.SMTP_FROM || '').trim();
+  if (from) {
+    if (!from.includes('@')) {
+      const user = (process.env.SMTP_USER || process.env.ORIN_MAIL_FROM || 'support@javl900.com').trim();
+      from = `"${from.replace(/"/g, '')}" <${user}>`;
+    }
+    return from;
+  }
+  const raw = (process.env.ORIN_MAIL_FROM || process.env.SMTP_USER || 'support@javl900.com').trim();
+  if (raw.includes('<') && raw.includes('>')) {
+    return raw;
+  }
+  return `"ORIN Trading" <${raw}>`;
+}
+
 export async function sendMailDirect(
   to: string,
   subject: string,
@@ -124,8 +140,9 @@ export async function sendMailDirect(
       socketTimeout: 20000
     });
 
+    const from = getMailFromAddress();
     const info = await transporter.sendMail({
-      from: `"ORIN" <${fromAddress}>`,
+      from,
       to,
       subject,
       html,
