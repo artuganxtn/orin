@@ -524,6 +524,19 @@ export async function state(u: Identity, now = Date.now()) {
       }
     }
 
+    let totalRealizedCents = Number(acc.realized_cents || 0);
+    try {
+      const settledRes = await client.query(
+        `SELECT COALESCE(SUM(result_cents), 0) AS total_settled
+         FROM positions
+         WHERE user_id = $1 AND status = 'settled'`,
+        [u.id]
+      );
+      totalRealizedCents = Number(settledRes.rows[0]?.total_settled || 0) + Number(acc.bonus_profit_cents || 0);
+    } catch {
+      totalRealizedCents = Number(acc.realized_cents || 0);
+    }
+
     return {
       serverTime: now,
       user: {
@@ -539,7 +552,7 @@ export async function state(u: Identity, now = Date.now()) {
       accountDirectory,
       balanceCents: Number(acc.balance_cents),
       reservedCents: Number(acc.reserved_cents),
-      realizedCents: Number(acc.realized_cents),
+      realizedCents: totalRealizedCents,
       bonusCents: Number(acc.bonus_cents),
       bonusReservedCents: Number(acc.bonus_reserved_cents),
       bonusProfitCents: Number(acc.bonus_profit_cents),

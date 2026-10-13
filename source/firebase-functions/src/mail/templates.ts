@@ -22,30 +22,37 @@ function baseLayout(title: string, bodyContentHtml: string, locale: 'ar' | 'en' 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${escapeHtml(title)}</title>
   <style>
-    body { margin: 0; padding: 0; background-color: #040812; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #ffffff; direction: ${dir}; text-align: ${isRtl ? 'right' : 'left'}; }
-    .container { max-width: 580px; margin: 20px auto; background-color: #09152b; border: 1px solid #1a3258; border-radius: 20px; overflow: hidden; }
-    .header { padding: 24px; text-align: center; border-bottom: 1px solid #1a3258; background: linear-gradient(180deg, #0d2247 0%, #09152b 100%); }
-    .header img { width: 48px; height: 48px; }
-    .header h1 { margin: 10px 0 0 0; font-size: 24px; font-weight: 800; color: #00d2ff; letter-spacing: 1px; }
-    .content { padding: 32px 28px; font-size: 15px; line-height: 1.7; color: #d0e1fd; }
-    .code-box { font-size: 36px; font-weight: 800; letter-spacing: 8px; color: #00f2fe; background: #040b18; border: 2px dashed #00d2ff; border-radius: 16px; padding: 18px; text-align: center; margin: 24px 0; font-family: monospace; }
-    .footer { padding: 20px 28px; text-align: center; font-size: 12px; color: #6b85ab; border-top: 1px solid #1a3258; background: #060e1f; }
-    .footer a { color: #00d2ff; text-decoration: none; }
-    .warn-box { background: #261f0d; border: 1px solid #5e4719; color: #f5d082; padding: 12px 16px; border-radius: 12px; margin-top: 16px; font-size: 13px; }
+    body { margin: 0; padding: 0; background-color: #030814; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #ffffff; direction: ${dir}; text-align: ${isRtl ? 'right' : 'left'}; -webkit-font-smoothing: antialiased; }
+    .wrapper { padding: 30px 12px; background-color: #030814; }
+    .container { max-width: 560px; margin: 0 auto; background-color: #0b172e; border: 1px solid #162c54; border-radius: 24px; overflow: hidden; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6); }
+    .header { padding: 32px 24px 20px; text-align: center; border-bottom: 1px solid #14284b; background: linear-gradient(180deg, #0e2247 0%, #0b172e 100%); }
+    .header img { width: 52px; height: 52px; margin-bottom: 8px; }
+    .header h1 { margin: 0; font-size: 26px; font-weight: 800; color: #ffffff; letter-spacing: 2px; }
+    .header span { display: block; font-size: 11px; color: #00d2ff; font-weight: 700; letter-spacing: 1.5px; margin-top: 2px; }
+    .content { padding: 32px 28px; font-size: 15px; line-height: 1.8; color: #d6e4fc; }
+    .content h2 { margin: 0 0 16px 0; font-size: 20px; font-weight: 700; color: #ffffff; }
+    .code-box { font-size: 38px; font-weight: 800; letter-spacing: 10px; color: #00f2fe; background: #040d21; border: 2px dashed #00d2ff; border-radius: 18px; padding: 20px; text-align: center; margin: 24px 0; font-family: 'Courier New', Courier, monospace; text-shadow: 0 0 12px rgba(0, 242, 254, 0.3); }
+    .footer { padding: 24px 28px; text-align: center; font-size: 12px; line-height: 1.6; color: #728cb5; border-top: 1px solid #14284b; background: #060e1f; }
+    .footer a { color: #00d2ff; text-decoration: none; font-weight: 600; }
+    .warn-box { background: #261b0c; border: 1px solid #634315; color: #f2cb7c; padding: 14px 18px; border-radius: 14px; margin-top: 20px; font-size: 13.5px; line-height: 1.6; }
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="header">
-      <img src="https://orin-trader.top/brand/orin-mark.png" alt="ORIN Logo" width="48" height="48">
-      <h1>ORIN</h1>
-    </div>
-    <div class="content">
-      ${bodyContentHtml}
-    </div>
-    <div class="footer">
-      <p style="margin:0 0 8px 0;">${isRtl ? 'منصة ORIN للتداول المعتمد — الدعم الفني 24/7' : 'ORIN Certified Trading Platform — 24/7 Technical Support'}</p>
-      <p style="margin:0;"><a href="https://orin-trader.top/support">${isRtl ? 'مركز الدعم والمساعدة' : 'Support Center'}</a> ${footerExtraHtml}</p>
+  <div class="wrapper">
+    <div class="container">
+      <div class="header">
+        <img src="https://orin-trader.top/brand/orin-mark.png" alt="ORIN Logo" width="52" height="52">
+        <h1>ORIN</h1>
+        <span>CERTIFIED TRADING PLATFORM</span>
+      </div>
+      <div class="content">
+        ${bodyContentHtml}
+      </div>
+      <div class="footer">
+        <p style="margin: 0 0 6px 0; font-weight: 700; color: #8ea9d4;">${isRtl ? 'منصة ORIN للتداول المعتمد' : 'ORIN Certified Trading Platform'}</p>
+        <p style="margin: 0 0 10px 0;">${isRtl ? 'هذه الرسالة آليّة ومعدّة تلقائياً، يرجى عدم الرد على هذا البريد. للحصول على الدعم والمساعدة، يرجى استخدام المساعد الذكي Adam داخل التطبيق.' : 'This is an automated notification. Please do not reply directly to this email. For support and assistance, please use Adam AI Assistant inside the ORIN app.'}</p>
+        <p style="margin: 0;"><a href="https://orin-trader.top">${isRtl ? 'فتح منصة ORIN' : 'Open ORIN Platform'}</a> ${footerExtraHtml}</p>
+      </div>
     </div>
   </div>
 </body>
@@ -126,7 +133,7 @@ export function renderEmailTemplate(
     const html = baseLayout(
       subject,
       `<h2>${isAr ? 'تغيير كلمة المرور' : 'Password Changed'}</h2>
-       <p>${isAr ? 'تم تغيير كلمة المرور الخاصة بحسابك بنجاح.' : 'Your account password was successfully changed.'}</p>`,
+       <p>${isAr ? 'تم تغيير كلمة المرور الخاصة بحسابك بنجاح. تم إبطال كافة الجلسات النشطة لسلامتك.' : 'Your account password was successfully changed. All active sessions have been revoked for your security.'}</p>`,
       locale
     );
     const text = `${subject}\n\n${isAr ? 'تم تغيير كلمة المرور بنجاح.' : 'Password changed successfully.'}`;
@@ -188,7 +195,7 @@ export function renderEmailTemplate(
       subject,
       `<h2>${isAr ? 'اكتمل السحب بنجاح' : 'Withdrawal Completed'}</h2>
        <p>${isAr ? `تم تحويل مبلغ <b>$${amountUsd} USD</b> إلى محفظتك بنجاح.` : `Your withdrawal of <b>$${amountUsd} USD</b> was completed and sent to your wallet.`}</p>
-       <p style="font-family:monospace;background:#040b18;padding:12px;border-radius:10px;">TxID: ${txHash}</p>`,
+       <p style="font-family:monospace;background:#040b18;padding:12px;border-radius:10px;color:#00f2fe;">TxID: ${txHash}</p>`,
       locale
     );
     const text = `${subject}\n\nTxID: ${txHash}`;
