@@ -1,6 +1,6 @@
 import nodemailer from 'nodemailer';
 import { randomUUID } from 'node:crypto';
-import { withTx } from '../db.ts';
+import { withTx, getPool } from '../db.ts';
 import { renderEmailTemplate } from './templates.ts';
 
 export interface SentMemoryEmail {
@@ -105,7 +105,10 @@ export async function sendMailDirect(
   const host = process.env.SMTP_HOST || 'smtp.titan.email';
   const port = Number(process.env.SMTP_PORT || 465);
   const secure = process.env.SMTP_SECURE !== 'false';
-  const fromAddress = (process.env.ORIN_MAIL_FROM || process.env.SMTP_USER || 'support@javl900.com').trim();
+  const rawFrom = (process.env.SMTP_FROM || process.env.ORIN_MAIL_FROM || process.env.SMTP_USER || 'support@javl900.com').trim();
+  const matchFrom = rawFrom.match(/<([^>]+)>/);
+  const emailOnly = matchFrom ? matchFrom[1].trim() : rawFrom.replace(/["']/g, '').trim();
+  const fromAddress = emailOnly;
   const user = (process.env.SMTP_USER || fromAddress).trim();
   const pass = (process.env.SMTP_PASS || process.env.TITAN_PASSWORD || process.env.ORIN_MAIL_API_KEY || '').trim();
   const mailKey = (process.env.ORIN_MAIL_API_KEY || process.env.RESEND_API_KEY || '').trim();
@@ -224,51 +227,59 @@ export async function processEmailOutboxOnce(): Promise<{ processed: number; err
   }
   isOutboxProcessing = true;
   try {
-    return await withTx(async (client) => {
+    const rows = await withTx(async (client) => {
       const rowsRes = await client.query(
         `SELECT * FROM email_outbox
          WHERE status IN ('queued', 'sending') AND next_attempt_at <= NOW() AND attempts < 5
          ORDER BY created_at ASC LIMIT 10 FOR UPDATE SKIP LOCKED`
       );
-
-      let processed = 0;
-      let errors = 0;
-
-      for (const row of rowsRes.rows) {
-        const rendered = renderEmailTemplate(row.template, row.locale || 'ar', row.payload || {});
-        const res = await sendMailDirect(
-          row.to_email,
-          rendered.subject,
-          rendered.html,
-          rendered.text,
-          { id: row.id, template: row.template, locale: row.locale, payload: row.payload }
-        );
-
-        if (res.ok) {
-          await client.query(
-            `UPDATE email_outbox
-             SET status = 'sent', sent_at = NOW(), attempts = attempts + 1, last_error = NULL
-             WHERE id = $1`,
-            [row.id]
-          );
-          processed++;
-        } else {
-          errors++;
-          const attempts = row.attempts + 1;
-          const nextDelaySec = Math.pow(2, attempts) * 10;
-          const status = attempts >= 5 ? 'failed' : 'queued';
-
-          await client.query(
-            `UPDATE email_outbox
-             SET attempts = $1, status = $2, last_error = $3, next_attempt_at = NOW() + ($4 || ' seconds')::interval
-             WHERE id = $5`,
-            [attempts, status, res.error || 'Failed to send', `${nextDelaySec}`, row.id]
-          );
-        }
-      }
-
-      return { processed, errors };
+      if (rowsRes.rows.length === 0) return [];
+      const ids = rowsRes.rows.map((r: any) => r.id);
+      await client.query(
+        `UPDATE email_outbox SET status = 'sending' WHERE id = ANY($1::varchar[])`,
+        [ids]
+      );
+      return rowsRes.rows;
     });
+
+    let processed = 0;
+    let errors = 0;
+
+    for (const row of rows) {
+      const rendered = renderEmailTemplate(row.template, row.locale || 'ar', row.payload || {});
+      const res = await sendMailDirect(
+        row.to_email,
+        rendered.subject,
+        rendered.html,
+        rendered.text,
+        { id: row.id, template: row.template, locale: row.locale, payload: row.payload }
+      );
+
+      const pool = getPool();
+      if (res.ok) {
+        await pool.query(
+          `UPDATE email_outbox
+           SET status = 'sent', sent_at = NOW(), attempts = attempts + 1, last_error = NULL
+           WHERE id = $1`,
+          [row.id]
+        );
+        processed++;
+      } else {
+        errors++;
+        const attempts = row.attempts + 1;
+        const nextDelaySec = Math.pow(2, attempts) * 10;
+        const status = attempts >= 5 ? 'failed' : 'queued';
+
+        await pool.query(
+          `UPDATE email_outbox
+           SET attempts = $1, status = $2, last_error = $3, next_attempt_at = NOW() + ($4 || ' seconds')::interval
+           WHERE id = $5`,
+          [attempts, status, res.error || 'Failed to send', `${nextDelaySec}`, row.id]
+        );
+      }
+    }
+
+    return { processed, errors };
   } finally {
     isOutboxProcessing = false;
   }

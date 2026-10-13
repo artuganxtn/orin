@@ -57,7 +57,8 @@ export async function createOtpChallenge(
       throw new OtpError('cooldown-active', 429);
     }
 
-    if (eTimes.length >= 5 || iTimes.length >= 20) {
+    const isInternalIp = !ip || ip === 'unknown' || ip === '127.0.0.1' || ip === '::1' || ip.startsWith('10.') || ip.startsWith('172.') || ip.startsWith('192.168.');
+    if (eTimes.length >= 5 || (!isInternalIp && iTimes.length >= 20)) {
       throw new OtpError('too-many-requests', 429);
     }
 
