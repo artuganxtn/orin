@@ -1,9 +1,11 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ArrowDownUp, Info, CheckCircle2, History } from 'lucide-react';
 import type { TradingAccount } from '@/lib/trading-accounts';
 import { useOrin } from './orin-settings';
 import { toast } from 'sonner';
+import { demoWalletRequest } from '@/lib/demo-wallet-client';
+import type { DemoWalletView } from '@/lib/demo-wallet';
 import './account-workflows.css';
 
 export function AccountTransfer({ account, onSaved }: { account: TradingAccount | null; onSaved: () => Promise<void> }) {
@@ -13,32 +15,76 @@ export function AccountTransfer({ account, onSaved }: { account: TradingAccount 
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [walletView, setWalletView] = useState<DemoWalletView | null>(null);
+  const [loading, setLoading] = useState(false);
 
   const to = from === 'futures' ? 'perpetual' : 'futures';
-  const label = (type: 'futures' | 'perpetual') => type === 'futures' ? t('العقود الآجلة', 'Futures Contracts') : t('العقود الدائمة', 'Perpetual Contracts');
+  const label = (type: string) => type === 'futures' ? t('العقود الآجلة', 'Futures Contracts') : t('العقود الدائمة', 'Perpetual Contracts');
 
-  const maxAmount = '1000';
+  // Load live wallet pockets and history on mount and when account changes
+  useEffect(() => {
+    let mounted = true;
+    if (!account?.id) {
+      setWalletView(null);
+      return;
+    }
+    setLoading(true);
+    demoWalletRequest(account.id)
+      .then(res => {
+        if (mounted) setWalletView(res);
+      })
+      .catch(err => {
+        console.warn('Failed to fetch wallet status', err);
+      })
+      .finally(() => {
+        if (mounted) setLoading(false);
+      });
+    return () => { mounted = false; };
+  }, [account?.id]);
+
+  const futuresBal = (walletView?.wallet?.futuresCents ?? account?.balanceCents ?? 0) / 100;
+  const perpBal = (walletView?.wallet?.perpetualCents ?? 0) / 100;
+  const availableBal = from === 'futures' ? futuresBal : perpBal;
+  const maxAmount = availableBal > 0 ? availableBal.toFixed(2) : '0';
 
   async function submit() {
+    if (!account?.id) {
+      toast.error(t('يرجى اختيار حساب تداول أولاً.', 'Please select a trading account first.'));
+      return;
+    }
     const val = Number(amount);
     if (!Number.isFinite(val) || val <= 0) {
       toast.error(t('أدخل مبلغ تحويل صالحًا.', 'Enter a valid transfer amount.'));
       return;
     }
+    if (val > availableBal) {
+      toast.error(t('الرصيد المتاح غير كافٍ للتحويل.', 'Insufficient available balance.'));
+      return;
+    }
+
     setBusy(true);
     try {
-      await new Promise(r => setTimeout(r, 800));
-      const refId = 'TR-' + Math.random().toString(36).slice(2, 8).toUpperCase();
-      setDone(refId);
+      const amountCents = Math.round(val * 100);
+      const reqId = 'TR-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).slice(2, 6).toUpperCase();
+      const updated = await demoWalletRequest(account.id, {
+        requestId: reqId,
+        kind: 'transfer',
+        amountCents,
+        from
+      });
+      setWalletView(updated);
+      setDone(reqId);
       setAmount('');
       toast.success(t('تم التحويل بنجاح بين العقود!', 'Transfer completed successfully!'));
       await onSaved();
-    } catch (e) {
-      toast.error((e as Error).message);
+    } catch (e: any) {
+      toast.error(e.message || t('تعذر إتمام التحويل.', 'Failed to complete transfer.'));
     } finally {
       setBusy(false);
     }
   }
+
+  const operations = walletView?.operations || [];
 
   if (showHistory) {
     return (
@@ -50,13 +96,23 @@ export function AccountTransfer({ account, onSaved }: { account: TradingAccount 
           </button>
         </div>
 
-        {done ? (
-          <div style={{ background: '#fff', border: '1px solid var(--orin-line)', borderRadius: '16px', padding: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div>
-              <b style={{ display: 'block', fontSize: '15px', color: 'var(--orin-ink)' }}>{label('futures')} ← {label('perpetual')}</b>
-              <small style={{ color: 'var(--orin-muted)', fontSize: '12px' }}>{new Date().toLocaleDateString('ar-SA')} · {done}</small>
-            </div>
-            <span style={{ color: '#0788ff', fontWeight: 700, fontSize: '16px' }} dir="ltr">1,000.00 USDT</span>
+        {operations.length > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {operations.map(op => (
+              <div key={op.id} style={{ background: '#fff', border: '1px solid var(--orin-line)', borderRadius: '16px', padding: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <b style={{ display: 'block', fontSize: '15px', color: 'var(--orin-ink)' }}>
+                    {label(op.from)} ← {label(op.to)}
+                  </b>
+                  <small style={{ color: 'var(--orin-muted)', fontSize: '12px' }}>
+                    {new Date(op.createdAt).toLocaleDateString('ar-SA')} · {op.id}
+                  </small>
+                </div>
+                <span style={{ color: '#0788ff', fontWeight: 700, fontSize: '16px' }} dir="ltr">
+                  {(op.amountCents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT
+                </span>
+              </div>
+            ))}
           </div>
         ) : (
           <div style={{ padding: '30px 16px', textAlign: 'center', color: 'var(--orin-muted)', fontSize: '14px' }}>
@@ -78,7 +134,7 @@ export function AccountTransfer({ account, onSaved }: { account: TradingAccount 
 
         <button type="button" onClick={() => setShowHistory(true)} style={{ border: 0, background: 'none', color: '#0788ff', fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
           <History size={16} />
-          {t('سجل التحويلات', 'Transfer History')}
+          {t('سجل التحويلات', 'Transfer History')} ({operations.length})
         </button>
       </div>
 
@@ -96,7 +152,12 @@ export function AccountTransfer({ account, onSaved }: { account: TradingAccount 
 
         {/* From Section */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', paddingEnd: '50px' }}>
-          <small style={{ fontSize: '12.5px', color: 'var(--orin-muted)' }}>{t('من', 'From')}</small>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <small style={{ fontSize: '12.5px', color: 'var(--orin-muted)' }}>{t('من', 'From')}</small>
+            <small style={{ fontSize: '12.5px', color: '#0788ff', fontWeight: 600 }} dir="ltr">
+              {t('المتاح', 'Available')}: {availableBal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT
+            </small>
+          </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#0788ff', display: 'inline-block' }} />
             <strong style={{ fontSize: '17px', color: 'var(--orin-ink)', fontWeight: 700 }}>{label(from)}</strong>
@@ -107,7 +168,12 @@ export function AccountTransfer({ account, onSaved }: { account: TradingAccount 
 
         {/* To Section */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', paddingEnd: '50px' }}>
-          <small style={{ fontSize: '12.5px', color: 'var(--orin-muted)' }}>{t('إلى', 'To')}</small>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <small style={{ fontSize: '12.5px', color: 'var(--orin-muted)' }}>{t('إلى', 'To')}</small>
+            <small style={{ fontSize: '12.5px', color: 'var(--orin-muted)' }} dir="ltr">
+              {t('الرصيد الحالي', 'Current')}: {(from === 'futures' ? perpBal : futuresBal).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT
+            </small>
+          </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#00d2c8', display: 'inline-block' }} />
             <strong style={{ fontSize: '17px', color: 'var(--orin-ink)', fontWeight: 700 }}>{label(to)}</strong>
@@ -169,7 +235,7 @@ export function AccountTransfer({ account, onSaved }: { account: TradingAccount 
       <button
         type="button"
         className="btn-primary"
-        disabled={busy || !amount}
+        disabled={busy || !amount || Number(amount) <= 0 || loading}
         onClick={submit}
         style={{ width: '100%', height: '52px', borderRadius: '16px', background: 'linear-gradient(180deg,#1c8cff 0%,#0064f4 100%)', color: '#fff', border: 0, fontSize: '16px', fontWeight: 700, cursor: 'pointer', boxShadow: '0 10px 22px rgba(10,108,255,0.25)' }}
       >

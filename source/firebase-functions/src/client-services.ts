@@ -134,16 +134,21 @@ export async function selectTradingAccount(user: { id: string }, input: { id?: s
 export async function getDemoWallet(user: { id: string }, accountId: string) {
   return await withTx(async (client) => {
     const accRes = await client.query(
-      `SELECT id, user_id, type FROM accounts WHERE id = $1 AND user_id = $2`,
+      `SELECT id, user_id, type, balance_cents FROM accounts WHERE id = $1 AND user_id = $2`,
       [accountId, user.id]
     );
-    if (accRes.rowCount === 0 || accRes.rows[0].type !== 'demo') {
-      throw new ClientError('الحساب التجريبي غير موجود. / Demo account required.', 404);
+    if (accRes.rowCount === 0) {
+      throw new ClientError('الحساب غير موجود. / Account not found.', 404);
     }
 
+    const acc = accRes.rows[0];
+    const isReal = acc.type === 'real';
+    const collName = isReal ? 'contract_wallets' : 'demo_wallets';
+    const initialFutures = isReal ? Number(acc.balance_cents) : 1000000;
+
     const docRes = await client.query(
-      `SELECT data FROM docs WHERE collection = 'demo_wallets' AND id = $1`,
-      [accountId]
+      `SELECT data FROM docs WHERE collection = $1 AND id = $2`,
+      [collName, accountId]
     );
 
     const data = docRes.rows[0]?.data || {
@@ -151,7 +156,7 @@ export async function getDemoWallet(user: { id: string }, accountId: string) {
         ownerId: user.id,
         accountId,
         currency: 'USD',
-        futuresCents: 1000000,
+        futuresCents: initialFutures,
         perpetualCents: 0,
         version: 1,
         updatedAt: Date.now()
@@ -173,21 +178,26 @@ export async function operateDemoWallet(
   const amountCents = Number(input.amountCents || 0);
 
   if (!accountId || !requestId || !['reset', 'transfer'].includes(kind)) {
-    throw new ClientError('بيانات العملية غير صالحة. / Invalid demo operation request.', 400);
+    throw new ClientError('بيانات العملية غير صالحة. / Invalid transfer operation request.', 400);
   }
 
   return await withTx(async (client) => {
     const accRes = await client.query(
-      `SELECT id, user_id, type FROM accounts WHERE id = $1 AND user_id = $2`,
+      `SELECT id, user_id, type, balance_cents FROM accounts WHERE id = $1 AND user_id = $2`,
       [accountId, user.id]
     );
-    if (accRes.rowCount === 0 || accRes.rows[0].type !== 'demo') {
-      throw new ClientError('الحساب التجريبي مطلوب. / Demo account required.', 404);
+    if (accRes.rowCount === 0) {
+      throw new ClientError('الحساب غير موجود. / Account not found.', 404);
     }
 
+    const acc = accRes.rows[0];
+    const isReal = acc.type === 'real';
+    const collName = isReal ? 'contract_wallets' : 'demo_wallets';
+    const initialFutures = isReal ? Number(acc.balance_cents) : 1000000;
+
     const docRes = await client.query(
-      `SELECT data FROM docs WHERE collection = 'demo_wallets' AND id = $1 FOR UPDATE`,
-      [accountId]
+      `SELECT data FROM docs WHERE collection = $1 AND id = $2 FOR UPDATE`,
+      [collName, accountId]
     );
 
     let state = docRes.rows[0]?.data || {
@@ -195,7 +205,7 @@ export async function operateDemoWallet(
         ownerId: user.id,
         accountId,
         currency: 'USD',
-        futuresCents: 1000000,
+        futuresCents: initialFutures,
         perpetualCents: 0,
         version: 1,
         updatedAt: Date.now()
@@ -212,7 +222,7 @@ export async function operateDemoWallet(
     let nextPerp = state.wallet.perpetualCents;
 
     if (kind === 'reset') {
-      nextFutures = 1000000;
+      nextFutures = initialFutures;
       nextPerp = 0;
     } else if (kind === 'transfer') {
       if (input.from === 'futures') {
@@ -246,9 +256,9 @@ export async function operateDemoWallet(
 
     await client.query(
       `INSERT INTO docs (collection, id, data, updated_at)
-       VALUES ('demo_wallets', $1, $2, NOW())
+       VALUES ($1, $2, $3, NOW())
        ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
-      [accountId, JSON.stringify(state)]
+      [collName, accountId, JSON.stringify(state)]
     );
 
     return state;
