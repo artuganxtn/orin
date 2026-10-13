@@ -21,7 +21,7 @@ export interface ContractMessageInfo {
 }
 
 export function formatTurkeyTime(timeMs: number): string {
-  return new Date(timeMs).toLocaleString('ar-SA', {
+  return new Date(timeMs).toLocaleString('en-US', {
     timeZone: 'Europe/Istanbul',
     hour: '2-digit',
     minute: '2-digit',
@@ -44,7 +44,6 @@ export function renderMessageTemplate(
   const pctText = (c.settlementBps / 100).toFixed(1) + '%';
   const startTimeStr = formatTurkeyTime(c.opensAtMs);
   const endTimeStr = formatTurkeyTime(c.closesAtMs);
-  const appLink = `https://orin-trader.top/?code=${encodeURIComponent(c.code)}`;
 
   if (kind === 'ended_slot') {
     const text =
@@ -97,16 +96,9 @@ export function renderMessageTemplate(
     `⏰ <b>فترة المشاركة (توقيت تركيا):</b> ${startTimeStr} - ${endTimeStr}\n` +
     `🔑 <b>كود الدخول في الصفقة:</b>\n` +
     `<code>${codeEsc}</code>\n` +
-    `━━━━━━━━━━━━━━━━━━━━\n` +
-    `⚠️ <i>التداول ينطوي على مخاطر مالية. الشروط مقفلة رقمياً مسبقاً ولا توجد ضمانات للربح.</i>`;
+    `━━━━━━━━━━━━━━━━━━━━`;
 
-  const reply_markup = {
-    inline_keyboard: [[
-      { text: '🚀 فتح التطبيق والدخول في الصفقة', url: appLink }
-    ]]
-  };
-
-  return { text, reply_markup };
+  return { text };
 }
 
 export async function sendTelegramApiRequest(

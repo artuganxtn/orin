@@ -100,93 +100,122 @@ export async function processSchedulerSlotsOnce(nowMs = Date.now()): Promise<{ r
       }
 
       // Execute slot run
-      const contractId = 'contract-auto-' + randomUUID();
-      const code = 'ORIN-' + randomBytes(6).toString('hex').toUpperCase();
-      const title = slot.name || 'صفقة معتمدة';
-      const opensAtMs = nowMs + Number(slot.opens_offset_min || 0) * 60 * 1000;
-      const closesAtMs = opensAtMs + Number(slot.closes_after_min || 60) * 60 * 1000;
-      const hashVal = createHash('sha256').update(code + ':' + slot.asset + ':' + slot.direction + ':' + slot.settlement_bps).digest('hex');
-
-      const isAuto = slot.mode === 'auto';
-      const initialStatus = isAuto ? 'active' : 'cancelled';
-      const runStatus = isAuto ? 'published' : 'draft';
-
-      await client.query(
-        `INSERT INTO profiles (id, email, display_name, role)
-         VALUES ('scheduler', 'scheduler@orin.internal', 'ORIN Scheduler Engine', 'admin')
-         ON CONFLICT (id) DO NOTHING`
-      );
-
-      await client.query(
-        `INSERT INTO contracts (id, code, title, asset, direction, duration_sec, settlement_bps, status, opens_at, closes_at, eligibility, hash, admin_id, created_at, published_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TO_TIMESTAMP($9/1000.0), TO_TIMESTAMP($10/1000.0), $11, $12, 'scheduler', NOW(), ${isAuto ? 'NOW()' : 'NULL'})`,
-        [contractId, code, title, slot.asset, slot.direction, Number(slot.duration_sec), Number(slot.settlement_bps), initialStatus, opensAtMs, closesAtMs, slot.eligibility || 'all', hashVal]
-      );
-
-      const runId = 'run-' + randomUUID();
-      await client.query(
-        `INSERT INTO scheduled_runs (id, slot_id, run_date, status, contract_id, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, NOW(), NOW())`,
-        [runId, slot.id, runDate, runStatus, contractId]
-      );
-
-      // Create telegram outbox record if auto or admin preview
-      const cInfo = {
-        id: contractId,
-        code,
-        title,
-        asset: slot.asset,
-        direction: slot.direction,
-        durationSec: Number(slot.duration_sec),
-        settlementBps: Number(slot.settlement_bps),
-        opensAtMs,
-        closesAtMs
-      };
-
-      if (isAuto) {
-        const tpl = renderMessageTemplate('agent_slot', cInfo, slot.name);
-        const channelId = process.env.TELEGRAM_MODE === 'test' ? (process.env.TELEGRAM_TEST_CHANNEL_ID || '@testchannel') : (process.env.TELEGRAM_CHANNEL_ID || '@channel');
-        const outboxPayload = JSON.stringify({
-          method: 'sendMessage',
-          body: {
-            chat_id: channelId,
-            text: tpl.text,
-            parse_mode: 'HTML',
-            reply_markup: tpl.reply_markup
-          }
-        });
-
-        await client.query(
-          `INSERT INTO telegram_outbox (id, kind, contract_id, payload, status, created_at, updated_at)
-           VALUES ($1, 'channel_post', $2, $3::jsonb, 'pending', NOW(), NOW())
-           ON CONFLICT (kind, contract_id) DO NOTHING`,
-          ['outbox-post-' + contractId, contractId, outboxPayload]
-        );
-      } else {
-        const adminChatId = (process.env.ADMIN_TELEGRAM_IDS || '').split(',')[0] || '@adminchat';
-        const tpl = renderMessageTemplate('admin_preview', cInfo, slot.name);
-        const outboxPayload = JSON.stringify({
-          method: 'sendMessage',
-          body: {
-            chat_id: adminChatId,
-            text: tpl.text,
-            parse_mode: 'HTML',
-            reply_markup: tpl.reply_markup
-          }
-        });
-
-        await client.query(
-          `INSERT INTO telegram_outbox (id, kind, contract_id, payload, status, created_at, updated_at)
-           VALUES ($1, 'admin_preview', $2, $3::jsonb, 'pending', NOW(), NOW())
-           ON CONFLICT (kind, contract_id) DO NOTHING`,
-          ['outbox-preview-' + contractId, contractId, outboxPayload]
-        );
-      }
-
+      await executeSlot(slot, client, nowMs, runDate);
       runsCreated++;
-      console.log(`[SCHEDULER_RUN] Slot ${slot.id} executed run ${runId} (Contract ${contractId}, Mode: ${slot.mode})`);
+      console.log(`[SCHEDULER_RUN] Slot ${slot.id} executed for ${runDate} (Mode: ${slot.mode})`);
     }
 
     return { runsCreated, missed };
   });
+}
+
+async function executeSlot(slot: any, client: any, nowMs: number, runDate: string) {
+  const contractId = 'contract-auto-' + randomUUID();
+  const code = 'ORIN-' + randomBytes(6).toString('hex').toUpperCase();
+  const title = slot.name || 'صفقة معتمدة';
+  const opensAtMs = nowMs + Number(slot.opens_offset_min || 0) * 60 * 1000;
+  const closesAtMs = opensAtMs + Number(slot.closes_after_min || 60) * 60 * 1000;
+  const hashVal = createHash('sha256').update(code + ':' + slot.asset + ':' + slot.direction + ':' + slot.settlement_bps).digest('hex');
+
+  const isAuto = slot.mode === 'auto';
+  const initialStatus = isAuto ? 'active' : 'cancelled';
+  const runStatus = isAuto ? 'published' : 'draft';
+
+  await client.query(
+    `INSERT INTO profiles (id, email, display_name, role)
+     VALUES ('scheduler', 'scheduler@orin.internal', 'ORIN Scheduler Engine', 'admin')
+     ON CONFLICT (id) DO NOTHING`
+  );
+
+  await client.query(
+    `INSERT INTO contracts (id, code, title, asset, direction, duration_sec, settlement_bps, status, opens_at, closes_at, eligibility, hash, admin_id, created_at, published_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TO_TIMESTAMP($9/1000.0), TO_TIMESTAMP($10/1000.0), $11, $12, 'scheduler', NOW(), ${isAuto ? 'NOW()' : 'NULL'})`,
+    [contractId, code, title, slot.asset, slot.direction, Number(slot.duration_sec), Number(slot.settlement_bps), initialStatus, opensAtMs, closesAtMs, slot.eligibility || 'all', hashVal]
+  );
+
+  const runId = 'run-' + randomUUID();
+  await client.query(
+    `INSERT INTO scheduled_runs (id, slot_id, run_date, status, contract_id, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+     ON CONFLICT (slot_id, run_date) DO UPDATE SET contract_id = EXCLUDED.contract_id, status = EXCLUDED.status, updated_at = NOW()`,
+    [runId, slot.id, runDate, runStatus, contractId]
+  );
+
+  const cInfo = {
+    id: contractId,
+    code,
+    title,
+    asset: slot.asset,
+    direction: slot.direction,
+    durationSec: Number(slot.duration_sec),
+    settlementBps: Number(slot.settlement_bps),
+    opensAtMs,
+    closesAtMs
+  };
+
+  if (isAuto) {
+    const tpl = renderMessageTemplate('agent_slot', cInfo, slot.name);
+    const channelId = process.env.TELEGRAM_MODE === 'test' ? (process.env.TELEGRAM_TEST_CHANNEL_ID || '@testchannel') : (process.env.TELEGRAM_CHANNEL_ID || '@channel');
+    const outboxPayload = JSON.stringify({
+      method: 'sendMessage',
+      body: {
+        chat_id: channelId,
+        text: tpl.text,
+        parse_mode: 'HTML',
+        reply_markup: tpl.reply_markup
+      }
+    });
+
+    await client.query(
+      `INSERT INTO telegram_outbox (id, kind, contract_id, payload, status, created_at, updated_at)
+       VALUES ($1, 'channel_post', $2, $3::jsonb, 'pending', NOW(), NOW())
+       ON CONFLICT (kind, contract_id) DO NOTHING`,
+      ['outbox-post-' + contractId, contractId, outboxPayload]
+    );
+  } else {
+    const adminChatId = (process.env.ADMIN_TELEGRAM_IDS || '').split(',')[0] || '@adminchat';
+    const tpl = renderMessageTemplate('admin_preview', cInfo, slot.name);
+    const outboxPayload = JSON.stringify({
+      method: 'sendMessage',
+      body: {
+        chat_id: adminChatId,
+        text: tpl.text,
+        parse_mode: 'HTML',
+        reply_markup: tpl.reply_markup
+      }
+    });
+
+    await client.query(
+      `INSERT INTO telegram_outbox (id, kind, contract_id, payload, status, created_at, updated_at)
+       VALUES ($1, 'admin_preview', $2, $3::jsonb, 'pending', NOW(), NOW())
+       ON CONFLICT (kind, contract_id) DO NOTHING`,
+      ['outbox-preview-' + contractId, contractId, outboxPayload]
+    );
+  }
+
+  return { code, contractId, runId, isAuto };
+}
+
+export async function triggerSlotRunDirectly(slotId: string, force = true): Promise<{ ok: boolean; code?: string; contractId?: string; isAuto?: boolean; outboxProcessed?: number }> {
+  const result = await withTx(async (client) => {
+    const slotRes = await client.query('SELECT * FROM trade_slots WHERE id = $1', [slotId]);
+    if (slotRes.rowCount === 0) {
+      throw new Error('Trade slot not found');
+    }
+    const slot = slotRes.rows[0];
+    const nowMs = Date.now();
+    const runDate = getCurrentDateStrInTz(nowMs, slot.timezone || 'Europe/Istanbul');
+    return await executeSlot(slot, client, nowMs, force ? `${runDate}-${Date.now().toString(36)}` : runDate);
+  });
+
+  let outboxProcessed = 0;
+  try {
+    const { processTelegramOutboxOnce } = await import('./telegram.js');
+    const outboxRes = await processTelegramOutboxOnce();
+    outboxProcessed = outboxRes.processed;
+  } catch (err: any) {
+    console.error('[TRIGGER_SLOT_OUTBOX_ERROR]', err?.message || err);
+  }
+
+  return { ok: true, ...result, outboxProcessed };
 }

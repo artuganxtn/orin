@@ -516,9 +516,13 @@ export async function controlAction(u: Identity, input: Data) {
 
   if (action === 'trade.run.now') {
     const slotId = target || payload.slotId;
-    const { processSchedulerSlotsOnce } = await import('./scheduler.js');
+    const { processSchedulerSlotsOnce, triggerSlotRunDirectly } = await import('./scheduler.js');
+    if (slotId && slotId !== 'all') {
+      const res = await triggerSlotRunDirectly(slotId, true);
+      return { ok: true, slotId, ...res, message: `تم تشغيل الفترة ${slotId} وإنشاء الكود ${res.code} وإرساله للتلغرام.` };
+    }
     const res = await processSchedulerSlotsOnce(Date.now());
-    return { ok: true, slotId, ...res };
+    return { ok: true, slotId, ...res, message: `تم فحص الجدولة لكافة الفترات (فترات منفذة: ${res.runsCreated})` };
   }
 
   // 4. Account Balance / Finance Propose
