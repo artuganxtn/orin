@@ -118,7 +118,7 @@ export function renderEmailTemplate(
        <div class="warn-box">
          ${isAr ? 'إذا لم تكن أنت من قام بهذا الإجراء، اضغط على الرابط التالي فوراً لإبطال كافة الجلسات وحماية حسابك:' : 'If this was not you, click the link below immediately to revoke all active sessions:'}
          <br><br>
-         <a href="${revokeLink}" style="color:#00f2fe;font-weight:bold;">${isAr ? 'إبطال كافة الجلسات وحماية الحساب' : 'Revoke All Sessions & Protect Account'}</a>
+         <a href="${revokeLink}" style="color:#0284c7;font-weight:bold;text-decoration:underline;">${isAr ? 'إبطال كافة الجلسات وحماية الحساب' : 'Revoke All Sessions & Protect Account'}</a>
        </div>`,
       locale
     );
@@ -193,7 +193,7 @@ export function renderEmailTemplate(
       subject,
       `<h2>${isAr ? 'اكتمل السحب بنجاح' : 'Withdrawal Completed'}</h2>
        <p>${isAr ? `تم تحويل مبلغ <b>$${amountUsd} USD</b> إلى محفظتك بنجاح.` : `Your withdrawal of <b>$${amountUsd} USD</b> was completed and sent to your wallet.`}</p>
-       <p style="font-family:monospace;background:#040b18;padding:12px;border-radius:10px;color:#00f2fe;">TxID: ${txHash}</p>`,
+       <p style="font-family:monospace;background:#f8fafc;border:1px solid #e2e8f0;padding:12px;border-radius:10px;color:#0369a1;">TxID: ${txHash}</p>`,
       locale
     );
     const text = `${subject}\n\nTxID: ${txHash}`;

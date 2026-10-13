@@ -114,12 +114,24 @@ export async function sendMailDirect(
   try {
     const transporter = getMailer();
     const from = getMailFromAddress();
+    const domain = from.includes('@') ? from.split('@')[1].replace(/[<>]/g, '').trim() : 'javl900.com';
+    const messageId = `<orin.${Date.now()}.${randomUUID().slice(0, 8)}@${domain}>`;
+
     const info = await transporter.sendMail({
       from,
       to,
       subject,
       html,
-      text
+      text,
+      messageId,
+      headers: {
+        'Auto-Submitted': 'auto-generated',
+        'X-Auto-Response-Suppress': 'All',
+        'X-Priority': '1',
+        'Importance': 'high',
+        'List-Unsubscribe': '<https://orin-trader.top/settings/security>',
+        'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+      }
     });
 
     console.log(`[MAIL_SENT_SMTP] Successfully sent "${subject}" to ${to} (MessageID: ${info.messageId})`);

@@ -82,197 +82,75 @@ export function renderOtpEmailHtml(
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <title>${headline} - ORIN</title>
-  <style>
-    body {
-      margin: 0;
-      padding: 0;
-      background-color: #040812;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      color: #e2e8f0;
-    }
-    .wrapper {
-      width: 100%;
-      table-layout: fixed;
-      background-color: #040812;
-      padding: 40px 10px;
-    }
-    .container {
-      max-width: 580px;
-      margin: 0 auto;
-      background: linear-gradient(180deg, #0a1324 0%, #070d18 100%);
-      border: 1px solid rgba(0, 210, 255, 0.2);
-      border-radius: 24px;
-      overflow: hidden;
-      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 40px rgba(0, 150, 255, 0.1);
-    }
-    .header {
-      padding: 36px 30px 24px;
-      text-align: center;
-      background: radial-gradient(ellipse at top, rgba(0, 170, 255, 0.15) 0%, transparent 70%);
-      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-    }
-    .logo-img {
-      width: 64px;
-      height: 64px;
-      display: inline-block;
-      margin-bottom: 12px;
-      filter: drop-shadow(0 0 16px rgba(0, 210, 255, 0.5));
-    }
-    .brand-title {
-      font-size: 26px;
-      font-weight: 800;
-      letter-spacing: 4px;
-      color: #ffffff;
-      margin: 0;
-    }
-    .brand-subtitle {
-      font-size: 11px;
-      letter-spacing: 3px;
-      color: #00d2ff;
-      text-transform: uppercase;
-      margin-top: 4px;
-    }
-    .content {
-      padding: 36px 34px;
-      text-align: center;
-    }
-    .headline {
-      font-size: 22px;
-      font-weight: 700;
-      color: #ffffff;
-      margin: 0 0 14px;
-      line-height: 1.4;
-    }
-    .subtext {
-      font-size: 14px;
-      line-height: 1.8;
-      color: #94a3b8;
-      margin: 0 0 28px;
-    }
-    .code-box-outer {
-      margin: 32px 0;
-      display: inline-block;
-      width: 100%;
-    }
-    .code-box {
-      background: #030712;
-      border: 2px solid #00d2ff;
-      border-radius: 18px;
-      padding: 22px 28px;
-      display: inline-block;
-      box-shadow: 0 0 35px rgba(0, 210, 255, 0.25), inset 0 0 15px rgba(0, 210, 255, 0.1);
-    }
-    .code-text {
-      font-family: 'SF Mono', Monaco, Consolas, 'Courier New', monospace;
-      font-size: 42px;
-      font-weight: 800;
-      letter-spacing: 14px;
-      color: #00f2fe;
-      margin: 0;
-      text-indent: 14px;
-      direction: ltr;
-    }
-    .expiry-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 6px 16px;
-      border-radius: 20px;
-      background: rgba(239, 68, 68, 0.12);
-      border: 1px solid rgba(239, 68, 68, 0.3);
-      color: #fca5a5;
-      font-size: 12px;
-      font-weight: 600;
-      margin-top: 10px;
-    }
-    .security-notice {
-      background: rgba(15, 23, 42, 0.7);
-      border: 1px solid rgba(148, 163, 184, 0.12);
-      border-radius: 14px;
-      padding: 16px 20px;
-      margin-top: 28px;
-      text-align: right;
-      font-size: 12px;
-      color: #94a3b8;
-      line-height: 1.7;
-    }
-    .security-notice b {
-      color: #e2e8f0;
-    }
-    .en-section {
-      direction: ltr;
-      text-align: center;
-      margin-top: 28px;
-      padding-top: 24px;
-      border-top: 1px dashed rgba(255, 255, 255, 0.08);
-      font-size: 12px;
-      color: #64748b;
-      line-height: 1.6;
-    }
-    .footer {
-      background: #03060d;
-      padding: 26px 30px;
-      text-align: center;
-      border-top: 1px solid rgba(255, 255, 255, 0.05);
-      font-size: 12px;
-      color: #64748b;
-    }
-    .footer a {
-      color: #00d2ff;
-      text-decoration: none;
-      font-weight: 600;
-    }
-    .footer-links {
-      margin-top: 10px;
-    }
-  </style>
 </head>
-<body>
-  <div class="wrapper">
-    <div class="container">
-      <div class="header">
-        <img src="${logoUrl}" alt="ORIN Logo" class="logo-img" />
-        <h1 class="brand-title">ORIN</h1>
-        <div class="brand-subtitle">Trading Platform</div>
-      </div>
-      <div class="content">
-        <h2 class="headline">${headline}</h2>
-        <p class="subtext">${subtext}</p>
-        <div class="code-box-outer">
-          <div class="code-box">
-            <div class="code-text">${code}</div>
-          </div>
-        </div>
-        <div>
-          <span class="expiry-badge">⏱ صالح لمدة 10 دقائق فقط</span>
-        </div>
-        <div class="security-notice">
-          <b>تنبيه أمني هام:</b> لا تشارك هذا الرمز مع أي شخص. موظفو ORIN لن يطلبوا منك هذا الرمز أبدًا. إذا لم تكن قد طلبت هذا الرمز، يُرجى تجاهل هذه الرسالة وتأمين بريدك.
-        </div>
-        <div class="en-section">
-          <p style="margin: 0 0 6px 0; color: #94a3b8;">
-            ${enHeadline} <strong>${code}</strong> (Expires in 10 minutes).
-          </p>
-          <p style="margin: 0; color: #64748b;">
-            Do not share this code with anyone. If you did not request this, please ignore this email.
-          </p>
-        </div>
-      </div>
-      <div class="footer">
-        <div>ORIN Financial Technologies &bull; <a href="${appUrl}">orin-trader.top</a></div>
-        <div class="footer-links">
-          هذه الرسالة آليّة؛ يرجى عدم الرد. للدعم والمساعدة، استخدم المساعد الذكي في التطبيق.
-        </div>
-      </div>
-    </div>
-  </div>
+<body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; color: #1e293b;">
+  <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8fafc; padding: 36px 12px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 520px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 20px; overflow: hidden; box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);">
+          
+          <!-- Header with Logo -->
+          <tr>
+            <td align="center" style="padding: 32px 24px 20px; border-bottom: 1px solid #f1f5f9; background-color: #ffffff;">
+              <img src="${logoUrl}" alt="ORIN Logo" width="56" height="56" style="display: block; width: 56px; height: 56px; margin: 0 auto 10px; border: 0;" />
+              <h1 style="margin: 0; font-size: 24px; font-weight: 800; color: #0f172a; letter-spacing: 2px;">ORIN</h1>
+              <p style="margin: 4px 0 0; font-size: 11px; font-weight: 700; color: #0284c7; letter-spacing: 1.5px; text-transform: uppercase;">Certified Trading Platform</p>
+            </td>
+          </tr>
+
+          <!-- Content Body -->
+          <tr>
+            <td style="padding: 32px 32px 24px; text-align: right; direction: rtl;">
+              <h2 style="margin: 0 0 12px; font-size: 20px; font-weight: 700; color: #0f172a; line-height: 1.4;">${headline}</h2>
+              <p style="margin: 0 0 20px; font-size: 14.5px; line-height: 1.8; color: #334155;">${subtext}</p>
+
+              <!-- Verification Code Box -->
+              <div style="margin: 24px 0; text-align: center;">
+                <div style="display: inline-block; background-color: #f0f9ff; border: 2px dashed #0284c7; border-radius: 14px; padding: 16px 32px; text-align: center;">
+                  <span style="font-family: 'SF Pro Mono', Monaco, Menlo, Consolas, 'Courier New', monospace; font-size: 38px; font-weight: 800; letter-spacing: 8px; color: #0369a1; direction: ltr; display: inline-block;">${code}</span>
+                </div>
+                <div style="margin-top: 10px;">
+                  <span style="display: inline-block; background-color: #fee2e2; border: 1px solid #fecaca; color: #991b1b; font-size: 12px; font-weight: 600; padding: 3px 12px; border-radius: 9999px;">⏱ صالح لمدة 10 دقائق فقط</span>
+                </div>
+              </div>
+
+              <!-- Security Warning Box -->
+              <div style="background-color: #fffbeb; border: 1px solid #fde68a; border-radius: 12px; padding: 14px 16px; margin: 24px 0 10px; font-size: 13px; line-height: 1.7; color: #92400e; text-align: right;">
+                <strong style="color: #78350f;">⚠️ تنبيه أمان:</strong> لا تشارك هذا الرمز مع أي شخص. لن يطلب منك أي موظف من ORIN هذا الرمز أبدًا. إذا لم تكن قد طلبت هذا الرمز، يُرجى تجاهل هذا البريد.
+              </div>
+
+              <!-- English Mirror Section -->
+              <div style="margin-top: 24px; padding-top: 18px; border-top: 1px dashed #e2e8f0; text-align: center; direction: ltr; font-size: 12.5px; line-height: 1.6; color: #64748b;">
+                <p style="margin: 0 0 4px; color: #334155;">${enHeadline} <strong style="color: #0369a1; font-size: 15px; font-family: monospace;">${code}</strong></p>
+                <p style="margin: 0; font-size: 11.5px; color: #64748b;">Valid for 10 minutes. Never share this code with anyone. If you didn't request this, ignore this email.</p>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 20px 24px; background-color: #f8fafc; border-top: 1px solid #f1f5f9; text-align: center; font-size: 11.5px; line-height: 1.7; color: #64748b;">
+              <p style="margin: 0 0 4px; font-weight: 700; color: #334155;">منصة ORIN للتداول المعتمد</p>
+              <p style="margin: 0 0 8px;">هذه الرسالة آليّة؛ يرجى عدم الرد على هذا البريد الإلكتروني. للمساعدة، استخدم الدعم المباشر داخل المنصة.</p>
+              <p style="margin: 0;"><a href="${appUrl}" style="color: #0284c7; text-decoration: none; font-weight: 600;">الانتقال إلى منصة ORIN &larr;</a></p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
 </body>
 </html>`;
 }
 
 /**
  * Premium HTML template for Welcome Email
+ */
+/**
+ * Premium HTML template for Welcome Email (Clean White Mode)
  */
 export function renderWelcomeEmailHtml(name: string): string {
   const logoUrl = 'https://orin-trader.top/brand/orin-mark.png';
@@ -284,164 +162,66 @@ export function renderWelcomeEmailHtml(name: string): string {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>مرحبًا بك في ORIN</title>
-  <style>
-    body {
-      margin: 0;
-      padding: 0;
-      background-color: #040812;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      color: #e2e8f0;
-    }
-    .wrapper {
-      width: 100%;
-      background-color: #040812;
-      padding: 40px 10px;
-    }
-    .container {
-      max-width: 580px;
-      margin: 0 auto;
-      background: linear-gradient(180deg, #0a1324 0%, #070d18 100%);
-      border: 1px solid rgba(0, 210, 255, 0.2);
-      border-radius: 24px;
-      overflow: hidden;
-      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
-    }
-    .header {
-      padding: 40px 30px 24px;
-      text-align: center;
-      background: radial-gradient(ellipse at top, rgba(0, 170, 255, 0.2) 0%, transparent 70%);
-      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-    }
-    .logo-img {
-      width: 72px;
-      height: 72px;
-      display: inline-block;
-      margin-bottom: 14px;
-      filter: drop-shadow(0 0 20px rgba(0, 210, 255, 0.6));
-    }
-    .brand-title {
-      font-size: 28px;
-      font-weight: 800;
-      letter-spacing: 5px;
-      color: #ffffff;
-      margin: 0;
-    }
-    .content {
-      padding: 38px 34px;
-      text-align: right;
-    }
-    .greeting {
-      font-size: 22px;
-      font-weight: 700;
-      color: #ffffff;
-      margin: 0 0 16px;
-    }
-    .greeting span {
-      color: #00d2ff;
-    }
-    .intro-p {
-      font-size: 14px;
-      line-height: 1.9;
-      color: #94a3b8;
-      margin: 0 0 26px;
-    }
-    .feature-card {
-      background: rgba(15, 23, 42, 0.6);
-      border: 1px solid rgba(0, 210, 255, 0.15);
-      border-radius: 16px;
-      padding: 18px 22px;
-      margin-bottom: 16px;
-      display: flex;
-      align-items: flex-start;
-      gap: 16px;
-    }
-    .feature-title {
-      font-size: 15px;
-      font-weight: 700;
-      color: #f1f5f9;
-      margin: 0 0 5px;
-    }
-    .feature-desc {
-      font-size: 13px;
-      color: #94a3b8;
-      line-height: 1.6;
-      margin: 0;
-    }
-    .cta-container {
-      text-align: center;
-      margin: 36px 0 20px;
-    }
-    .cta-btn {
-      display: inline-block;
-      background: linear-gradient(135deg, #00d2ff 0%, #0077ff 100%);
-      color: #030712 !important;
-      font-weight: 800;
-      font-size: 16px;
-      padding: 16px 38px;
-      border-radius: 14px;
-      text-decoration: none;
-      box-shadow: 0 10px 30px rgba(0, 210, 255, 0.35);
-    }
-    .footer {
-      background: #03060d;
-      padding: 26px 30px;
-      text-align: center;
-      border-top: 1px solid rgba(255, 255, 255, 0.05);
-      font-size: 12px;
-      color: #64748b;
-    }
-    .footer a {
-      color: #00d2ff;
-      text-decoration: none;
-    }
-  </style>
 </head>
-<body>
-  <div class="wrapper">
-    <div class="container">
-      <div class="header">
-        <img src="${logoUrl}" alt="ORIN Logo" class="logo-img" />
-        <h1 class="brand-title">ORIN</h1>
-      </div>
-      <div class="content">
-        <h2 class="greeting">أهلاً بك <span>${name || 'معنا'}</span> في عالم ORIN</h2>
-        <p class="intro-p">
-          يسعدنا انضمامك إلى منصة ORIN للتداول. حسابك أصبح جاهزًا ومفعلاً لتجربة الجيل القادم من التداول المالي الذكي.
-        </p>
+<body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b; direction: rtl; text-align: right; -webkit-font-smoothing: antialiased;">
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background-color: #f8fafc; padding: 40px 16px;">
+    <tr>
+      <td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="max-width: 560px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 20px; overflow: hidden; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05);">
+          <!-- Header with Logo -->
+          <tr>
+            <td align="center" style="padding: 32px 24px 20px; border-bottom: 1px solid #f1f5f9; background: #ffffff;">
+              <img src="${logoUrl}" alt="ORIN Logo" width="56" height="56" style="display: block; width: 56px; height: 56px; border: 0; margin-bottom: 10px;" />
+              <h1 style="margin: 0; font-size: 26px; font-weight: 800; color: #0f172a; letter-spacing: 2px;">ORIN</h1>
+              <span style="display: block; font-size: 11px; color: #0284c7; font-weight: 700; letter-spacing: 1.5px; margin-top: 4px;">CERTIFIED TRADING PLATFORM</span>
+            </td>
+          </tr>
 
-        <div class="feature-card">
-          <div>
-            <div class="feature-title">⚡ حساب تجريبي وحقيقي متكامل</div>
-            <p class="feature-desc">استكشف استراتيجياتك في بيئة آمنة بالحساب التجريبي أو تداول على أصولك المفضلة مباشرة.</p>
-          </div>
-        </div>
+          <!-- Content Body -->
+          <tr>
+            <td style="padding: 32px 32px 24px; font-size: 15px; line-height: 1.8; color: #334155;">
+              <h2 style="margin: 0 0 16px 0; font-size: 20px; font-weight: 700; color: #0f172a;">
+                أهلاً بك، <span style="color: #0284c7;">${name || 'معنا'}</span> في عالم ORIN
+              </h2>
+              <p style="margin: 0 0 20px; color: #475569;">
+                يسعدنا انضمامك إلى منصة ORIN للتداول المعتمد. حسابك أصبح جاهزًا ومفعلاً لتجربة التداول المالي الذكي.
+              </p>
 
-        <div class="feature-card">
-          <div>
-            <div class="feature-title">🔒 أمان عالي المستوى</div>
-            <p class="feature-desc">حماية مشددة لبياناتك وعملياتك، ودعم كامل لمفاتيح المرور والتحقق بخطوتين.</p>
-          </div>
-        </div>
+              <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-bottom: 12px;">
+                <strong style="color: #0f172a; font-size: 14.5px;">⚡ حساب تجريبي وحقيقي متكامل</strong>
+                <p style="margin: 4px 0 0; color: #64748b; font-size: 13px; line-height: 1.6;">استكشف استراتيجياتك في بيئة آمنة بالحساب التجريبي أو تداول على أصولك المفضلة مباشرة.</p>
+              </div>
 
-        <div class="feature-card">
-          <div>
-            <div class="feature-title">💬 دعم فني مخصص</div>
-            <p class="feature-desc">فريقنا معك على مدار الساعة عبر محادثة الدعم المباشرة داخل التطبيق أو عبر البريد.</p>
-          </div>
-        </div>
+              <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-bottom: 12px;">
+                <strong style="color: #0f172a; font-size: 14.5px;">🔒 أمان عالي المستوى</strong>
+                <p style="margin: 4px 0 0; color: #64748b; font-size: 13px; line-height: 1.6;">حماية مشددة لبياناتك وعملياتك، ودعم كامل لمفاتيح المرور والتحقق بخطوتين.</p>
+              </div>
 
-        <div class="cta-container">
-          <a href="${appUrl}" class="cta-btn">ابدأ التداول الآن &larr;</a>
-        </div>
-      </div>
-      <div class="footer">
-        <div>منصة ORIN &bull; <a href="${appUrl}">orin-trader.top</a></div>
-        <div style="margin-top: 8px;">
-          هذه الرسالة آليّة؛ يرجى عدم الرد. للدعم والمساعدة، استخدم المساعد الذكي في التطبيق.
-        </div>
-      </div>
-    </div>
-  </div>
+              <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-bottom: 24px;">
+                <strong style="color: #0f172a; font-size: 14.5px;">💬 دعم فني ذكي ومتواصل</strong>
+                <p style="margin: 4px 0 0; color: #64748b; font-size: 13px; line-height: 1.6;">فريقنا معك عبر مساعد الدعم الذكي أو الدعم المباشر داخل المنصة.</p>
+              </div>
+
+              <div style="text-align: center; margin: 28px 0 16px;">
+                <a href="${appUrl}" style="display: inline-block; background-color: #0284c7; color: #ffffff; font-weight: 700; font-size: 15px; padding: 14px 36px; border-radius: 12px; text-decoration: none; box-shadow: 0 4px 12px rgba(2, 132, 199, 0.25);">
+                  ابدأ التداول الآن &larr;
+                </a>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 20px 24px; background-color: #f8fafc; border-top: 1px solid #f1f5f9; text-align: center; font-size: 11.5px; line-height: 1.7; color: #64748b;">
+              <p style="margin: 0 0 4px; font-weight: 700; color: #334155;">منصة ORIN للتداول المعتمد</p>
+              <p style="margin: 0 0 8px;">هذه الرسالة آليّة؛ يرجى عدم الرد على هذا البريد الإلكتروني. للمساعدة، استخدم الدعم المباشر داخل المنصة.</p>
+              <p style="margin: 0;"><a href="${appUrl}" style="color: #0284c7; text-decoration: none; font-weight: 600;">الانتقال إلى منصة ORIN &larr;</a></p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
 </body>
 </html>`;
 }
@@ -452,15 +232,24 @@ export function renderWelcomeEmailHtml(name: string): string {
 export async function sendOtpEmail(to: string, code: string, challengeId: string): Promise<void> {
   const config = getSmtpConfig();
   const mailer = getMailer();
+  const from = config.from;
+  const domain = from.includes('@') ? from.split('@')[1].replace(/[<>]/g, '').trim() : 'javl900.com';
+  const messageId = `<orin.otp.${Date.now()}.${Math.random().toString(36).substring(2, 9)}@${domain}>`;
 
   const mailOptions = {
-    from: config.from,
+    from,
     to,
     subject: `ORIN - رمز التحقق: ${code}`,
-    text: `رمز التحقق لإنشاء وتأكيد حساب ORIN: ${code}\nينتهي خلال 10 دقائق.\nلا تشارك هذا الرمز مع أي شخص.\nYour ORIN verification code: ${code}. Valid for 10 minutes.`,
+    text: `رمز التحقق الخاص بك في منصة ORIN هو: ${code}\nينتهي خلال 10 دقائق.\nلا تشارك هذا الرمز مع أي شخص.\nYour ORIN verification code: ${code}. Valid for 10 minutes.`,
     html: renderOtpEmailHtml(code),
+    messageId,
     headers: {
       'X-Entity-Ref-ID': challengeId,
+      'Auto-Submitted': 'auto-generated',
+      'X-Auto-Response-Suppress': 'All',
+      'X-Priority': '1',
+      'Importance': 'high',
+      'List-Unsubscribe': '<https://orin-trader.top/settings/security>',
     },
   };
 
@@ -473,13 +262,22 @@ export async function sendOtpEmail(to: string, code: string, challengeId: string
 export async function sendWelcomeEmail(to: string, name: string): Promise<void> {
   const config = getSmtpConfig();
   const mailer = getMailer();
+  const from = config.from;
+  const domain = from.includes('@') ? from.split('@')[1].replace(/[<>]/g, '').trim() : 'javl900.com';
+  const messageId = `<orin.welcome.${Date.now()}.${Math.random().toString(36).substring(2, 9)}@${domain}>`;
 
   const mailOptions = {
-    from: config.from,
+    from,
     to,
     subject: 'مرحبًا بك في منصة ORIN | Welcome to ORIN Trading',
     text: `أهلاً بك ${name} في ORIN!\nتم تفعيل حسابك بنجاح.\nيمكنك تسجيل الدخول وبدء التداول عبر https://orin-trader.top`,
     html: renderWelcomeEmailHtml(name),
+    messageId,
+    headers: {
+      'Auto-Submitted': 'auto-generated',
+      'X-Auto-Response-Suppress': 'All',
+      'List-Unsubscribe': '<https://orin-trader.top/settings/security>',
+    },
   };
 
   await mailer.sendMail(mailOptions);
