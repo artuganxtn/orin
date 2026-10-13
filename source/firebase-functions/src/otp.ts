@@ -27,7 +27,8 @@ export async function createOtpChallenge(
   secret: string,
   ip: string,
   userId?: string,
-  boundHash?: string
+  boundHash?: string,
+  dbClient?: any
 ): Promise<{ challengeId: string; code: string; retryAfter: number }> {
   const email = String(emailInput || '').toLowerCase().trim();
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -38,7 +39,7 @@ export async function createOtpChallenge(
   const code = String(randomInt(0, 1000000)).padStart(6, '0');
   const codeHmac = computeOtpHmac(secret, challengeId, email, code);
 
-  return await withTx(async (client) => {
+  const runWithClient = async (client: any) => {
     const emailKey = createHash('sha256').update(`rate:email:${email}`).digest('hex');
     const ipKey = createHash('sha256').update(`rate:ip:${ip}`).digest('hex');
 
@@ -79,7 +80,13 @@ export async function createOtpChallenge(
     );
 
     return { challengeId, code, retryAfter: 60 };
-  });
+  };
+
+  if (dbClient) {
+    return await runWithClient(dbClient);
+  } else {
+    return await withTx(async (client) => runWithClient(client));
+  }
 }
 
 export async function verifyOtpChallenge(
@@ -97,7 +104,7 @@ export async function verifyOtpChallenge(
   const c = res.rows[0];
 
   if (!c || c.consumed_at || c.email !== email || c.purpose !== purpose) {
-    throw new OtpError('invalid-code', 400);
+    throw new OtpError('code-invalid', 400);
   }
 
   if (new Date(c.expires_at).getTime() <= Date.now()) {
@@ -109,7 +116,7 @@ export async function verifyOtpChallenge(
   }
 
   if (boundHash && c.bound_hash && c.bound_hash !== boundHash) {
-    throw new OtpError('invalid-code', 400);
+    throw new OtpError('code-invalid', 400);
   }
 
   const actualHmac = computeOtpHmac(secret, challengeId, email, code);
@@ -126,7 +133,7 @@ export async function verifyOtpChallenge(
     if (newAttempts >= (c.max_attempts || 5)) {
       throw new OtpError('code-locked', 400);
     }
-    throw new OtpError('invalid-code', 400);
+    throw new OtpError('code-invalid', 400);
   }
 
   return await withTx(async (client) => {

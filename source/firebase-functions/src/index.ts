@@ -2,7 +2,7 @@ import express, { type Request, type Response } from 'express';
 import cors from 'cors';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { authMiddleware } from './auth-middleware.ts';
 import { paymentsHandle } from './payments-http.ts';
 import { programSummary, programAction, adminPrograms, accountActivity, getReferralsSummary } from './programs.ts';
@@ -111,7 +111,8 @@ app.post('/api/auth/reset/start', async (req: Request, res: Response) => {
       return res.json(sameResponse);
     }
 
-    const secret = process.env.ORIN_EMAIL_CODE_SECRET || 'test_secret_pepper_0123456789abcdef0123456789abcdef';
+    const secret = process.env.ORIN_EMAIL_CODE_SECRET;
+    if (!secret) return res.json(sameResponse);
 
     await withTx(async (client) => {
       const pRes = await client.query('SELECT id, email FROM profiles WHERE LOWER(email) = $1 AND disabled = FALSE', [email]);
@@ -120,13 +121,13 @@ app.post('/api/auth/reset/start', async (req: Request, res: Response) => {
         const { createOtpChallenge } = await import('./otp.js');
         const { enqueueEmail } = await import('./mail/transport.js');
 
-        const challenge = await createOtpChallenge(email, 'password_reset', secret, req.ip || 'unknown', userId);
+        const challenge = await createOtpChallenge(email, 'password_reset', secret, req.ip || 'unknown', userId, undefined, client);
         await enqueueEmail(email, 'password_reset_code', 'ar', { code: challenge.code }, `reset:${challenge.challengeId}`, client);
       }
     });
 
     res.json(sameResponse);
-  } catch (err: any) {
+  } catch {
     res.json(sameResponse);
   }
 });
@@ -135,22 +136,62 @@ app.post('/api/auth/reset/confirm', async (req: Request, res: Response) => {
   res.set('Cache-Control', 'private, no-store');
   try {
     const email = String(req.body?.email || '').trim().toLowerCase();
-    const challengeId = String(req.body?.challengeId || '').trim();
     const code = String(req.body?.code || '').trim();
     const newPassword = String(req.body?.newPassword || '');
 
-    if (!email || !challengeId || !code || !/^\d{6}$/.test(code) || newPassword.length < 8 || newPassword.length > 128) {
+    if (!email || !code || !/^\d{6}$/.test(code) || newPassword.length < 8 || newPassword.length > 128) {
       return res.status(400).json({ error: 'البيانات المدخلة غير صحيحة.', code: 'invalid-input' });
     }
 
-    const secret = process.env.ORIN_EMAIL_CODE_SECRET || 'test_secret_pepper_0123456789abcdef0123456789abcdef';
-    const { verifyOtpChallenge } = await import('./otp.js');
+    const secret = process.env.ORIN_EMAIL_CODE_SECRET;
+    if (!secret) return res.status(500).json({ error: 'الخدمة غير متاحة حالياً.' });
+
+    const { OtpError, computeOtpHmac } = await import('./otp.js');
     const { enqueueEmail } = await import('./mail/transport.js');
     const { adminAuth } = await import('./firebase-admin-init.js');
 
-    const result = await verifyOtpChallenge(challengeId, email, code, 'password_reset', secret);
+    let uid = '';
+    let challengeId = '';
 
-    let uid = result.userId;
+    await withTx(async (client) => {
+      const cRes = await client.query(
+        `SELECT * FROM otp_challenges
+         WHERE LOWER(email) = LOWER($1) AND purpose = 'password_reset' AND consumed_at IS NULL
+         ORDER BY created_at DESC LIMIT 1 FOR UPDATE`,
+        [email]
+      );
+
+      const c = cRes.rows[0];
+      if (!c) {
+        throw new OtpError('code-invalid', 400);
+      }
+
+      if (new Date(c.expires_at).getTime() <= Date.now()) {
+        throw new OtpError('code-expired', 400);
+      }
+
+      if (c.attempts >= c.max_attempts) {
+        throw new OtpError('code-locked', 400);
+      }
+
+      const actualHmac = computeOtpHmac(secret, c.id, email, code);
+      const match = timingSafeEqual(Buffer.from(actualHmac, 'hex'), Buffer.from(c.code_hmac, 'hex'));
+
+      if (!match) {
+        const updated = await client.query(
+          `UPDATE otp_challenges SET attempts = attempts + 1 WHERE id = $1 RETURNING attempts, max_attempts`,
+          [c.id]
+        );
+        if ((updated.rows[0]?.attempts || 0) >= (c.max_attempts || 5)) {
+          throw new OtpError('code-locked', 400);
+        }
+        throw new OtpError('code-invalid', 400);
+      }
+
+      challengeId = c.id;
+      uid = c.user_id || '';
+    });
+
     if (!uid) {
       const fbUser = await adminAuth.getUserByEmail(email);
       uid = fbUser.uid;
@@ -162,11 +203,8 @@ app.post('/api/auth/reset/confirm', async (req: Request, res: Response) => {
     }
 
     await withTx(async (client) => {
-      await client.query(
-        `INSERT INTO session_revocations (user_id, valid_after, created_at)
-         VALUES ($1, NOW(), NOW())`,
-        [uid]
-      );
+      await client.query(`UPDATE otp_challenges SET consumed_at = NOW() WHERE id = $1`, [challengeId]);
+      await client.query(`INSERT INTO session_revocations (user_id, valid_after) VALUES ($1, NOW())`, [uid]);
 
       const payload = JSON.stringify({ uid, email, action: 'PASSWORD_RESET_COMPLETED' });
       await client.query(

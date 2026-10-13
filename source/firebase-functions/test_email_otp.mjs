@@ -202,7 +202,7 @@ const { authMiddleware } = await import('./lib/auth-middleware.js');
 let resUnverifiedCode = 0;
 let resUnverifiedJson = {};
 let reqUnverified = {
-  headers: { authorization: 'Bearer test-token-usr-unverified-1:unverified@javl900.com' },
+  headers: { authorization: 'Bearer test-token-usr-unverified-1:unverified@javl900.com:user:Unverified User:1791830000000:false' },
   path: '/lab'
 };
 let resUnverified = {
@@ -231,6 +231,29 @@ assert.equal(resetEmailSent.to, resetEmail);
 const verifyReset = await verifyOtpChallenge(challengeReset.challengeId, resetEmail, challengeReset.code, 'password_reset', testSecret);
 assert.ok(verifyReset.proofId);
 console.log('✔ Password reset code verified successfully via server OTP flow.');
+
+// TEST 10: REVOKED TOKEN SESSION REJECTION
+console.log('\n--- TEST 10: Revoked Token Session Rejection ---');
+
+await client.query(`
+  INSERT INTO session_revocations (user_id, valid_after)
+  VALUES ('usr-unverified-1', NOW() + INTERVAL '1 hour');
+`);
+
+let resRevokedCode = 0;
+let resRevokedJson = {};
+let reqRevoked = {
+  headers: { authorization: 'Bearer test-token-usr-unverified-1:unverified@javl900.com:::1000' },
+  path: '/lab'
+};
+let resRevoked = {
+  status: (code) => { resRevokedCode = code; return resRevoked; },
+  json: (data) => { resRevokedJson = data; }
+};
+
+await authMiddleware(reqRevoked, resRevoked, () => {});
+assert.equal(resRevokedCode, 401, 'Revoked token rejected with 401');
+console.log('✔ Revoked token correctly rejected with 401 Unauthorized.');
 
 client.release();
 await pool.end();

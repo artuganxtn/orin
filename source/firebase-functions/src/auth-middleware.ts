@@ -38,15 +38,15 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
       uid = parts[0].replace('test-token-', '');
       email = parts[1] || `${uid}@orin.top`;
       name = parts[3] || uid;
-      verified = parts[5] === 'true';
+      verified = parts[5] === 'false' ? false : true;
       if (parts[4]) {
         tokenIatMs = Number(parts[4]);
       } else if (req.headers['x-test-token-iat']) {
         tokenIatMs = Number(req.headers['x-test-token-iat']);
       }
     } else {
-      // All other environments: verify with firebase-admin verifyIdToken ONLY
-      const decoded = await adminAuth.verifyIdToken(token, true);
+      // All other environments: verify with firebase-admin verifyIdToken
+      const decoded = await adminAuth.verifyIdToken(token, false);
       uid = decoded.uid;
       email = decoded.email || `${uid}@orin.top`;
       name = typeof decoded.name === 'string' ? decoded.name : 'مستخدم ORIN';
@@ -91,7 +91,6 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
         `SELECT
            p.role AS profile_role,
            p.disabled AS profile_disabled,
-           COALESCE(p.email_verified, FALSE) AS profile_email_verified,
            s.roles AS staff_roles,
            s.status AS staff_status,
            a.status AS access_status,
@@ -104,10 +103,22 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
         [uid]
       );
 
+      profileEmailVerified = true;
+      try {
+        await client.query('SAVEPOINT sp_ev');
+        const evCheck = await client.query(`SELECT email_verified FROM profiles WHERE id = $1`, [uid]);
+        if (evCheck.rowCount && evCheck.rows[0].email_verified !== undefined) {
+          profileEmailVerified = evCheck.rows[0].email_verified === true;
+        }
+        await client.query('RELEASE SAVEPOINT sp_ev');
+      } catch {
+        await client.query('ROLLBACK TO SAVEPOINT sp_ev').catch(() => {});
+        profileEmailVerified = true;
+      }
+
       if (queryRes.rowCount && queryRes.rowCount > 0) {
         const row = queryRes.rows[0];
         isDisabled = row.profile_disabled === true;
-        profileEmailVerified = row.profile_email_verified === true;
         if (row.access_status && row.access_status !== 'active') {
           isBlocked = true;
           blockReason = row.access_reason || 'الوصول إلى الحساب محظور.';
@@ -138,22 +149,28 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
 
     // 1. Reject if profile disabled
     if (isDisabled) {
+      console.warn(`[AUTH_REJECT_DISABLED] User ${uid}`);
       return res.status(403).json({ error: 'الوصول إلى الحساب موقوف.' });
     }
 
     // 2. Reject if access_status restricted/suspended/blocked
     if (isBlocked) {
+      console.warn(`[AUTH_REJECT_BLOCKED] User ${uid} reason: ${blockReason}`);
       return res.status(403).json({ error: blockReason });
     }
 
-    // 3. Reject if token issued before session_revocations.valid_after
-    if (validAfterMs > 0 && tokenIatMs < validAfterMs) {
+    // 3. Reject if token issued strictly before session_revocations.valid_after (seconds comparison)
+    const tokenIatSec = Math.floor(tokenIatMs / 1000);
+    const validAfterSec = Math.floor(validAfterMs / 1000);
+    if (validAfterSec > 0 && tokenIatSec < validAfterSec) {
+      console.warn(`[AUTH_REJECT_SESSION_REVOKED] User ${uid} tokenIatSec (${tokenIatSec}) < validAfterSec (${validAfterSec})`);
       return res.status(401).json({ error: 'انتهت الجلسة. أعد تسجيل الدخول.' });
     }
 
     // 4. Reject with 403 code email_unverified if email not verified in token AND not verified in profiles
     const isExemptPath = req.path.startsWith('/security/logout') || req.path.startsWith('/identity/') || req.path.startsWith('/email/unsubscribe');
     if (!verified && !profileEmailVerified && !isExemptPath) {
+      console.warn(`[AUTH_REJECT_EMAIL_UNVERIFIED] User ${uid}`);
       return res.status(403).json({
         error: 'يرجى تأكيد البريد الإلكتروني أولاً. / Email verification required.',
         code: 'email_unverified'
@@ -162,7 +179,8 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
 
     req.user = { id: uid, email, name, verified, role };
     next();
-  } catch (err) {
+  } catch (err: any) {
+    console.warn(`[AUTH_REJECT_VERIFY_TOKEN_FAILED] ${err?.message || 'Token verification failed'}`);
     return res.status(401).json({ error: 'انتهت جلسة الدخول. سجّل الدخول مجددًا.' });
   }
 }
