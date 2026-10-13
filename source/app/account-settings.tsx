@@ -3,7 +3,7 @@ import {LanguageSettings} from './language-settings';
 import {SecurityCenter} from './security-center';
 import { firebaseMode, signInUrl, signOutUrl } from '@/lib/client-api';
 import { useEffect, useState, type ReactNode } from 'react';
-import { Bell, Check, ChevronLeft, ChartCandlestick, Download, EyeOff, Globe2, Info, LockKeyhole, ShieldCheck, SlidersHorizontal, UserRound, Wallet, ClipboardList, Copy, Palette, Sun, Moon, Monitor, ChevronRight, LogOut, RefreshCw, Headphones, Gift, BadgeCheck, KeyRound, Fingerprint, Smartphone, ShieldAlert, ExternalLink } from 'lucide-react';
+import { Bell, Check, ChevronLeft, ChartCandlestick, Download, EyeOff, Globe2, Info, LockKeyhole, ShieldCheck, SlidersHorizontal, UserRound, Wallet, ClipboardList, Copy, Palette, Sun, Moon, Monitor, ChevronRight, LogOut, RefreshCw, Headphones, Gift, BadgeCheck, KeyRound, Fingerprint, Smartphone, Apple, ShieldAlert, ExternalLink, Sparkles } from 'lucide-react';
 import { FullPage as Dialog, FullPageContent as DialogContent, FullPageHeader as DialogHeader, FullPageTitle as DialogTitle, FullPageDescription as DialogDescription } from './full-page';
 import { useRoutePanel, useNavigation } from './orin-navigation';
 import { SoundPreferences } from './sound-preferences';
@@ -78,10 +78,10 @@ export function AccountSettings({ state, onTerms, onAdmin, onLedger, onNotificat
     onNotifications: () => void;
 }) {
     const { prefs, settings, status, error, t, change, reload } = useOrin();
-    const [panel, setPanel] = useRoutePanel('/settings', ['account', 'appearance', 'security', 'notifications', 'chart', 'about', 'admin', 'language', 'devices', 'privacy', 'documents', 'support', 'referral', 'agent', 'two-factor', 'authenticator', 'data', 'kyc'] as const);
+    const [panel, setPanel] = useRoutePanel('/settings', ['account', 'appearance', 'security', 'notifications', 'chart', 'about', 'admin', 'language', 'devices', 'privacy', 'documents', 'support', 'referral', 'agent', 'two-factor', 'authenticator', 'data', 'kyc', 'app'] as const);
     const navigation = useNavigation();
     const busy = status === 'saving' || status === 'loading';
-    const titles = { account: t('الملف الشخصي', 'Your profile'), appearance: t('المظهر', 'Appearance'), security: t('مركز الأمان', 'Security center'), notifications: t('تفضيلات الإشعارات', 'Notification preferences'), chart: t('إعدادات الشارت', 'Chart settings'), about: t('حول ORIN', 'About ORIN'), admin: t('إدارة إعدادات الشارت', 'Admin chart settings'), language: t('اللغة', 'Language'), devices: t('الأجهزة', 'Devices'), privacy: t('الخصوصية', 'Privacy'), documents: t('المستندات', 'Documents'), support: t('الدعم', 'Support'), referral: t('مركز الإحالات', 'Referral center'), agent: t('مركز الوكلاء', 'Agent center'), 'two-factor': t('المصادقة الثنائية', 'Two-factor authentication'), data:t('البيانات والخصوصية','Data & privacy'), authenticator: t('تطبيق المصادقة', 'Authenticator setup'), kyc: t('توثيق الهوية (KYC)', 'Identity verification (KYC)') };
+    const titles = { account: t('الملف الشخصي', 'Your profile'), appearance: t('المظهر', 'Appearance'), security: t('مركز الأمان', 'Security center'), notifications: t('تفضيلات الإشعارات', 'Notification preferences'), chart: t('إعدادات الشارت', 'Chart settings'), about: t('حول ORIN', 'About ORIN'), admin: t('إدارة إعدادات الشارت', 'Admin chart settings'), language: t('اللغة', 'Language'), devices: t('الأجهزة', 'Devices'), privacy: t('الخصوصية', 'Privacy'), documents: t('المستندات', 'Documents'), support: t('الدعم', 'Support'), referral: t('مركز الإحالات', 'Referral center'), agent: t('مركز الوكلاء', 'Agent center'), 'two-factor': t('المصادقة الثنائية', 'Two-factor authentication'), data:t('البيانات والخصوصية','Data & privacy'), authenticator: t('تطبيق المصادقة', 'Authenticator setup'), kyc: t('توثيق الهوية (KYC)', 'Identity verification (KYC)'), app: t('تطبيق الجوال', 'Mobile app') };
     const profile = settings?.profile;
     const activeAccount=state?.accountDirectory?.accounts.find(a=>a.id===state.accountDirectory?.activeId);
     const tier = state?.user.tier === 'advanced' ? t('متقدم', 'Advanced') : t('قياسي', 'Standard');
@@ -122,6 +122,7 @@ export function AccountSettings({ state, onTerms, onAdmin, onLedger, onNotificat
    <SettingsRow icon={<UserRound/>} title={t('برنامج الوكالة','Agency program')} onClick={()=>navigation.navigate('/agent')}/>
   </section>
   <h2 className="settings-section-label">{t('نحن هنا لمساعدتك','Here to help')}</h2><section className="settings-group">
+   <SettingsRow icon={<Smartphone/>} title={t('تطبيق الجوال','Mobile app')} detail={t('أندرويد APK و iOS','Android APK & iOS')} onClick={()=>setPanel('app')}/>
    <SettingsRow icon={<Headphones/>} title={t('المساعدة والدعم','Help & support')} onClick={()=>navigation.navigate('/support')}/>
    <SettingsRow icon={<ClipboardList/>} title={t('الشروط والسياسات','Terms & policies')} onClick={onTerms}/>
    <SettingsRow icon={<Info/>} title={t('حول ORIN','About ORIN')} detail={APP_VERSION} onClick={()=>setPanel('about')}/>
@@ -141,6 +142,85 @@ export function AccountSettings({ state, onTerms, onAdmin, onLedger, onNotificat
   {panel === 'security' && <SecurityCenter t={t} onPassword={()=>navigation.navigate('/account/security')}/>}
   {panel === 'two-factor' && <SecurityCenter t={t} initialPanel="totp"/>}{panel === 'authenticator' && <SecurityCenter t={t} initialPanel="totp"/>}{panel === 'devices' && <SecurityCenter t={t} initialPanel="sessions"/>}{panel === 'admin' && <AdminChartSettings />}
   {panel === 'about' && <div className="about-data"><h2>ORIN {APP_VERSION}</h2><a href="/privacy">{t('سياسة الخصوصية','Privacy policy')}</a><img src="/brand/orin-mark.png" alt="ORIN"/><p>{t('الشارت يستخدم Coinbase Exchange لشموع BTC/USD وTradingView للأصول الأخرى. قد تختلف درجة التأخير بحسب المصدر والسوق.', 'BTC/USD candles use Coinbase Exchange; other assets use TradingView. Delays vary by source and market.')}</p><p>{t('العقود الداخلية مستقلة عن السوق. تظهر نسبة التسوية المقفلة قبل المشاركة، ولا تمثل تنفيذًا لأمر في بورصة.', 'Internal contracts are independent of the market. Locked settlement terms are shown before participation and do not represent an exchange execution.')}</p><p>{t('تكامل Widget الحالي لا يتيح وقت آخر سعر لـ ORIN، أو حفظ الرسومات، أو تنبيهات أسعار خلفية. تغيير الرمز أو الفاصل يعيد تهيئة الشارت.', 'The current widget does not expose the last quote time, drawing storage or background price alerts to ORIN. Changing symbol or interval reinitializes the chart.')}</p><a href="https://www.tradingview.com/widget-docs/widgets/charts/advanced-chart/" target="_blank" rel="noopener noreferrer">TradingView <ExternalLink size={14}/></a></div>}
+  {panel === 'app' && (
+    <div className="about-data settings-app-panel" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <h2>{t('تطبيقات ORIN الرسمية', 'Official ORIN Mobile Apps')}</h2>
+      <p style={{ margin: 0, fontSize: '13px', color: 'var(--orin-muted)', lineHeight: '1.6' }}>
+        {t('تداول فوري وأسعار حية مستقرة مع تحديثات تلقائية وتجربة سلسة على هاتفك.', 'Instant trading, live quotes, and seamless performance on your mobile phone.')}
+      </p>
+      <div style={{ padding: '16px', borderRadius: '16px', background: 'var(--orin-surface)', border: '1px solid var(--orin-line)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Smartphone size={22} style={{ color: '#20b792' }} />
+            <div>
+              <strong style={{ fontSize: '14px', display: 'block' }}>{t('تطبيق أندرويد (APK)', 'Android App (APK)')}</strong>
+              <small style={{ color: 'var(--orin-muted)', fontSize: '11px' }}>v1.6.2 Live · 36.6 MB</small>
+            </div>
+          </div>
+          <span style={{ fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: '100px', background: 'rgba(32, 183, 146, 0.15)', color: '#20b792' }}>
+            {t('رسمي مباشر', 'Official')}
+          </span>
+        </div>
+        <a
+          href="/downloads/ORIN-Android-1.6.2.apk"
+          download="ORIN-Android-1.6.2.apk"
+          className="btn-primary"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
+            padding: '11px 16px',
+            borderRadius: '12px',
+            background: 'linear-gradient(135deg, #20b792, #10ac89)',
+            color: '#fff',
+            textDecoration: 'none',
+            fontWeight: 600,
+            fontSize: '13px'
+          }}
+        >
+          <Download size={16} />
+          <span>{t('تحميل ملف APK المباشر', 'Download APK Package')}</span>
+        </a>
+      </div>
+      <div style={{ padding: '16px', borderRadius: '16px', background: 'var(--orin-surface)', border: '1px solid var(--orin-line)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Apple size={22} />
+            <div>
+              <strong style={{ fontSize: '14px', display: 'block' }}>{t('تطبيق آبل (Apple iOS)', 'Apple iOS App')}</strong>
+              <small style={{ color: 'var(--orin-muted)', fontSize: '11px' }}>{t('شاشة كاملة / WebClip', 'Fullscreen WebClip')}</small>
+            </div>
+          </div>
+          <span style={{ fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: '100px', background: 'rgba(7, 136, 255, 0.15)', color: '#0788ff' }}>
+            iOS WebClip
+          </span>
+        </div>
+        <a
+          href="/orin.mobileconfig"
+          download="orin.mobileconfig"
+          className="btn-outline"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
+            padding: '11px 16px',
+            borderRadius: '12px',
+            textDecoration: 'none',
+            fontWeight: 600,
+            fontSize: '13px'
+          }}
+        >
+          <Sparkles size={16} />
+          <span>{t('تحميل ملف تعريف iOS (.mobileconfig)', 'Install iOS Profile')}</span>
+        </a>
+        <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--orin-muted)', lineHeight: '1.5' }}>
+          {t('أو اضغط زر المشاركة (Share) في متصفح Safari ثم اختر "إضافة إلى الشاشة الرئيسية" لإضافة أيقونة التطبيق مباشرة.', 'Or tap Share in Safari and select "Add to Home Screen" to install instantly.')}
+        </p>
+      </div>
+    </div>
+  )}
   </DialogContent></Dialog>
  </div>;
 }
