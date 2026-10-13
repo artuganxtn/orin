@@ -47,7 +47,8 @@ export async function sendMailDirect(
   const port = Number(process.env.SMTP_PORT || 465);
   const secure = process.env.SMTP_SECURE !== 'false';
   const user = process.env.SMTP_USER || process.env.ORIN_MAIL_FROM || 'support@javl900.com';
-  const pass = process.env.SMTP_PASS || process.env.ORIN_MAIL_API_KEY || '';
+  const pass = process.env.SMTP_PASS || process.env.TITAN_PASSWORD || process.env.ORIN_MAIL_API_KEY || '';
+  const mailKey = (process.env.ORIN_MAIL_API_KEY || process.env.RESEND_API_KEY || '').trim();
 
   try {
     const transporter = nodemailer.createTransport({
@@ -55,20 +56,56 @@ export async function sendMailDirect(
       port,
       secure,
       auth: { user, pass },
-      connectionTimeout: 10000
+      connectionTimeout: 15000,
+      greetingTimeout: 10000,
+      socketTimeout: 20000
     });
 
     const info = await transporter.sendMail({
-      from: `ORIN Support <${user}>`,
+      from: `"ORIN Trading" <${user}>`,
       to,
       subject,
       html,
       text
     });
 
+    console.log(`[MAIL_SENT_SMTP] Successfully sent "${subject}" to ${to} (MessageID: ${info.messageId})`);
     return { ok: true, messageId: info.messageId };
-  } catch (err: any) {
-    return { ok: false, error: err.message };
+  } catch (smtpErr: any) {
+    console.warn(`[MAIL_SMTP_FAILED] SMTP delivery to ${to} failed: ${smtpErr.message}. Checking Resend API fallback...`);
+
+    if (mailKey && mailKey.startsWith('re_')) {
+      try {
+        const resendRes = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            Authorization: 'Bearer ' + mailKey,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            from: `ORIN Trading <${user}>`,
+            to: [to],
+            subject,
+            html,
+            text
+          }),
+          signal: AbortSignal.timeout(12000)
+        });
+
+        if (resendRes.ok) {
+          const json = await resendRes.json() as any;
+          console.log(`[MAIL_SENT_RESEND] Successfully sent "${subject}" to ${to} via Resend API (ID: ${json.id})`);
+          return { ok: true, messageId: json.id };
+        } else {
+          const errJson = await resendRes.json().catch(() => ({})) as any;
+          console.error(`[MAIL_RESEND_FAILED] Resend API error: ${errJson.message || resendRes.statusText}`);
+        }
+      } catch (resendErr: any) {
+        console.error(`[MAIL_RESEND_EXCEPTION] Resend API exception: ${resendErr.message}`);
+      }
+    }
+
+    return { ok: false, error: smtpErr.message };
   }
 }
 
