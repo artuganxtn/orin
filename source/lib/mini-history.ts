@@ -3,9 +3,9 @@ import {diagnostic} from './diagnostics';
 import type {QuotePoint} from './quote-stream';
 export const MINI_INTERVAL=15*60*1000;
 export const MINI_WINDOW=24*60*60*1000;
-export type MiniProvider='Coinbase Exchange'|'Kraken'|'Bitstamp'|'Gemini';
+export type MiniProvider='Coinbase Exchange'|'Kraken'|'Bitstamp'|'Gemini'|'Internal';
 export type MiniHistory={pair:string;source:MiniProvider;points:QuotePoint[];windowEnd:number;receivedAt?:number};
-const providers:MiniProvider[]=['Bitstamp','Kraken','Gemini','Coinbase Exchange'];
+const providers:MiniProvider[]=['Internal','Bitstamp','Kraken','Gemini','Coinbase Exchange'];
 export const MINI_TIMEOUT=12000;
 /** Avoid Promise.any: supported Android OS versions can carry older WebViews. */
 function firstAvailable<T>(tasks:Promise<T>[]):Promise<T>{return new Promise((resolve,reject)=>{let remaining=tasks.length;const errors:unknown[]=[];if(!remaining){reject(new Error('No history provider'));return}tasks.forEach(task=>Promise.resolve(task).then(resolve,error=>{errors.push(error);if(--remaining===0)reject(Object.assign(new Error('All history providers unavailable'),{causes:errors}))}))})}
@@ -75,6 +75,21 @@ export class MiniHistoryLoader{
   const key=pair+'|'+source,old=this.peek(pair,source);
   if(old&&this.now()-(old.receivedAt??old.windowEnd)<MINI_INTERVAL)return Promise.resolve(old);
   const running=this.pending.get(key);if(running)return running;
+  if(source==='Internal'){
+   const work=Promise.resolve().then(async()=>{
+    const controller=new AbortController();let timer:ReturnType<typeof setTimeout>;
+    const timeout=new Promise<never>((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(new Error('History request timed out'))},MINI_TIMEOUT)});
+    try{
+     const response=await Promise.race([this.request(`/api/market/candles?pair=${encodeURIComponent(pair)}`,{signal:controller.signal,credentials:'omit',headers:{Accept:'application/json'}}),timeout]);
+     if(!response.ok)throw new Error('HTTP '+response.status);
+     const json=await Promise.race([response.json(),timeout]) as any;
+     if(!json||!Array.isArray(json.points)||json.points.length<72)throw new Error('Insufficient internal history');
+     const data:MiniHistory={pair,source:'Internal',points:json.points,windowEnd:Number(json.windowEnd)||Math.floor(this.now()/MINI_INTERVAL)*MINI_INTERVAL,receivedAt:this.now()};
+     this.cache.set(key,data);return data;
+    }catch(error){diagnostic('market','mini_history_failed',{pair,provider:source,error:(error as Error).message});throw error}
+    finally{clearTimeout(timer!);this.pending.delete(key)}
+   });this.pending.set(key,work);return work;
+  }
   const url=source==='Gemini'?`https://api.gemini.com/v2/candles/${pair.replace('-','').toLowerCase()}/15m`:source==='Bitstamp'?`https://www.bitstamp.net/api/v2/ohlc/${pair.replace('-','').toLowerCase()}/?step=900&limit=96&exclude_current_candle=true`:source==='Kraken'?`https://api.kraken.com/0/public/OHLC?pair=${krakenPairs[pair]}&assetVersion=1&interval=15`:`https://api.exchange.coinbase.com/products/${pair}/candles?granularity=900`;
   // Defer execution so synchronous transport failures cannot leave a rejected promise stuck in pending.
   const work=Promise.resolve().then(async()=>{

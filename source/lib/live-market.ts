@@ -19,7 +19,15 @@ export function loadMarket(pair:string,frame:string):Promise<MarketData>{
  const read=async(path:string)=>{
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),10000);
   let status=0;
-  try{const res=await fetch('https://api.exchange.coinbase.com/products/'+pair+path,{signal:controller.signal,credentials:'omit',headers:{Accept:'application/json'}});status=res.status;
+  try{
+   let res:Response;
+   try{
+    res=await fetch('https://api.exchange.coinbase.com/products/'+pair+path,{signal:controller.signal,credentials:'omit',headers:{Accept:'application/json'}});
+    if(!res.ok)throw new Error('HTTP '+res.status);
+   }catch{
+    res=await fetch('/api/market/proxy?pair='+encodeURIComponent(pair)+'&endpoint='+encodeURIComponent(path),{signal:controller.signal,credentials:'omit',headers:{Accept:'application/json'}});
+   }
+   status=res.status;
    if(!res.ok)throw new Error('HTTP '+res.status);
    if(!res.headers.get('content-type')?.includes('application/json'))throw new Error('Expected JSON; received '+(res.headers.get('content-type')??'unknown content type'));
    return await res.json();

@@ -44,7 +44,7 @@ export class QuoteStream {
   let data:MarketQuote|null=null;
   try{
    const value=JSON.parse(this.options.storage?.getItem(CACHE_KEY)??'{}')[pair] as MarketQuote|undefined;
-   if(value&&value.pair===pair&&['Coinbase Exchange','Bitstamp','Kraken'].includes(value.source)&&this.now()-value.fetchedAt<600000&&value.fetchedAt<=this.now()&&value.asOf<=value.fetchedAt+60000&&value.fetchedAt-value.asOf<120000){
+   if(value&&value.pair===pair&&['Coinbase Exchange','Bitstamp','Kraken','Binance','ORIN Feed'].includes(value.source)&&this.now()-value.fetchedAt<600000&&value.fetchedAt<=this.now()&&value.asOf<=value.fetchedAt+60000&&value.fetchedAt-value.asOf<120000){
     const checked=decodeQuote(pair,{last:value.price,open:value.open,high:value.high,low:value.low,volume:value.volume},'coinbase',value.fetchedAt);
     data={...checked,source:value.source,asOf:value.asOf};
    }

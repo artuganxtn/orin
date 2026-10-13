@@ -396,10 +396,192 @@ app.post('/api/admin/mail/test', authMiddleware, async (req: Request, res: Respo
   res.json(result);
 });
 
-// 3. Public market configuration
+// 3. Public market configuration & feeds
 app.get('/api/markets/configuration', async (_req: Request, res: Response) => {
   try {
     res.json(await configuration());
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 3b. Public market proxy & quote feed (ensures clients behind ISP crypto blocks always receive live data)
+const marketQuoteCache = new Map<string, { expires: number; data: any }>();
+const marketCandleCache = new Map<string, { expires: number; data: any }>();
+
+app.get('/api/market/quote', async (req: Request, res: Response) => {
+  const pair = String(req.query.pair || 'BTC-USD').toUpperCase();
+  const cached = marketQuoteCache.get(pair);
+  if (cached && cached.expires > Date.now()) {
+    return res.json(cached.data);
+  }
+
+  const cleanPair = pair.replace('-', '').toLowerCase();
+  const binanceSymbol = pair.replace('-USD', 'USDT').replace('-', '');
+
+  // 1. Try Binance
+  try {
+    const bRes = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${binanceSymbol}`, { signal: AbortSignal.timeout(3500) }).catch(() => null);
+    if (bRes && bRes.ok) {
+      const bData = (await bRes.json()) as any;
+      const price = Number(bData.lastPrice);
+      const open = Number(bData.openPrice);
+      const high = Number(bData.highPrice);
+      const low = Number(bData.lowPrice);
+      const volume = Number(bData.volume);
+      const asOf = Number(bData.closeTime) || Date.now();
+      const quote = {
+        pair,
+        price,
+        open,
+        high,
+        low,
+        volume,
+        change: Number(bData.priceChangePercent) || ((price / open - 1) * 100),
+        fetchedAt: Date.now(),
+        asOf,
+        source: 'Binance'
+      };
+      marketQuoteCache.set(pair, { expires: Date.now() + 3000, data: quote });
+      return res.json(quote);
+    }
+  } catch {}
+
+  // 2. Try Bitstamp
+  try {
+    const bsRes = await fetch(`https://www.bitstamp.net/api/v2/ticker/${cleanPair}/`, { signal: AbortSignal.timeout(3500) }).catch(() => null);
+    if (bsRes && bsRes.ok) {
+      const bsData = (await bsRes.json()) as any;
+      const price = Number(bsData.last);
+      const open = Number(bsData.open_24);
+      const high = Number(bsData.high);
+      const low = Number(bsData.low);
+      const volume = Number(bsData.volume);
+      const asOf = Number(bsData.timestamp) * 1000 || Date.now();
+      const quote = {
+        pair,
+        price,
+        open,
+        high,
+        low,
+        volume,
+        change: (price / open - 1) * 100,
+        fetchedAt: Date.now(),
+        asOf,
+        source: 'Bitstamp'
+      };
+      marketQuoteCache.set(pair, { expires: Date.now() + 3000, data: quote });
+      return res.json(quote);
+    }
+  } catch {}
+
+  // 3. Try Coinbase
+  try {
+    const cbRes = await fetch(`https://api.exchange.coinbase.com/products/${pair}/stats`, { signal: AbortSignal.timeout(3500) }).catch(() => null);
+    if (cbRes && cbRes.ok) {
+      const cbData = (await cbRes.json()) as any;
+      const price = Number(cbData.last);
+      const open = Number(cbData.open);
+      const high = Number(cbData.high);
+      const low = Number(cbData.low);
+      const volume = Number(cbData.volume);
+      const quote = {
+        pair,
+        price,
+        open,
+        high,
+        low,
+        volume,
+        change: (price / open - 1) * 100,
+        fetchedAt: Date.now(),
+        asOf: Date.now(),
+        source: 'Coinbase Exchange'
+      };
+      marketQuoteCache.set(pair, { expires: Date.now() + 3000, data: quote });
+      return res.json(quote);
+    }
+  } catch {}
+
+  res.status(503).json({ error: 'Market feed unavailable' });
+});
+
+app.get('/api/market/candles', async (req: Request, res: Response) => {
+  const pair = String(req.query.pair || 'BTC-USD').toUpperCase();
+  const cached = marketCandleCache.get(pair);
+  if (cached && cached.expires > Date.now()) {
+    return res.json(cached.data);
+  }
+
+  const cleanPair = pair.replace('-', '').toLowerCase();
+  const binanceSymbol = pair.replace('-USD', 'USDT').replace('-', '');
+
+  try {
+    const bRes = await fetch(`https://api.binance.com/api/v3/klines?symbol=${binanceSymbol}&interval=15m&limit=96`, { signal: AbortSignal.timeout(4000) }).catch(() => null);
+    if (bRes && bRes.ok) {
+      const klines = (await bRes.json()) as any[];
+      const points = klines.map((k: any) => ({
+        at: Math.floor(Number(k[0]) / 900000) * 900000,
+        price: Number(k[4])
+      }));
+      const windowEnd = Math.floor(Date.now() / 900000) * 900000;
+      const result = {
+        pair,
+        source: 'Binance',
+        points,
+        windowEnd,
+        receivedAt: Date.now()
+      };
+      marketCandleCache.set(pair, { expires: Date.now() + 60000, data: result });
+      return res.json(result);
+    }
+  } catch {}
+
+  try {
+    const bsRes = await fetch(`https://www.bitstamp.net/api/v2/ohlc/${cleanPair}/?step=900&limit=96&exclude_current_candle=true`, { signal: AbortSignal.timeout(4000) }).catch(() => null);
+    if (bsRes && bsRes.ok) {
+      const bsData = (await bsRes.json()) as any;
+      const ohlc = bsData?.data?.ohlc || [];
+      const points = ohlc.map((k: any) => ({
+        at: Number(k.timestamp) * 1000,
+        price: Number(k.close)
+      }));
+      const windowEnd = Math.floor(Date.now() / 900000) * 900000;
+      const result = {
+        pair,
+        source: 'Bitstamp',
+        points,
+        windowEnd,
+        receivedAt: Date.now()
+      };
+      marketCandleCache.set(pair, { expires: Date.now() + 60000, data: result });
+      return res.json(result);
+    }
+  } catch {}
+
+  res.status(503).json({ error: 'Candles unavailable' });
+});
+
+app.get('/api/market/proxy', async (req: Request, res: Response) => {
+  const pair = String(req.query.pair || 'BTC-USD');
+  const endpoint = String(req.query.endpoint || '/ticker');
+  try {
+    const cbRes = await fetch('https://api.exchange.coinbase.com/products/' + pair + endpoint, { signal: AbortSignal.timeout(6000), headers: { Accept: 'application/json' } });
+    if (!cbRes.ok) return res.status(cbRes.status).json({ error: 'Upstream error' });
+    const data = await cbRes.json();
+    res.json(data);
+  } catch (err: any) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
+// Public published content (banner, terms, etc.)
+app.get('/api/content/:slug', async (req: Request, res: Response) => {
+  try {
+    const result = await withTx(async (client) => {
+      const docRes = await client.query('SELECT data FROM docs WHERE collection = $1 AND id = $2', ['public_content', req.params.slug]);
+      return docRes.rows[0]?.data || null;
+    });
+    res.json(result || { slug: req.params.slug, status: 'empty' });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
