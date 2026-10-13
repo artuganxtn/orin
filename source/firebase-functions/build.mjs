@@ -30,3 +30,13 @@ await build({
   packages: 'external',
   sourcemap: true
 });
+
+import fs from 'node:fs';
+import path from 'node:path';
+
+const parentMigrations = path.resolve(process.cwd(), '../migrations');
+const localMigrations = path.resolve(process.cwd(), 'migrations');
+if (fs.existsSync(parentMigrations)) {
+  fs.cpSync(parentMigrations, localMigrations, { recursive: true });
+}
+
