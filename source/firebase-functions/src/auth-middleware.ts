@@ -18,19 +18,31 @@ declare global {
   }
 }
 
+type RejectReason =
+  | 'no_bearer' | 'token_invalid' | 'token_expired' | 'verify_unavailable'
+  | 'account_disabled' | 'access_blocked' | 'session_revoked' | 'email_unverified' | 'db_error';
+
+/** One structured log line per rejection: reason code (and an error *code*) only, never tokens or messages. */
+function reject(req: Request, res: Response, status: number, reason: RejectReason, body: Record<string, unknown>, code?: string) {
+  console.warn(JSON.stringify({ evt: 'auth_reject', reason, status, method: req.method, path: req.path, ...(code ? { code } : {}) }));
+  return res.status(status).json(body);
+}
+
 export async function authMiddleware(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'سجّل الدخول للمتابعة.' });
+    return reject(req, res, 401, 'no_bearer', { error: 'سجّل الدخول للمتابعة.' });
   }
 
   const token = authHeader.slice(7);
+  let uid: string;
+  let email: string;
+  let name: string = 'مستخدم ORIN';
+  let verified: boolean = true;
+  let tokenIatMs: number = Date.now();
+
+  // Step A: identity. Only a genuinely bad token produces 401.
   try {
-    let uid: string;
-    let email: string;
-    let name: string = 'مستخدم ORIN';
-    let verified: boolean = true;
-    let tokenIatMs: number = Date.now();
 
     // Test auth bypass ONLY when NODE_ENV === 'test'
     if (process.env.NODE_ENV === 'test' && token.startsWith('test-token-')) {
@@ -51,15 +63,26 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
       email = decoded.email || `${uid}@orin.top`;
       name = typeof decoded.name === 'string' ? decoded.name : 'مستخدم ORIN';
       verified = decoded.email_verified === true;
-      tokenIatMs = (decoded.auth_time || decoded.iat || Math.floor(Date.now() / 1000)) * 1000;
+      // iat (time THIS token was issued), not auth_time: a token minted after a revocation is always valid.
+      tokenIatMs = (decoded.iat || decoded.auth_time || Math.floor(Date.now() / 1000)) * 1000;
     }
+  } catch (err: any) {
+    const code = String(err?.code || 'unknown');
+    if (code.startsWith('auth/')) {
+      return reject(req, res, 401, code === 'auth/id-token-expired' ? 'token_expired' : 'token_invalid', { error: 'انتهت جلسة الدخول. سجّل الدخول مجددًا.' }, code);
+    }
+    // e.g. app/network-error while fetching signing certs: our side, not the user's session.
+    return reject(req, res, 503, 'verify_unavailable', { error: 'الخدمة غير متاحة مؤقتًا. أعد المحاولة.', code: 'auth_backend_unavailable' }, code);
+  }
 
-    let role = 'user';
-    let isDisabled = false;
-    let isBlocked = false;
-    let blockReason = '';
-    let validAfterMs = 0;
-    let profileEmailVerified = false;
+  // Step B: account state. A database failure must never look like an expired login.
+  let role = 'user';
+  let isDisabled = false;
+  let isBlocked = false;
+  let blockReason = '';
+  let validAfterMs = 0;
+  let profileEmailVerified = false;
+  try {
 
     await withTx(async (client) => {
       // Upsert default profile row
@@ -103,6 +126,7 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
         [uid]
       );
 
+      // Gate only applies once migration 013 has run. Until then (42703 undefined_column) treat as verified.
       profileEmailVerified = true;
       try {
         await client.query('SAVEPOINT sp_ev');
@@ -111,8 +135,9 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
           profileEmailVerified = evCheck.rows[0].email_verified === true;
         }
         await client.query('RELEASE SAVEPOINT sp_ev');
-      } catch {
+      } catch (evErr: any) {
         await client.query('ROLLBACK TO SAVEPOINT sp_ev').catch(() => {});
+        if (evErr?.code !== '42703') throw evErr;
         profileEmailVerified = true;
       }
 
@@ -146,41 +171,38 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
         }
       }
     });
-
-    // 1. Reject if profile disabled
-    if (isDisabled) {
-      console.warn(`[AUTH_REJECT_DISABLED] User ${uid}`);
-      return res.status(403).json({ error: 'الوصول إلى الحساب موقوف.' });
-    }
-
-    // 2. Reject if access_status restricted/suspended/blocked
-    if (isBlocked) {
-      console.warn(`[AUTH_REJECT_BLOCKED] User ${uid} reason: ${blockReason}`);
-      return res.status(403).json({ error: blockReason });
-    }
-
-    // 3. Reject if token issued strictly before session_revocations.valid_after (seconds comparison)
-    const tokenIatSec = Math.floor(tokenIatMs / 1000);
-    const validAfterSec = Math.floor(validAfterMs / 1000);
-    if (validAfterSec > 0 && tokenIatSec < validAfterSec) {
-      console.warn(`[AUTH_REJECT_SESSION_REVOKED] User ${uid} tokenIatSec (${tokenIatSec}) < validAfterSec (${validAfterSec})`);
-      return res.status(401).json({ error: 'انتهت الجلسة. أعد تسجيل الدخول.' });
-    }
-
-    // 4. Reject with 403 code email_unverified if email not verified in token AND not verified in profiles
-    const isExemptPath = req.path.startsWith('/security/logout') || req.path.startsWith('/identity/') || req.path.startsWith('/email/unsubscribe');
-    if (!verified && !profileEmailVerified && !isExemptPath) {
-      console.warn(`[AUTH_REJECT_EMAIL_UNVERIFIED] User ${uid}`);
-      return res.status(403).json({
-        error: 'يرجى تأكيد البريد الإلكتروني أولاً. / Email verification required.',
-        code: 'email_unverified'
-      });
-    }
-
-    req.user = { id: uid, email, name, verified, role };
-    next();
   } catch (err: any) {
-    console.warn(`[AUTH_REJECT_VERIFY_TOKEN_FAILED] ${err?.message || 'Token verification failed'}`);
-    return res.status(401).json({ error: 'انتهت جلسة الدخول. سجّل الدخول مجددًا.' });
+    return reject(req, res, 503, 'db_error', { error: 'الخدمة غير متاحة مؤقتًا. أعد المحاولة.', code: 'auth_backend_unavailable' }, String(err?.code || 'unknown'));
   }
+
+  // 1. Reject if profile disabled
+  if (isDisabled) {
+    return reject(req, res, 403, 'account_disabled', { error: 'الوصول إلى الحساب موقوف.' });
+  }
+
+  // 2. Reject if access_status restricted/suspended/blocked
+  if (isBlocked) {
+    return reject(req, res, 403, 'access_blocked', { error: blockReason });
+  }
+
+  // 3. Reject only if the token was issued strictly before the last revocation.
+  //    Both sides are floored to whole seconds (JWT iat has 1s resolution; valid_after has sub-second precision),
+  //    so a token minted in the same second as the revocation, or later, is accepted.
+  const tokenIatSec = Math.floor(tokenIatMs / 1000);
+  const validAfterSec = Math.floor(validAfterMs / 1000);
+  if (validAfterSec > 0 && tokenIatSec < validAfterSec) {
+    return reject(req, res, 401, 'session_revoked', { error: 'انتهت الجلسة. أعد تسجيل الدخول.' });
+  }
+
+  // 4. Reject with 403 code email_unverified if email not verified in token AND not verified in profiles
+  const isExemptPath = req.path.startsWith('/security/logout') || req.path.startsWith('/identity/') || req.path.startsWith('/email/unsubscribe');
+  if (!verified && !profileEmailVerified && !isExemptPath) {
+    return reject(req, res, 403, 'email_unverified', {
+      error: 'يرجى تأكيد البريد الإلكتروني أولاً. / Email verification required.',
+      code: 'email_unverified'
+    });
+  }
+
+  req.user = { id: uid, email, name, verified, role };
+  next();
 }

@@ -204,7 +204,11 @@ app.post('/api/auth/reset/confirm', async (req: Request, res: Response) => {
 
     await withTx(async (client) => {
       await client.query(`UPDATE otp_challenges SET consumed_at = NOW() WHERE id = $1`, [challengeId]);
-      await client.query(`INSERT INTO session_revocations (user_id, valid_after) VALUES ($1, NOW())`, [uid]);
+      await client.query(
+        `INSERT INTO session_revocations (user_id, valid_after, updated_at) VALUES ($1, NOW(), NOW())
+         ON CONFLICT (user_id) DO UPDATE SET valid_after = NOW(), updated_at = NOW()`,
+        [uid]
+      );
 
       const payload = JSON.stringify({ uid, email, action: 'PASSWORD_RESET_COMPLETED' });
       await client.query(
