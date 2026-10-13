@@ -42,4 +42,24 @@ export function OrinSettingsProvider({children,initialSettings,onSettingsChange}
  const number=(n:number,digits=2)=>new Intl.NumberFormat('en-US',{minimumFractionDigits:digits,maximumFractionDigits:digits}).format(n);
  return <OrinContext.Provider value={{prefs,configuration,settings,status,error,marketReady,theme,t,change,saveProfile,saveConfiguration,reload,number}}>{children}</OrinContext.Provider>;
 }
-export function useOrin(){const c=useContext(OrinContext);if(!c)throw new Error('OrinSettingsProvider is required');return c;}
+
+const fallbackOrinContext = {
+  prefs: parsePreferences({}, DEFAULT_MARKET_CONFIGURATION),
+  configuration: DEFAULT_MARKET_CONFIGURATION,
+  settings: null,
+  status: 'synced' as const,
+  error: '',
+  marketReady: true,
+  theme: 'dark',
+  t: (ar: string, en?: string) => ar,
+  change: async () => false,
+  saveProfile: async () => false,
+  saveConfiguration: async () => false,
+  reload: async () => {},
+  number: (n: number, digits = 2) => new Intl.NumberFormat('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(n)
+};
+
+export function useOrin() {
+  const c = useContext(OrinContext);
+  return c || fallbackOrinContext;
+}
