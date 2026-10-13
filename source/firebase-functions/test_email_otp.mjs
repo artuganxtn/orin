@@ -191,6 +191,8 @@ console.log('✔ Double-entry ledger invariant verified: 0 mismatches across all
 // TEST 8: EMAIL UNVERIFIED USER REJECTION (GATE CHECK)
 console.log('\n--- TEST 8: Email Unverified User Gate Check ---');
 
+await client.query(`DELETE FROM session_revocations WHERE user_id = 'usr-unverified-1'`);
+
 await client.query(`
   INSERT INTO profiles (id, email, display_name, role, email_verified)
   VALUES ('usr-unverified-1', 'unverified@javl900.com', 'Unverified User', 'user', FALSE)

@@ -1,5 +1,5 @@
 import React,{useEffect,useState,type FormEvent} from 'react';
-import {KeyRound,Mail,LockKeyhole,UserRound,Eye,EyeOff,Gift,CheckCircle2,ShieldCheck} from 'lucide-react';
+import {KeyRound,Mail,LockKeyhole,UserRound,Eye,EyeOff,Gift,ShieldCheck,CheckCircle2} from 'lucide-react';
 import {initializeApp} from 'firebase/app';
 import {getAuth,signInWithEmailAndPassword,signInWithCustomToken,type User} from 'firebase/auth';
 
@@ -49,7 +49,7 @@ export function AuthForm({path,done}:{path:string;done:()=>void}){
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[sent,setSent]=useState(false),[show,setShow]=useState(false),[showConfirmation,setShowConfirmation]=useState(false);
  const [referral,setReferral]=useState(invitation),[notice,setNotice]=useState('');
 
- // OTP Step state for signup flow
+ // OTP Step state for signup & password reset flows
  const [otpStep,setOtpStep]=useState(false);
  const [challengeId,setChallengeId]=useState('');
  const [otpCode,setOtpCode]=useState('');
@@ -134,11 +134,66 @@ export function AuthForm({path,done}:{path:string;done:()=>void}){
     throw {code:data?.code||'code-invalid'};
    }
 
-   // Authenticate client with custom token returned by server
    await signInWithCustomToken(auth,data.token);
    void ensureSecuritySession().catch(()=>{});
    setPassword('');setConfirmation('');
    done();
+  }catch(e){
+   setError(fail(e));
+  }finally{
+   lock.current=false;setBusy(false);
+  }
+ }
+
+ async function sendResetOtp(){
+  const normalizedEmail=email.trim().toLowerCase();
+  if(!validEmail(normalizedEmail)){setError(t('أدخل بريدًا صحيحًا.','Enter a valid email.'));return;}
+
+  lock.current=true;setBusy(true);setError('');
+  try{
+   const res=await apiFetch('/api/auth/reset/start',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({email:normalizedEmail})
+   });
+   const data=await res.json();
+   setNotice(data.message||t('أرسلنا رمز الاستعادة إلى بريدك.','Reset code sent to your email.'));
+   setOtpStep(true);
+   setCooldown(60);
+  }catch(e){
+   setError(fail(e));
+  }finally{
+   lock.current=false;setBusy(false);
+  }
+ }
+
+ async function confirmResetOtp(e:FormEvent){
+  e.preventDefault();
+  if(lock.current)return;
+  if(otpCode.trim().length!==6){setError(t('أدخل كود التحقق المكون من 6 أرقام.','Enter 6-digit verification code.'));return;}
+  if(password.length<8){setError(t('أدخل كلمة مرور جديدة من 8 أحرف على الأقل.','Enter a new password of at least 8 characters.'));return;}
+  if(password!==confirmation){setError(t('تأكيد كلمة المرور غير مطابق.','The passwords do not match.'));return;}
+
+  const normalizedEmail=email.trim().toLowerCase();
+  lock.current=true;setBusy(true);setError('');
+
+  try{
+   const res=await apiFetch('/api/auth/reset/confirm',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+     email:normalizedEmail,
+     code:otpCode.trim(),
+     newPassword:password
+    })
+   });
+   const data=await res.json();
+   if(!res.ok){
+    throw {code:data?.code||'code-invalid'};
+   }
+   setSent(true);
+   setOtpStep(false);
+   setPassword('');setConfirmation('');setOtpCode('');
   }catch(e){
    setError(fail(e));
   }finally{
@@ -160,21 +215,22 @@ export function AuthForm({path,done}:{path:string;done:()=>void}){
    return;
   }
 
+  if(mode==='reset'){
+   if(!otpStep){
+    await sendResetOtp();
+   }else{
+    await confirmResetOtp(e);
+   }
+   return;
+  }
+
   const normalizedEmail=email.trim().toLowerCase();
   lock.current=true;setBusy(true);setError('');
   try{
-   if(mode==='reset'){
-    const res=await apiFetch('/api/auth/reset/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:normalizedEmail})});
-    const data=await res.json();
-    setNotice(data.message||t('أرسلنا رمز الاستعادة إلى بريدك.','Reset code sent to your email.'));
-    setOtpStep(true);
-    setSent(true);
-   }else{
-    await signInWithEmailAndPassword(auth,normalizedEmail,password);
-    void ensureSecuritySession().catch(()=>{});
-    setPassword('');
-    done();
-   }
+   await signInWithEmailAndPassword(auth,normalizedEmail,password);
+   void ensureSecuritySession().catch(()=>{});
+   setPassword('');
+   done();
   }catch(e){
    setError(fail(e));
   }finally{
@@ -188,13 +244,18 @@ export function AuthForm({path,done}:{path:string;done:()=>void}){
   <div className="auth-heading orin-auth-hero">
    <div className="auth-hero-art" aria-hidden="true"><img src="/brand/orin-mark.png" alt=""/></div>
    <span className="auth-eyebrow">ORIN</span>
-   <h1>{otpStep?t('تأكيد البريد الإلكتروني','Verify Email'):mode==='register'?t('إنشاء حساب جديد','Create your account'):mode==='reset'?t('استعادة كلمة المرور','Reset password'):t('تسجيل الدخول','Welcome back')}</h1>
-   <p>{otpStep?t('أدخل الكود المكون من 6 أرقام المرسل لبريدك.','Enter 6-digit code sent to your email.'):mode==='register'?t('ابدأ رحلتك مع ORIN.','Start your journey with ORIN.'):mode==='reset'?t('سنرسل رابطًا آمنًا إلى بريدك.','We will send a secure link to your email.'):t('مرحبًا بعودتك إلى ORIN.','Sign in to your ORIN account.')}</p>
+   <h1>{otpStep?(mode==='reset'?t('رمز تعيين كلمة المرور','Reset Password Code'):t('تأكيد البريد الإلكتروني','Verify Email')):mode==='register'?t('إنشاء حساب جديد','Create your account'):mode==='reset'?t('استعادة كلمة المرور','Reset password'):t('تسجيل الدخول','Welcome back')}</h1>
+   <p>{otpStep?t('أدخل الكود المكون من 6 أرقام المرسل لبريدك.','Enter 6-digit code sent to your email.'):mode==='register'?t('ابدأ رحلتك مع ORIN.','Start your journey with ORIN.'):mode==='reset'?t('سنرسل لك رمز التأكيد لإعادة تعيين كلمة المرور.','We will send a secure link to your email.'):t('مرحبًا بعودتك إلى ORIN.','Sign in to your ORIN account.')}</p>
   </div>
 
   <form className="card form" onSubmit={submit} aria-busy={busy}>
    {error&&<div className="message error" role="alert">{error}</div>}
-   {sent?<div className="message" role="status">{t('إذا كان البريد مسجّلًا، فستصلك رسالة الاستعادة. تحقق من الرسائل غير المرغوبة أيضًا.','If this email is registered, a reset email will arrive. Check your spam folder too.')}</div>:<>
+   {sent?<div className="message" role="status" style={{display:'flex',flexDirection:'column',gap:'10px',alignItems:'center',textAlign:'center'}}>
+    <CheckCircle2 size={32} style={{color:'#10b981'}}/>
+    <b>{t('تم تعيين كلمة المرور بنجاح!','Password reset completed successfully!')}</b>
+    <p>{t('يمكنك الآن تسجيل الدخول بكلمة المرور الجديدة.','You can now sign in with your new password.')}</p>
+    <button className="primary" type="button" onClick={()=>to('/login')}>{t('الانتقال لتسجيل الدخول','Go to Sign In')}</button>
+   </div>:<>
 
     {otpStep ? (
      <div style={{display:'flex',flexDirection:'column',gap:'14px'}}>
@@ -222,15 +283,63 @@ export function AuthForm({path,done}:{path:string;done:()=>void}){
        </span>
       </label>
 
-      <button className="primary" disabled={busy||otpCode.length!==6}>
-       {busy?t('جار التحقق وإنشاء الحساب…','Verifying…'):t('تأكيد وإنشاء الحساب','Verify & Create Account')}
+      {mode==='reset' && (
+       <>
+        <label>{t('كلمة المرور الجديدة','New Password')}
+         <span className="password-field auth-input">
+          <LockKeyhole aria-hidden="true"/>
+          <input
+           type={show?'text':'password'}
+           dir="ltr"
+           placeholder="••••••••"
+           autoComplete="new-password"
+           value={password}
+           onChange={e=>setPassword(e.target.value)}
+           minLength={8}
+           maxLength={128}
+           required
+           disabled={busy}
+          />
+          <button type="button" aria-label={show?t('إخفاء','Hide'):t('إظهار','Show')} onClick={()=>setShow(v=>!v)}>
+           {show?<EyeOff/>:<Eye/>}
+          </button>
+         </span>
+         <meter min={0} max={4} value={strength} aria-label={t('قوة كلمة المرور','Password strength')}/>
+         <small aria-live="polite">{password?strengthLabels[strength]:t('8 أحرف على الأقل.','At least 8 characters.')}</small>
+        </label>
+
+        <label>{t('تأكيد كلمة المرور الجديدة','Confirm New Password')}
+         <span className="password-field auth-input">
+          <LockKeyhole aria-hidden="true"/>
+          <input
+           type={showConfirmation?'text':'password'}
+           dir="ltr"
+           placeholder={t('أعد إدخال كلمة المرور','Re-enter password')}
+           autoComplete="new-password"
+           value={confirmation}
+           onChange={e=>setConfirmation(e.target.value)}
+           minLength={8}
+           maxLength={128}
+           required
+           disabled={busy}
+          />
+          <button type="button" aria-label={showConfirmation?t('إخفاء','Hide'):t('إظهار','Show')} onClick={()=>setShowConfirmation(v=>!v)}>
+           {showConfirmation?<EyeOff/>:<Eye/>}
+          </button>
+         </span>
+        </label>
+       </>
+      )}
+
+      <button className="primary" disabled={busy||otpCode.length!==6||(mode==='reset'&&(!password||password!==confirmation))}>
+       {busy?t('جار التأكيد…','Confirming…'):mode==='reset'?t('تغيير كلمة المرور','Reset Password'):t('تأكيد وإنشاء الحساب','Verify & Create Account')}
       </button>
 
       <div style={{display:'flex',alignItems:'center',justify:'space-between',marginTop:'6px',fontSize:'13px'}}>
        <button
         type="button"
         disabled={busy||cooldown>0}
-        onClick={()=>void sendSignupOtp()}
+        onClick={()=>void (mode==='reset'?sendResetOtp():sendSignupOtp())}
         style={{border:0,background:'none',color:cooldown>0?'#94a3b8':'#0788ff',cursor:cooldown>0?'not-allowed':'pointer',fontWeight:600}}
        >
         {cooldown>0?t(`إعادة الإرسال بعد ${cooldown}ث`,`Resend in ${cooldown}s`):t('إعادة إرسال الرمز','Resend Code')}
@@ -252,7 +361,7 @@ export function AuthForm({path,done}:{path:string;done:()=>void}){
       {notice&&<div className="message" role="status">{notice}</div>}
       {mode!=='reset'&&<label>{t('كلمة المرور','Password')}<span className="password-field auth-input"><LockKeyhole aria-hidden="true"/><input type={show?'text':'password'} dir="ltr" placeholder="••••••••" autoComplete={mode==='register'?'new-password':'current-password'} value={password} onChange={e=>setPassword(e.target.value)} minLength={mode==='register'?8:1} maxLength={128} required disabled={busy}/><button type="button" aria-label={show?t('إخفاء كلمة المرور','Hide password'):t('إظهار كلمة المرور','Show password')} aria-pressed={show} onClick={()=>setShow(v=>!v)}>{show?<EyeOff aria-hidden="true"/>:<Eye aria-hidden="true"/>}</button></span>{mode==='register'&&<><meter min={0} max={4} value={strength} aria-label={t('قوة كلمة المرور','Password strength')}/><small aria-live="polite">{password?strengthLabels[strength]:t('8 أحرف على الأقل.','At least 8 characters.')}</small></>}</label>}
       {mode==='register'&&<><label>{t('تأكيد كلمة المرور','Confirm password')}<span className="password-field auth-input"><LockKeyhole aria-hidden="true"/><input type={showConfirmation?'text':'password'} dir="ltr" placeholder={t('أعد إدخال كلمة المرور','Re-enter password')} autoComplete="new-password" value={confirmation} onChange={e=>setConfirmation(e.target.value)} required minLength={8} maxLength={128} disabled={busy}/><button type="button" aria-label={showConfirmation?t('إخفاء تأكيد كلمة المرور','Hide confirmation'):t('إظهار تأكيد كلمة المرور','Show confirmation')} aria-pressed={showConfirmation} onClick={()=>setShowConfirmation(v=>!v)}>{showConfirmation?<EyeOff/>:<Eye/>}</button></span></label><label>{t('كود الدعوة (اختياري)','Invitation code (optional)')}<span className="auth-input"><Gift aria-hidden="true"/><input dir="ltr" autoCapitalize="characters" spellCheck={false} autoComplete="off" maxLength={17} placeholder="ORIN-XXXXXXXXXXXX" value={referral} onChange={e=>setReferral(e.target.value.trim().toUpperCase())} disabled={busy}/></span></label></>}
-      <button className="primary" disabled={busy}>{busy?t('جار التنفيذ…','Please wait…'):mode==='register'?t('المتابعة لإرسال الرمز','Continue to Send Code'):mode==='reset'?t('إرسال رابط الاستعادة','Send reset link'):t('دخول','Sign in')}</button>
+      <button className="primary" disabled={busy}>{busy?t('جار التنفيذ…','Please wait…'):mode==='register'?t('المتابعة لإرسال الرمز','Continue to Send Code'):mode==='reset'?t('إرسال كود الاستعادة','Send Reset Code'):t('دخول','Sign in')}</button>
      </>
     )}
    </>}
