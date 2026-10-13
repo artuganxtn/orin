@@ -2,6 +2,7 @@ import nodemailer from 'nodemailer';
 import { randomUUID } from 'node:crypto';
 import { withTx, getPool } from '../db.ts';
 import { renderEmailTemplate } from './templates.ts';
+import { normalizeFromAddress, getMailer } from '../email-service.ts';
 
 export interface SentMemoryEmail {
   id: string;
@@ -75,19 +76,9 @@ export async function verifyMailConnectionAtStartup(): Promise<void> {
 }
 
 export function getMailFromAddress(): string {
-  let from = (process.env.SMTP_FROM || '').trim();
-  if (from) {
-    if (!from.includes('@')) {
-      const user = (process.env.SMTP_USER || process.env.ORIN_MAIL_FROM || 'support@javl900.com').trim();
-      from = `"${from.replace(/"/g, '')}" <${user}>`;
-    }
-    return from;
-  }
-  const raw = (process.env.ORIN_MAIL_FROM || process.env.SMTP_USER || 'support@javl900.com').trim();
-  if (raw.includes('<') && raw.includes('>')) {
-    return raw;
-  }
-  return `"ORIN Trading" <${raw}>`;
+  const user = (process.env.SMTP_USER || process.env.ORIN_MAIL_FROM || 'support@javl900.com').trim();
+  const raw = process.env.SMTP_FROM || process.env.ORIN_MAIL_FROM || user;
+  return normalizeFromAddress(raw, user);
 }
 
 export async function sendMailDirect(
@@ -118,28 +109,10 @@ export async function sendMailDirect(
     return { ok: true, messageId: msgId };
   }
 
-  const host = process.env.SMTP_HOST || 'smtp.titan.email';
-  const port = Number(process.env.SMTP_PORT || 465);
-  const secure = process.env.SMTP_SECURE !== 'false';
-  const rawFrom = (process.env.SMTP_FROM || process.env.ORIN_MAIL_FROM || process.env.SMTP_USER || 'support@javl900.com').trim();
-  const matchFrom = rawFrom.match(/<([^>]+)>/);
-  const emailOnly = matchFrom ? matchFrom[1].trim() : rawFrom.replace(/["']/g, '').trim();
-  const fromAddress = emailOnly;
-  const user = (process.env.SMTP_USER || fromAddress).trim();
-  const pass = (process.env.SMTP_PASS || process.env.TITAN_PASSWORD || process.env.ORIN_MAIL_API_KEY || '').trim();
   const mailKey = (process.env.ORIN_MAIL_API_KEY || process.env.RESEND_API_KEY || '').trim();
 
   try {
-    const transporter = nodemailer.createTransport({
-      host,
-      port,
-      secure,
-      auth: { user, pass },
-      connectionTimeout: 15000,
-      greetingTimeout: 10000,
-      socketTimeout: 20000
-    });
-
+    const transporter = getMailer();
     const from = getMailFromAddress();
     const info = await transporter.sendMail({
       from,
@@ -164,7 +137,7 @@ export async function sendMailDirect(
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            from: `ORIN <${fromAddress}>`,
+            from: getMailFromAddress(),
             to: [to],
             subject,
             html,

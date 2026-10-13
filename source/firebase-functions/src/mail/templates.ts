@@ -1,3 +1,5 @@
+import { renderOtpEmailHtml } from '../email-service.ts';
+
 export interface RenderedEmail {
   subject: string;
   html: string;
@@ -69,13 +71,11 @@ export function renderEmailTemplate(
   if (template === 'signup_code') {
     const code = String(payload.code || '000000');
     const subject = isAr ? 'رمز إنشاء حساب ORIN الخاص بك' : 'Your ORIN Account Verification Code';
-    const html = baseLayout(
-      subject,
-      `<h2>${isAr ? 'تأكيد البريد الإلكتروني' : 'Verify Your Email'}</h2>
-       <p>${isAr ? 'استخدم رمز التحقق التالي لتأكيد بريدك الإلكتروني وإنشاء حسابك في منصة ORIN:' : 'Use the following verification code to confirm your email address and create your ORIN account:'}</p>
-       <div class="code-box">${escapeHtml(code)}</div>
-       <p style="font-size:13px;color:#64748b;">${isAr ? 'الرمز صالح لمدة 10 دقائق واستخدام واحد فقط. لا تشارك الرمز مع أي شخص.' : 'The code is valid for 10 minutes for single use. Do not share it with anyone.'}</p>`,
-      locale
+    const html = renderOtpEmailHtml(
+      code,
+      isAr ? 'تأكيد البريد الإلكتروني' : 'Verify Your Email',
+      isAr ? 'استخدم رمز التحقق التالي لتأكيد بريدك الإلكتروني وإنشاء حسابك في منصة ORIN:' : 'Use the following verification code to confirm your email address and create your ORIN account:',
+      isAr ? 'رمز التحقق الخاص بك هو:' : 'Your ORIN verification code is:'
     );
     const text = `${subject}\n\n${isAr ? 'رمز التحقق الخاص بك:' : 'Your verification code:'} ${code}\n${isAr ? 'صالح لمدة 10 دقائق.' : 'Valid for 10 minutes.'}`;
     return { subject, html, text };
@@ -84,13 +84,11 @@ export function renderEmailTemplate(
   if (template === 'password_reset_code') {
     const code = String(payload.code || '000000');
     const subject = isAr ? 'رمز إعادة تعيين كلمة المرور - ORIN' : 'ORIN Password Reset Code';
-    const html = baseLayout(
-      subject,
-      `<h2>${isAr ? 'إعادة تعيين كلمة المرور' : 'Reset Your Password'}</h2>
-       <p>${isAr ? 'استخدم رمز التأكيد التالي لإعادة تعيين كلمة المرور الخاصة بحسابك في منصة ORIN:' : 'Use the following verification code to reset your ORIN account password:'}</p>
-       <div class="code-box">${escapeHtml(code)}</div>
-       <p style="font-size:13px;color:#64748b;">${isAr ? 'الرمز صالح لمدة 10 دقائق واستخدام واحد فقط. إذا لم تطلب إعادة التعيين، يرجى تجاهل هذه الرسالة.' : 'The code is valid for 10 minutes for single use. If you did not request a password reset, please ignore this email.'}</p>`,
-      locale
+    const html = renderOtpEmailHtml(
+      code,
+      isAr ? 'إعادة تعيين كلمة المرور' : 'Reset Your Password',
+      isAr ? 'استخدم رمز التأكيد التالي لإعادة تعيين كلمة المرور الخاصة بحسابك في منصة ORIN:' : 'Use the following verification code to reset your ORIN account password:',
+      isAr ? 'رمز إعادة تعيين كلمة المرور الخاص بك هو:' : 'Your ORIN password reset code is:'
     );
     const text = `${subject}\n\n${isAr ? 'رمز إعادة تعيين كلمة المرور:' : 'Password reset code:'} ${code}\n${isAr ? 'صالح لمدة 10 دقائق.' : 'Valid for 10 minutes.'}`;
     return { subject, html, text };

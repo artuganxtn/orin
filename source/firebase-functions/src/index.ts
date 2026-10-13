@@ -158,11 +158,12 @@ app.post('/api/auth/reset/start', async (req: Request, res: Response) => {
     const { enqueueEmail, processEmailOutboxOnce } = await import('./mail/transport.js');
     const { adminAuth } = await import('./firebase-admin-init.js');
 
-    let challengeCreated = false;
+    let codeToSend = '';
+    let challengeId = '';
 
     await withTx(async (client) => {
       let userId = '';
-      const pRes = await client.query('SELECT id, email, disabled FROM profiles WHERE LOWER(email) = $1', [email]);
+      const pRes = await client.query('SELECT id, email, disabled FROM profiles WHERE LOWER(TRIM(email)) = $1', [email]);
       if (pRes.rows && pRes.rows.length > 0) {
         if (pRes.rows[0].disabled) {
           console.warn(`[AUTH_RESET_START] reason=user_disabled email=${email}`);
@@ -194,14 +195,34 @@ app.post('/api/auth/reset/start', async (req: Request, res: Response) => {
 
       // Single client, single transaction for challenge and outbox enqueue
       const challenge = await createOtpChallenge(email, 'password_reset', secret, req.ip || 'unknown', userId, undefined, client);
+      codeToSend = challenge.code;
+      challengeId = challenge.challengeId;
       await enqueueEmail(email, 'password_reset_code', 'ar', { code: challenge.code }, `reset:${challenge.challengeId}`, client);
-      challengeCreated = true;
       console.log(`[AUTH_RESET_START] reason=challenge_enqueued challengeId=${challenge.challengeId}`);
     });
 
-    if (challengeCreated) {
+    if (codeToSend) {
       try {
-        await processEmailOutboxOnce();
+        const { renderEmailTemplate } = await import('./mail/templates.js');
+        const { sendMailDirect } = await import('./mail/transport.js');
+        const rendered = renderEmailTemplate('password_reset_code', 'ar', { code: codeToSend });
+        const sendRes = await sendMailDirect(
+          email,
+          rendered.subject,
+          rendered.html,
+          rendered.text,
+          { id: challengeId, template: 'password_reset_code', locale: 'ar', payload: { code: codeToSend } }
+        );
+        if (sendRes.ok) {
+          const pool = (await import('./db.js')).getPool();
+          await pool.query(
+            `UPDATE email_outbox SET status = 'sent', sent_at = NOW(), attempts = attempts + 1 WHERE dedupe_key = $1`,
+            [`reset:${challengeId}`]
+          );
+          console.log(`[AUTH_RESET_START] reason=email_sent_direct to=${email}`);
+        } else {
+          console.warn(`[AUTH_RESET_START] reason=direct_send_failed to=${email} err=${sendRes.error}`);
+        }
       } catch (dispErr: any) {
         console.error(`[AUTH_RESET_START] reason=immediate_dispatch_failed`, dispErr?.message || dispErr);
       }

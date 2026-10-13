@@ -9,19 +9,33 @@ export interface SmtpConfig {
   from: string;
 }
 
+export function normalizeFromAddress(raw: string, fallbackUser: string): string {
+  let s = (raw || '').trim();
+  if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
+    s = s.slice(1, -1).trim();
+  }
+  if (!s) {
+    return `"ORIN Trading" <${fallbackUser}>`;
+  }
+  const match = s.match(/^(.*?)\s*<([^>]+)>$/);
+  if (match) {
+    const name = match[1].trim().replace(/^["']|["']$/g, '').trim();
+    const email = match[2].trim();
+    return name ? `"${name}" <${email}>` : email;
+  }
+  if (s.includes('@')) {
+    return `"ORIN Trading" <${s.replace(/^["']|["']$/g, '').trim()}>`;
+  }
+  return `"${s.replace(/^["']|["']$/g, '').trim()}" <${fallbackUser}>`;
+}
+
 export function getSmtpConfig(): SmtpConfig {
   const host = process.env.SMTP_HOST || 'smtp.titan.email';
   const port = Number(process.env.SMTP_PORT) || 465;
   const secure = process.env.SMTP_SECURE === 'false' ? false : (port === 465);
   const user = process.env.SMTP_USER || process.env.ORIN_MAIL_FROM || 'support@javl900.com';
   const pass = process.env.SMTP_PASS || process.env.TITAN_PASSWORD || process.env.ORIN_MAIL_API_KEY || '';
-  let from = (process.env.SMTP_FROM || '').trim();
-  if (!from) {
-    from = `"ORIN Trading" <${user}>`;
-  } else if (!from.includes('@')) {
-    // If only display name provided, append valid mailbox
-    from = `"${from.replace(/"/g, '')}" <${user}>`;
-  }
+  const from = normalizeFromAddress(process.env.SMTP_FROM || process.env.ORIN_MAIL_FROM || user, user);
 
   return { host, port, secure, user, pass, from };
 }
@@ -54,7 +68,12 @@ export function resetMailer() {
 /**
  * Premium bilingual HTML template for OTP verification code
  */
-export function renderOtpEmailHtml(code: string): string {
+export function renderOtpEmailHtml(
+  code: string,
+  headline = 'رمز التحقق لتأكيد الحساب',
+  subtext = 'استخدم الرمز التالي لإتمام عملية تسجيل الدخول أو تأكيد حسابك على منصة ORIN:',
+  enHeadline = 'Your ORIN verification code is:'
+): string {
   const logoUrl = 'https://orin-trader.top/brand/orin-mark.png';
   const appUrl = 'https://orin-trader.top';
 
@@ -63,7 +82,7 @@ export function renderOtpEmailHtml(code: string): string {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>رمز التحقق - ORIN</title>
+  <title>${headline} - ORIN</title>
   <style>
     body {
       margin: 0;
@@ -218,10 +237,8 @@ export function renderOtpEmailHtml(code: string): string {
         <div class="brand-subtitle">Trading Platform</div>
       </div>
       <div class="content">
-        <h2 class="headline">رمز التحقق لتأكيد الحساب</h2>
-        <p class="subtext">
-          استخدم الرمز التالي لإتمام عملية تسجيل الدخول أو تأكيد حسابك على منصة ORIN:
-        </p>
+        <h2 class="headline">${headline}</h2>
+        <p class="subtext">${subtext}</p>
         <div class="code-box-outer">
           <div class="code-box">
             <div class="code-text">${code}</div>
@@ -235,7 +252,7 @@ export function renderOtpEmailHtml(code: string): string {
         </div>
         <div class="en-section">
           <p style="margin: 0 0 6px 0; color: #94a3b8;">
-            Your ORIN verification code is: <strong>${code}</strong> (Expires in 10 minutes).
+            ${enHeadline} <strong>${code}</strong> (Expires in 10 minutes).
           </p>
           <p style="margin: 0; color: #64748b;">
             Do not share this code with anyone. If you did not request this, please ignore this email.
