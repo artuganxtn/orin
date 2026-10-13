@@ -19,6 +19,7 @@ await build({
     'src/scheduler.ts',
     'src/db.ts',
     'src/email-registration-http.ts',
+    'src/firebase-admin-init.ts',
     'src/migrate.ts'
   ],
   outdir: 'lib',

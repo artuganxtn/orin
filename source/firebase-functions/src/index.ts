@@ -53,10 +53,13 @@ app.use(express.json({
   }
 }));
 
-import { processEmailOutboxOnce } from './mail/transport.ts';
+import { processEmailOutboxOnce, verifyMailConnectionAtStartup } from './mail/transport.ts';
 
 // Start outbox worker interval in web process
 setInterval(() => void processEmailOutboxOnce().catch(() => {}), 5000);
+void verifyMailConnectionAtStartup().catch((err) => {
+  console.warn('[MAIL_STARTUP_VERIFY_WARN]', err?.message || err);
+});
 
 // 1. Health checks
 app.get('/healthz', async (_req: Request, res: Response) => {
@@ -83,8 +86,44 @@ app.get('/healthz', async (_req: Request, res: Response) => {
 import compression from 'compression';
 app.use(compression({ level: 6 }));
 
-app.get('/api/health', (_req: Request, res: Response) => {
-  res.status(200).json({ ok: true, app: 'ORIN', backend: 'postgres', mode: 'production' });
+app.get('/api/health', async (_req: Request, res: Response) => {
+  try {
+    const stats = await withTx(async (client) => {
+      const qRes = await client.query(`
+        SELECT
+          COUNT(*) FILTER (WHERE status IN ('queued', 'sending'))::INT AS queued,
+          COUNT(*) FILTER (WHERE status = 'failed')::INT AS failed,
+          COALESCE(EXTRACT(EPOCH FROM (NOW() - MIN(created_at) FILTER (WHERE status IN ('queued', 'sending'))))::INT, 0) AS oldest_sec
+        FROM email_outbox
+      `);
+      const row = qRes.rows[0];
+      return {
+        queueDepth: Number(row?.queued || 0),
+        oldestQueuedAge: Number(row?.oldest_sec || 0),
+        failedCount: Number(row?.failed || 0)
+      };
+    });
+    res.status(200).json({
+      ok: true,
+      app: 'ORIN',
+      backend: 'postgres',
+      mode: process.env.NODE_ENV || 'production',
+      outbox: stats,
+      queueDepth: stats.queueDepth,
+      oldestQueuedAge: stats.oldestQueuedAge,
+      failedCount: stats.failedCount
+    });
+  } catch {
+    res.status(200).json({
+      ok: true,
+      app: 'ORIN',
+      backend: 'postgres',
+      mode: process.env.NODE_ENV || 'production',
+      queueDepth: 0,
+      oldestQueuedAge: 0,
+      failedCount: 0
+    });
+  }
 });
 
 import { identityHandle } from './email-registration-http.ts';
@@ -105,29 +144,74 @@ app.post('/api/auth/reset/start', async (req: Request, res: Response) => {
     message: 'إذا كان البريد مسجّلاً، فستصلك رسالة تحتوي على رمز إعادة تعيين كلمة المرور.'
   };
 
-  try {
-    const email = String(req.body?.email || '').trim().toLowerCase();
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return res.json(sameResponse);
-    }
+  const email = String(req.body?.email || '').trim().toLowerCase();
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    console.warn(`[AUTH_RESET_START] reason=invalid_email_format`);
+    return res.json(sameResponse);
+  }
 
-    const secret = process.env.ORIN_EMAIL_CODE_SECRET;
-    if (!secret) return res.json(sameResponse);
+  const secret = process.env.ORIN_EMAIL_CODE_SECRET;
+  if (!secret) {
+    console.error(`[AUTH_RESET_START] reason=secret_missing`);
+    return res.json(sameResponse);
+  }
+
+  try {
+    const { createOtpChallenge } = await import('./otp.js');
+    const { enqueueEmail } = await import('./mail/transport.js');
+    const { adminAuth } = await import('./firebase-admin-init.js');
 
     await withTx(async (client) => {
-      const pRes = await client.query('SELECT id, email FROM profiles WHERE LOWER(email) = $1 AND disabled = FALSE', [email]);
+      let userId = '';
+      const pRes = await client.query('SELECT id, email, disabled FROM profiles WHERE LOWER(email) = $1', [email]);
       if (pRes.rowCount > 0) {
-        const userId = pRes.rows[0].id;
-        const { createOtpChallenge } = await import('./otp.js');
-        const { enqueueEmail } = await import('./mail/transport.js');
-
-        const challenge = await createOtpChallenge(email, 'password_reset', secret, req.ip || 'unknown', userId, undefined, client);
-        await enqueueEmail(email, 'password_reset_code', 'ar', { code: challenge.code }, `reset:${challenge.challengeId}`, client);
+        if (pRes.rows[0].disabled) {
+          console.warn(`[AUTH_RESET_START] reason=user_disabled email=${email}`);
+          return;
+        }
+        userId = pRes.rows[0].id;
+      } else {
+        // Fallback to Firebase Auth for users without profiles row
+        let fbUser: any = null;
+        try {
+          fbUser = await adminAuth.getUserByEmail(email);
+        } catch {
+          console.warn(`[AUTH_RESET_START] reason=unknown_email email=${email}`);
+          return;
+        }
+        if (fbUser.disabled) {
+          console.warn(`[AUTH_RESET_START] reason=fb_user_disabled email=${email}`);
+          return;
+        }
+        userId = fbUser.uid;
+        await client.query(
+          `INSERT INTO profiles (id, email, display_name, role)
+           VALUES ($1, $2, $3, 'user')
+           ON CONFLICT (id) DO NOTHING`,
+          [userId, email, fbUser.displayName || 'مستخدم ORIN']
+        );
+        console.log(`[AUTH_RESET_START] reason=profile_backfilled uid=${userId} email=${email}`);
       }
+
+      // Single client, single transaction for challenge and outbox enqueue
+      const challenge = await createOtpChallenge(email, 'password_reset', secret, req.ip || 'unknown', userId, undefined, client);
+      await enqueueEmail(email, 'password_reset_code', 'ar', { code: challenge.code }, `reset:${challenge.challengeId}`, client);
+      console.log(`[AUTH_RESET_START] reason=challenge_enqueued challengeId=${challenge.challengeId}`);
     });
 
     res.json(sameResponse);
-  } catch {
+  } catch (err: any) {
+    if (err?.code === 'cooldown-active') {
+      console.warn(`[AUTH_RESET_START] reason=cooldown_active email=${email}`);
+      res.set('Retry-After', '60');
+      return res.json(sameResponse);
+    }
+    if (err?.code === 'too-many-requests') {
+      console.warn(`[AUTH_RESET_START] reason=rate_limited email=${email}`);
+      res.set('Retry-After', '3600');
+      return res.json(sameResponse);
+    }
+    console.error(`[AUTH_RESET_START] reason=internal_error error=${err?.message || err}`);
     res.json(sameResponse);
   }
 });
@@ -150,58 +234,70 @@ app.post('/api/auth/reset/confirm', async (req: Request, res: Response) => {
     const { enqueueEmail } = await import('./mail/transport.js');
     const { adminAuth } = await import('./firebase-admin-init.js');
 
+    const { getPool, withTx } = await import('./db.js');
+    const pool = getPool();
+
     let uid = '';
     let challengeId = '';
 
-    await withTx(async (client) => {
-      const cRes = await client.query(
-        `SELECT * FROM otp_challenges
-         WHERE LOWER(email) = LOWER($1) AND purpose = 'password_reset' AND consumed_at IS NULL
-         ORDER BY created_at DESC LIMIT 1 FOR UPDATE`,
-        [email]
+    // Step 1: Verify code server-side finding newest unconsumed challenge
+    const cRes = await pool.query(
+      `SELECT * FROM otp_challenges
+       WHERE LOWER(email) = LOWER($1) AND purpose = 'password_reset' AND consumed_at IS NULL
+       ORDER BY created_at DESC LIMIT 1`,
+      [email]
+    );
+
+    const c = cRes.rows[0];
+    if (!c) {
+      throw new OtpError('code-invalid', 400);
+    }
+
+    if (new Date(c.expires_at).getTime() <= Date.now()) {
+      throw new OtpError('code-expired', 400);
+    }
+
+    if (c.attempts >= c.max_attempts) {
+      throw new OtpError('code-locked', 400);
+    }
+
+    const actualHmac = computeOtpHmac(secret, c.id, email, code);
+    const match = timingSafeEqual(Buffer.from(actualHmac, 'hex'), Buffer.from(c.code_hmac, 'hex'));
+
+    if (!match) {
+      const updated = await pool.query(
+        `UPDATE otp_challenges SET attempts = attempts + 1 WHERE id = $1 RETURNING attempts, max_attempts`,
+        [c.id]
       );
-
-      const c = cRes.rows[0];
-      if (!c) {
-        throw new OtpError('code-invalid', 400);
-      }
-
-      if (new Date(c.expires_at).getTime() <= Date.now()) {
-        throw new OtpError('code-expired', 400);
-      }
-
-      if (c.attempts >= c.max_attempts) {
+      const attempts = updated.rows[0]?.attempts || (c.attempts + 1);
+      const maxAttempts = c.max_attempts || 5;
+      const remaining = Math.max(0, maxAttempts - attempts);
+      if (attempts >= maxAttempts) {
         throw new OtpError('code-locked', 400);
       }
+      const err = new OtpError('code-invalid', 400) as any;
+      err.attemptsLeft = remaining;
+      throw err;
+    }
 
-      const actualHmac = computeOtpHmac(secret, c.id, email, code);
-      const match = timingSafeEqual(Buffer.from(actualHmac, 'hex'), Buffer.from(c.code_hmac, 'hex'));
+    challengeId = c.id;
+    uid = c.user_id || '';
 
-      if (!match) {
-        const updated = await client.query(
-          `UPDATE otp_challenges SET attempts = attempts + 1 WHERE id = $1 RETURNING attempts, max_attempts`,
-          [c.id]
-        );
-        if ((updated.rows[0]?.attempts || 0) >= (c.max_attempts || 5)) {
-          throw new OtpError('code-locked', 400);
-        }
-        throw new OtpError('code-invalid', 400);
-      }
-
-      challengeId = c.id;
-      uid = c.user_id || '';
-    });
+    // Step 2: Validate password strength (same rule as signup: min 8, max 128)
+    if (newPassword.length < 8 || newPassword.length > 128) {
+      return res.status(400).json({ error: 'كلمة المرور يجب أن تكون 8 أحرف على الأقل.', code: 'weak-password' });
+    }
 
     if (!uid) {
       const fbUser = await adminAuth.getUserByEmail(email);
       uid = fbUser.uid;
     }
 
-    if (process.env.NODE_ENV !== 'test') {
-      await adminAuth.updateUser(uid, { password: newPassword });
-      await adminAuth.revokeRefreshTokens(uid).catch(() => {});
-    }
+    // Step 3: Firebase updateUser (Firebase failure must not burn the code)
+    await adminAuth.updateUser(uid, { password: newPassword });
+    await adminAuth.revokeRefreshTokens(uid).catch(() => {});
 
+    // Step 4: Consume challenge, revoke sessions, and enqueue password_changed
     await withTx(async (client) => {
       await client.query(`UPDATE otp_challenges SET consumed_at = NOW() WHERE id = $1`, [challengeId]);
       await client.query(
@@ -224,9 +320,39 @@ app.post('/api/auth/reset/confirm', async (req: Request, res: Response) => {
     res.json({ ok: true, message: 'تم تغيير كلمة المرور وإبطال الجلسات بنجاح.' });
   } catch (err: any) {
     const code = err?.code || 'service-unavailable';
-    const status = err?.status || (code === 'code-invalid' || code === 'code-expired' || code === 'code-locked' ? 400 : 500);
-    res.status(status).json({ error: err.message || 'تعذر تغيير كلمة المرور.', code });
+    const status = err?.status || (code === 'code-invalid' || code === 'code-expired' || code === 'code-locked' || code === 'weak-password' ? 400 : 500);
+    res.status(status).json({
+      error: err.message || 'تعذر تغيير كلمة المرور.',
+      code,
+      ...(err.attemptsLeft !== undefined ? { attemptsLeft: err.attemptsLeft } : {})
+    });
   }
+});
+
+// Admin Mail Test Endpoint
+app.post('/api/admin/mail/test', authMiddleware, async (req: Request, res: Response) => {
+  if (req.user?.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin access required', code: 'forbidden' });
+  }
+
+  if (process.env.NODE_ENV === 'production' && process.env.ORIN_MAIL_DEBUG !== 'true') {
+    return res.status(403).json({ error: 'Endpoint disabled in production without ORIN_MAIL_DEBUG=true', code: 'disabled' });
+  }
+
+  const to = String(req.body?.to || req.user.email || '').trim();
+  if (!to || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
+    return res.status(400).json({ error: 'Valid recipient email required', code: 'invalid_recipient' });
+  }
+
+  const { sendMailDirect } = await import('./mail/transport.js');
+  const result = await sendMailDirect(
+    to,
+    'ORIN SMTP Verification Test',
+    '<div style="font-family:sans-serif;padding:20px;"><h2>ORIN Test Email</h2><p>This is a test email sent from the ORIN admin panel to verify SMTP transport connectivity.</p></div>',
+    'ORIN Test Email: SMTP transport connectivity verified.'
+  );
+
+  res.json(result);
 });
 
 // 3. Public market configuration

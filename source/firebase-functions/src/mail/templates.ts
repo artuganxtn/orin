@@ -22,19 +22,19 @@ function baseLayout(title: string, bodyContentHtml: string, locale: 'ar' | 'en' 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${escapeHtml(title)}</title>
   <style>
-    body { margin: 0; padding: 0; background-color: #030814; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #ffffff; direction: ${dir}; text-align: ${isRtl ? 'right' : 'left'}; -webkit-font-smoothing: antialiased; }
-    .wrapper { padding: 30px 12px; background-color: #030814; }
-    .container { max-width: 560px; margin: 0 auto; background-color: #0b172e; border: 1px solid #162c54; border-radius: 24px; overflow: hidden; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6); }
-    .header { padding: 32px 24px 20px; text-align: center; border-bottom: 1px solid #14284b; background: linear-gradient(180deg, #0e2247 0%, #0b172e 100%); }
-    .header img { width: 52px; height: 52px; margin-bottom: 8px; }
-    .header h1 { margin: 0; font-size: 26px; font-weight: 800; color: #ffffff; letter-spacing: 2px; }
-    .header span { display: block; font-size: 11px; color: #00d2ff; font-weight: 700; letter-spacing: 1.5px; margin-top: 2px; }
-    .content { padding: 32px 28px; font-size: 15px; line-height: 1.8; color: #d6e4fc; }
-    .content h2 { margin: 0 0 16px 0; font-size: 20px; font-weight: 700; color: #ffffff; }
-    .code-box { font-size: 38px; font-weight: 800; letter-spacing: 10px; color: #00f2fe; background: #040d21; border: 2px dashed #00d2ff; border-radius: 18px; padding: 20px; text-align: center; margin: 24px 0; font-family: 'Courier New', Courier, monospace; text-shadow: 0 0 12px rgba(0, 242, 254, 0.3); }
-    .footer { padding: 24px 28px; text-align: center; font-size: 12px; line-height: 1.6; color: #728cb5; border-top: 1px solid #14284b; background: #060e1f; }
-    .footer a { color: #00d2ff; text-decoration: none; font-weight: 600; }
-    .warn-box { background: #261b0c; border: 1px solid #634315; color: #f2cb7c; padding: 14px 18px; border-radius: 14px; margin-top: 20px; font-size: 13.5px; line-height: 1.6; }
+    body { margin: 0; padding: 0; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b; direction: ${dir}; text-align: ${isRtl ? 'right' : 'left'}; -webkit-font-smoothing: antialiased; }
+    .wrapper { padding: 40px 16px; background-color: #f1f5f9; }
+    .container { max-width: 560px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 20px; overflow: hidden; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01); }
+    .header { padding: 32px 24px 24px; text-align: center; border-bottom: 1px solid #f1f5f9; background: #ffffff; }
+    .header img { width: 52px; height: 52px; margin-bottom: 10px; display: inline-block; }
+    .header h1 { margin: 0; font-size: 26px; font-weight: 800; color: #0f172a; letter-spacing: 2px; }
+    .header span { display: block; font-size: 11px; color: #0284c7; font-weight: 700; letter-spacing: 1.5px; margin-top: 4px; }
+    .content { padding: 32px 32px 24px; font-size: 15px; line-height: 1.8; color: #334155; }
+    .content h2 { margin: 0 0 16px 0; font-size: 20px; font-weight: 700; color: #0f172a; }
+    .code-box { font-size: 36px; font-weight: 800; letter-spacing: 8px; color: #0369a1; background: #f0f9ff; border: 2px dashed #0284c7; border-radius: 16px; padding: 18px; text-align: center; margin: 24px 0; font-family: 'Courier New', Courier, monospace; }
+    .footer { padding: 24px 32px; text-align: center; font-size: 12px; line-height: 1.6; color: #64748b; border-top: 1px solid #f1f5f9; background: #fafafa; }
+    .footer a { color: #0284c7; text-decoration: none; font-weight: 600; }
+    .warn-box { background: #fffbeb; border: 1px solid #fef3c7; color: #92400e; padding: 14px 18px; border-radius: 12px; margin-top: 20px; font-size: 13.5px; line-height: 1.6; }
   </style>
 </head>
 <body>
@@ -49,7 +49,7 @@ function baseLayout(title: string, bodyContentHtml: string, locale: 'ar' | 'en' 
         ${bodyContentHtml}
       </div>
       <div class="footer">
-        <p style="margin: 0 0 6px 0; font-weight: 700; color: #8ea9d4;">${isRtl ? 'منصة ORIN للتداول المعتمد' : 'ORIN Certified Trading Platform'}</p>
+        <p style="margin: 0 0 6px 0; font-weight: 700; color: #475569;">${isRtl ? 'منصة ORIN للتداول المعتمد' : 'ORIN Certified Trading Platform'}</p>
         <p style="margin: 0 0 10px 0;">${isRtl ? 'هذه الرسالة آليّة ومعدّة تلقائياً، يرجى عدم الرد على هذا البريد. للحصول على الدعم والمساعدة، يرجى استخدام المساعد الذكي Adam داخل التطبيق.' : 'This is an automated notification. Please do not reply directly to this email. For support and assistance, please use Adam AI Assistant inside the ORIN app.'}</p>
         <p style="margin: 0;"><a href="https://orin-trader.top">${isRtl ? 'فتح منصة ORIN' : 'Open ORIN Platform'}</a> ${footerExtraHtml}</p>
       </div>
@@ -74,7 +74,7 @@ export function renderEmailTemplate(
       `<h2>${isAr ? 'تأكيد البريد الإلكتروني' : 'Verify Your Email'}</h2>
        <p>${isAr ? 'استخدم رمز التحقق التالي لتأكيد بريدك الإلكتروني وإنشاء حسابك في منصة ORIN:' : 'Use the following verification code to confirm your email address and create your ORIN account:'}</p>
        <div class="code-box">${escapeHtml(code)}</div>
-       <p style="font-size:13px;color:#8ba5cb;">${isAr ? 'الرمز صالح لمدة 10 دقائق واستخدام واحد فقط. لا تشارك الرمز مع أي شخص.' : 'The code is valid for 10 minutes for single use. Do not share it with anyone.'}</p>`,
+       <p style="font-size:13px;color:#64748b;">${isAr ? 'الرمز صالح لمدة 10 دقائق واستخدام واحد فقط. لا تشارك الرمز مع أي شخص.' : 'The code is valid for 10 minutes for single use. Do not share it with anyone.'}</p>`,
       locale
     );
     const text = `${subject}\n\n${isAr ? 'رمز التحقق الخاص بك:' : 'Your verification code:'} ${code}\n${isAr ? 'صالح لمدة 10 دقائق.' : 'Valid for 10 minutes.'}`;
@@ -89,7 +89,7 @@ export function renderEmailTemplate(
       `<h2>${isAr ? 'إعادة تعيين كلمة المرور' : 'Reset Your Password'}</h2>
        <p>${isAr ? 'استخدم رمز التأكيد التالي لإعادة تعيين كلمة المرور الخاصة بحسابك في منصة ORIN:' : 'Use the following verification code to reset your ORIN account password:'}</p>
        <div class="code-box">${escapeHtml(code)}</div>
-       <p style="font-size:13px;color:#8ba5cb;">${isAr ? 'الرمز صالح لمدة 10 دقائق واستخدام واحد فقط. إذا لم تطلب إعادة التعيين، يرجى تجاهل هذه الرسالة.' : 'The code is valid for 10 minutes for single use. If you did not request a password reset, please ignore this email.'}</p>`,
+       <p style="font-size:13px;color:#64748b;">${isAr ? 'الرمز صالح لمدة 10 دقائق واستخدام واحد فقط. إذا لم تطلب إعادة التعيين، يرجى تجاهل هذه الرسالة.' : 'The code is valid for 10 minutes for single use. If you did not request a password reset, please ignore this email.'}</p>`,
       locale
     );
     const text = `${subject}\n\n${isAr ? 'رمز إعادة تعيين كلمة المرور:' : 'Password reset code:'} ${code}\n${isAr ? 'صالح لمدة 10 دقائق.' : 'Valid for 10 minutes.'}`;

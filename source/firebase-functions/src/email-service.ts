@@ -245,7 +245,7 @@ export function renderOtpEmailHtml(code: string): string {
       <div class="footer">
         <div>ORIN Financial Technologies &bull; <a href="${appUrl}">orin-trader.top</a></div>
         <div class="footer-links">
-          دعم العملاء: <a href="mailto:support@javl900.com">support@javl900.com</a>
+          هذه الرسالة آليّة؛ يرجى عدم الرد. للدعم والمساعدة، استخدم المساعد الذكي في التطبيق.
         </div>
       </div>
     </div>
@@ -420,7 +420,7 @@ export function renderWelcomeEmailHtml(name: string): string {
       <div class="footer">
         <div>منصة ORIN &bull; <a href="${appUrl}">orin-trader.top</a></div>
         <div style="margin-top: 8px;">
-          فريق الدعم الفني: <a href="mailto:support@javl900.com">support@javl900.com</a>
+          هذه الرسالة آليّة؛ يرجى عدم الرد. للدعم والمساعدة، استخدم المساعد الذكي في التطبيق.
         </div>
       </div>
     </div>
@@ -461,7 +461,7 @@ export async function sendWelcomeEmail(to: string, name: string): Promise<void> 
     from: config.from,
     to,
     subject: 'مرحبًا بك في منصة ORIN | Welcome to ORIN Trading',
-    text: `أهلاً بك ${name} في ORIN!\nتم تفعيل حسابك بنجاح.\nيمكنك تسجيل الدخول وبدء التداول عبر https://orin-trader.top\nفريق الدعم: support@javl900.com`,
+    text: `أهلاً بك ${name} في ORIN!\nتم تفعيل حسابك بنجاح.\nيمكنك تسجيل الدخول وبدء التداول عبر https://orin-trader.top`,
     html: renderWelcomeEmailHtml(name),
   };
 

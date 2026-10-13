@@ -19,4 +19,12 @@ export function getAdminApp(): App {
 }
 
 export const adminApp: App = getAdminApp();
-export const adminAuth: Auth = getAuth(adminApp);
+const realAdminAuth: Auth = getAuth(adminApp);
+export const adminAuth: Auth = new Proxy(realAdminAuth, {
+  get(target, prop, receiver) {
+    if (process.env.NODE_ENV === 'test' && (globalThis as any).__adminAuthMock?.[prop]) {
+      return (globalThis as any).__adminAuthMock[prop];
+    }
+    return Reflect.get(target, prop, receiver);
+  }
+}) as Auth;

@@ -54,6 +54,7 @@ export function AuthForm({path,done}:{path:string;done:()=>void}){
  const [challengeId,setChallengeId]=useState('');
  const [otpCode,setOtpCode]=useState('');
  const [cooldown,setCooldown]=useState(0);
+ const [attemptsLeft,setAttemptsLeft]=useState<number | null>(null);
 
  const lock=React.useRef(false),version=React.useRef(0);
 
@@ -69,6 +70,7 @@ export function AuthForm({path,done}:{path:string;done:()=>void}){
   setOtpStep(false);
   setOtpCode('');
   setChallengeId('');
+  setAttemptsLeft(null);
   return()=>{version.current++};
  },[mode]);
 
@@ -95,7 +97,7 @@ export function AuthForm({path,done}:{path:string;done:()=>void}){
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify({email:normalizedEmail,name:name.trim()})
    });
-   const data=await res.json();
+   const data = (await res.json()) as any;
    if(!res.ok){
     throw {code:data?.code||'service-unavailable'};
    }
@@ -129,7 +131,7 @@ export function AuthForm({path,done}:{path:string;done:()=>void}){
      challengeId
     })
    });
-   const data=await res.json();
+   const data = (await res.json()) as any;
    if(!res.ok){
     throw {code:data?.code||'code-invalid'};
    }
@@ -156,10 +158,12 @@ export function AuthForm({path,done}:{path:string;done:()=>void}){
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify({email:normalizedEmail})
    });
-   const data=await res.json();
+   const retryHeader=res.headers.get('Retry-After');
+   const data = (await res.json()) as any;
    setNotice(data.message||t('أرسلنا رمز الاستعادة إلى بريدك.','Reset code sent to your email.'));
    setOtpStep(true);
-   setCooldown(60);
+   setAttemptsLeft(null);
+   setCooldown(retryHeader?Math.max(1,parseInt(retryHeader,10)):60);
   }catch(e){
    setError(fail(e));
   }finally{
@@ -187,13 +191,16 @@ export function AuthForm({path,done}:{path:string;done:()=>void}){
      newPassword:password
     })
    });
-   const data=await res.json();
+   const data = (await res.json()) as any;
    if(!res.ok){
-    throw {code:data?.code||'code-invalid'};
+    if(data?.attemptsLeft!==undefined){
+     setAttemptsLeft(Number(data.attemptsLeft));
+    }
+    throw {code:data?.code||'code-invalid',message:data?.error};
    }
    setSent(true);
    setOtpStep(false);
-   setPassword('');setConfirmation('');setOtpCode('');
+   setPassword('');setConfirmation('');setOtpCode('');setAttemptsLeft(null);
   }catch(e){
    setError(fail(e));
   }finally{
@@ -283,6 +290,12 @@ export function AuthForm({path,done}:{path:string;done:()=>void}){
        </span>
       </label>
 
+      {attemptsLeft!==null && (
+       <div style={{fontSize:'12.5px',color:'#e11d48',fontWeight:600,textAlign:'center'}}>
+        {t(`المحاولات المتبقية: ${attemptsLeft}`,`Remaining attempts: ${attemptsLeft}`)}
+       </div>
+      )}
+
       {mode==='reset' && (
        <>
         <label>{t('كلمة المرور الجديدة','New Password')}
@@ -335,7 +348,7 @@ export function AuthForm({path,done}:{path:string;done:()=>void}){
        {busy?t('جار التأكيد…','Confirming…'):mode==='reset'?t('تغيير كلمة المرور','Reset Password'):t('تأكيد وإنشاء الحساب','Verify & Create Account')}
       </button>
 
-      <div style={{display:'flex',alignItems:'center',justify:'space-between',marginTop:'6px',fontSize:'13px'}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:'6px',fontSize:'13px'}}>
        <button
         type="button"
         disabled={busy||cooldown>0}

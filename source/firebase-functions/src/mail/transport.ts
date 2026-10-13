@@ -15,20 +15,62 @@ export interface SentMemoryEmail {
   sentAt: number;
 }
 
-export const testMemoryOutbox: SentMemoryEmail[] = [];
+const globalOutbox: SentMemoryEmail[] = (globalThis as any).__testMemoryOutbox || [];
+(globalThis as any).__testMemoryOutbox = globalOutbox;
+export const testMemoryOutbox: SentMemoryEmail[] = globalOutbox;
+
+export function setTestFailNextSend(fail: boolean) {
+  (globalThis as any).__testFailNextSend = fail;
+}
 
 export function clearTestMemoryOutbox() {
   testMemoryOutbox.length = 0;
+  (globalThis as any).__testFailNextSend = false;
 }
 
 export function validateMailConfigAtStartup() {
   if (process.env.NODE_ENV === 'test') return;
 
-  const from = process.env.ORIN_MAIL_FROM || process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS || process.env.ORIN_MAIL_API_KEY;
+  const from = (process.env.ORIN_MAIL_FROM || process.env.SMTP_USER || '').trim();
+  const pass = (process.env.SMTP_PASS || process.env.ORIN_MAIL_API_KEY || '').trim();
 
-  if (!from || !pass) {
-    throw new Error('Mail Layer Configuration Missing: ORIN_MAIL_FROM and SMTP_PASS/ORIN_MAIL_API_KEY are required in production.');
+  if (process.env.NODE_ENV === 'production') {
+    if (!from || !pass) {
+      console.error('[MAIL_STARTUP_FATAL] Refusing to start in production: ORIN_MAIL_FROM/SMTP_USER and SMTP_PASS/ORIN_MAIL_API_KEY are required.');
+      throw new Error('Mail Layer Configuration Missing: ORIN_MAIL_FROM and SMTP_PASS/ORIN_MAIL_API_KEY are required in production.');
+    }
+  }
+}
+
+export async function verifyMailConnectionAtStartup(): Promise<void> {
+  if (process.env.NODE_ENV === 'test') return;
+
+  validateMailConfigAtStartup();
+
+  const from = (process.env.ORIN_MAIL_FROM || process.env.SMTP_USER || '').trim();
+  const pass = (process.env.SMTP_PASS || process.env.ORIN_MAIL_API_KEY || '').trim();
+  if (!from || !pass) return;
+
+  const host = process.env.SMTP_HOST || 'smtp.titan.email';
+  const port = Number(process.env.SMTP_PORT || 465);
+  const secure = process.env.SMTP_SECURE !== 'false';
+  const user = process.env.SMTP_USER || from;
+
+  try {
+    const transporter = nodemailer.createTransport({
+      host,
+      port,
+      secure,
+      auth: { user, pass },
+      connectionTimeout: 10000,
+      greetingTimeout: 5000,
+      socketTimeout: 15000
+    });
+    await transporter.verify();
+    console.log('[MAIL_STARTUP_VERIFY] SMTP connection verified: status=ok');
+  } catch (err: any) {
+    const code = err?.code || 'VERIFY_FAILED';
+    console.warn(`[MAIL_STARTUP_VERIFY] SMTP verification failed: status=failed code=${code}`);
   }
 }
 
@@ -36,18 +78,36 @@ export async function sendMailDirect(
   to: string,
   subject: string,
   html: string,
-  text: string
+  text: string,
+  extraMeta?: { id?: string; template?: string; locale?: string; payload?: any }
 ): Promise<{ ok: boolean; error?: string; messageId?: string }> {
   if (process.env.NODE_ENV === 'test') {
+    if ((globalThis as any).__testFailNextSend) {
+      (globalThis as any).__testFailNextSend = false;
+      console.warn(`[MAIL_SEND_FAILED] to=${to} reason=SIMULATED_FAIL status=failed`);
+      return { ok: false, error: 'SIMULATED_TRANSPORT_FAILURE' };
+    }
     const msgId = 'test-msg-' + randomUUID();
+    testMemoryOutbox.push({
+      id: extraMeta?.id || msgId,
+      to,
+      template: extraMeta?.template || 'custom',
+      locale: extraMeta?.locale || 'ar',
+      payload: extraMeta?.payload || {},
+      subject,
+      text,
+      html,
+      sentAt: Date.now()
+    });
     return { ok: true, messageId: msgId };
   }
 
   const host = process.env.SMTP_HOST || 'smtp.titan.email';
   const port = Number(process.env.SMTP_PORT || 465);
   const secure = process.env.SMTP_SECURE !== 'false';
-  const user = process.env.SMTP_USER || process.env.ORIN_MAIL_FROM || 'support@javl900.com';
-  const pass = process.env.SMTP_PASS || process.env.TITAN_PASSWORD || process.env.ORIN_MAIL_API_KEY || '';
+  const fromAddress = (process.env.ORIN_MAIL_FROM || process.env.SMTP_USER || 'support@javl900.com').trim();
+  const user = (process.env.SMTP_USER || fromAddress).trim();
+  const pass = (process.env.SMTP_PASS || process.env.TITAN_PASSWORD || process.env.ORIN_MAIL_API_KEY || '').trim();
   const mailKey = (process.env.ORIN_MAIL_API_KEY || process.env.RESEND_API_KEY || '').trim();
 
   try {
@@ -62,7 +122,7 @@ export async function sendMailDirect(
     });
 
     const info = await transporter.sendMail({
-      from: `"ORIN Trading" <${user}>`,
+      from: `"ORIN" <${fromAddress}>`,
       to,
       subject,
       html,
@@ -72,7 +132,8 @@ export async function sendMailDirect(
     console.log(`[MAIL_SENT_SMTP] Successfully sent "${subject}" to ${to} (MessageID: ${info.messageId})`);
     return { ok: true, messageId: info.messageId };
   } catch (smtpErr: any) {
-    console.warn(`[MAIL_SMTP_FAILED] SMTP delivery to ${to} failed: ${smtpErr.message}. Checking Resend API fallback...`);
+    const errorCode = smtpErr?.code || 'SMTP_ERROR';
+    console.warn(`[MAIL_SEND_FAILED] to=${to} reason=${errorCode} status=failed message=${smtpErr.message}. Checking Resend API fallback...`);
 
     if (mailKey && mailKey.startsWith('re_')) {
       try {
@@ -83,7 +144,7 @@ export async function sendMailDirect(
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            from: `ORIN Trading <${user}>`,
+            from: `ORIN <${fromAddress}>`,
             to: [to],
             subject,
             html,
@@ -105,8 +166,18 @@ export async function sendMailDirect(
       }
     }
 
-    return { ok: false, error: smtpErr.message };
+    return { ok: false, error: `${errorCode}: ${smtpErr.message}` };
   }
+}
+
+const PRIORITY_TEMPLATES = new Set(['password_reset_code', 'signup_code', 'withdrawal_code']);
+
+export function triggerImmediateEmailSend() {
+  setTimeout(() => {
+    void processEmailOutboxOnce().catch((err) => {
+      console.warn(`[MAIL_PRIORITY_DISPATCH_WARN] ${err?.message || err}`);
+    });
+  }, 100);
 }
 
 export async function enqueueEmail(
@@ -131,19 +202,8 @@ export async function enqueueEmail(
 
     const outboxId = res.rows[0]?.id || id;
 
-    if (process.env.NODE_ENV === 'test') {
-      const rendered = renderEmailTemplate(template, locale as 'ar' | 'en', payload);
-      testMemoryOutbox.push({
-        id: outboxId,
-        to: toEmail,
-        template,
-        locale,
-        payload,
-        subject: rendered.subject,
-        text: rendered.text,
-        html: rendered.html,
-        sentAt: Date.now()
-      });
+    if (PRIORITY_TEMPLATES.has(template)) {
+      triggerImmediateEmailSend();
     }
 
     return outboxId;
@@ -156,44 +216,60 @@ export async function enqueueEmail(
   }
 }
 
+let isOutboxProcessing = false;
+
 export async function processEmailOutboxOnce(): Promise<{ processed: number; errors: number }> {
-  return await withTx(async (client) => {
-    const rowsRes = await client.query(
-      `SELECT * FROM email_outbox
-       WHERE status IN ('queued', 'sending') AND next_attempt_at <= NOW() AND attempts < 5
-       ORDER BY created_at ASC LIMIT 10 FOR UPDATE SKIP LOCKED`
-    );
+  if (isOutboxProcessing) {
+    return { processed: 0, errors: 0 };
+  }
+  isOutboxProcessing = true;
+  try {
+    return await withTx(async (client) => {
+      const rowsRes = await client.query(
+        `SELECT * FROM email_outbox
+         WHERE status IN ('queued', 'sending') AND next_attempt_at <= NOW() AND attempts < 5
+         ORDER BY created_at ASC LIMIT 10 FOR UPDATE SKIP LOCKED`
+      );
 
-    let processed = 0;
-    let errors = 0;
+      let processed = 0;
+      let errors = 0;
 
-    for (const row of rowsRes.rows) {
-      const rendered = renderEmailTemplate(row.template, row.locale || 'ar', row.payload || {});
-      const res = await sendMailDirect(row.to_email, rendered.subject, rendered.html, rendered.text);
-
-      if (res.ok) {
-        await client.query(
-          `UPDATE email_outbox
-           SET status = 'sent', sent_at = NOW(), attempts = attempts + 1, last_error = NULL
-           WHERE id = $1`,
-          [row.id]
+      for (const row of rowsRes.rows) {
+        const rendered = renderEmailTemplate(row.template, row.locale || 'ar', row.payload || {});
+        const res = await sendMailDirect(
+          row.to_email,
+          rendered.subject,
+          rendered.html,
+          rendered.text,
+          { id: row.id, template: row.template, locale: row.locale, payload: row.payload }
         );
-        processed++;
-      } else {
-        errors++;
-        const attempts = row.attempts + 1;
-        const nextDelaySec = Math.pow(2, attempts) * 10;
-        const status = attempts >= 5 ? 'failed' : 'queued';
 
-        await client.query(
-          `UPDATE email_outbox
-           SET attempts = $1, status = $2, last_error = $3, next_attempt_at = NOW() + ($4 || ' seconds')::interval
-           WHERE id = $5`,
-          [attempts, status, res.error || 'Failed to send', `${nextDelaySec}`, row.id]
-        );
+        if (res.ok) {
+          await client.query(
+            `UPDATE email_outbox
+             SET status = 'sent', sent_at = NOW(), attempts = attempts + 1, last_error = NULL
+             WHERE id = $1`,
+            [row.id]
+          );
+          processed++;
+        } else {
+          errors++;
+          const attempts = row.attempts + 1;
+          const nextDelaySec = Math.pow(2, attempts) * 10;
+          const status = attempts >= 5 ? 'failed' : 'queued';
+
+          await client.query(
+            `UPDATE email_outbox
+             SET attempts = $1, status = $2, last_error = $3, next_attempt_at = NOW() + ($4 || ' seconds')::interval
+             WHERE id = $5`,
+            [attempts, status, res.error || 'Failed to send', `${nextDelaySec}`, row.id]
+          );
+        }
       }
-    }
 
-    return { processed, errors };
-  });
+      return { processed, errors };
+    });
+  } finally {
+    isOutboxProcessing = false;
+  }
 }

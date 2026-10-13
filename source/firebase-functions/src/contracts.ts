@@ -532,7 +532,10 @@ export async function state(u: Identity, now = Date.now()) {
          WHERE user_id = $1 AND status = 'settled'`,
         [u.id]
       );
-      totalRealizedCents = Number(settledRes.rows[0]?.total_settled || 0) + Number(acc.bonus_profit_cents || 0);
+      const settled = Number(settledRes.rows[0]?.total_settled || 0);
+      const bonusProfit = Number(acc.bonus_profit_cents || 0);
+      const accRealized = Number(acc.realized_cents || 0);
+      totalRealizedCents = settled !== 0 ? (settled + bonusProfit) : (accRealized !== 0 ? accRealized : bonusProfit);
     } catch {
       totalRealizedCents = Number(acc.realized_cents || 0);
     }

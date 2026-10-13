@@ -24,7 +24,7 @@ export function newAccountNumber(): string {
 export async function getTradingAccounts(user: { id: string }, dbClient?: any) {
   const run = async (client: any) => {
     const accRes = await client.query(
-      `SELECT id, account_number, type, currency, balance_cents, reserved_cents, realized_cents, created_at
+      `SELECT id, account_number, type, currency, balance_cents, reserved_cents, realized_cents, bonus_profit_cents, created_at
        FROM accounts
        WHERE user_id = $1
        ORDER BY created_at ASC`,
@@ -39,16 +39,19 @@ export async function getTradingAccounts(user: { id: string }, dbClient?: any) {
     const savedActiveId = prefs.activeAccountId;
 
     const accounts = await Promise.all(accRes.rows.map(async (row: any) => {
-      let realizedCents = Number(row.realized_cents || 0);
+      let settledPnl = 0;
       try {
         const sRes = await client.query(
-          `SELECT COALESCE(SUM(result_cents), 0) AS total_settled FROM positions WHERE user_id = $1 AND account_id = $2 AND status = 'settled'`,
+          `SELECT COALESCE(SUM(result_cents), 0) AS total_settled FROM positions WHERE user_id = $1 AND (account_id = $2 OR account_id IS NULL) AND status = 'settled'`,
           [user.id, row.id]
         );
-        realizedCents = Number(sRes.rows[0]?.total_settled || 0) + Number(row.bonus_profit_cents || 0);
+        settledPnl = Number(sRes.rows[0]?.total_settled || 0);
       } catch {
-        realizedCents = Number(row.realized_cents || 0);
+        settledPnl = 0;
       }
+      const bonusProfit = Number(row.bonus_profit_cents || 0);
+      const accRealized = Number(row.realized_cents || 0);
+      const realizedCents = settledPnl !== 0 ? (settledPnl + bonusProfit) : (accRealized !== 0 ? accRealized : bonusProfit);
       return {
         id: row.id,
         accountNumber: row.account_number,
