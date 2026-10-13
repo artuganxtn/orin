@@ -58,13 +58,14 @@ export function AppDownloadCard({ compact = false }: { compact?: boolean }) {
               gap: '8px',
               padding: '10px 12px',
               borderRadius: '12px',
-              background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.02))',
-              border: '1px solid rgba(255, 255, 255, 0.15)',
-              color: '#f8fafc',
+              background: 'linear-gradient(135deg, rgba(7, 136, 255, 0.12), rgba(0, 100, 244, 0.05))',
+              border: '1px solid #0788ff',
+              color: '#0788ff',
               textDecoration: 'none',
               fontSize: '13px',
-              fontWeight: 600,
-              transition: 'all 0.2s ease'
+              fontWeight: 700,
+              transition: 'all 0.2s ease',
+              boxShadow: '0 2px 8px rgba(7, 136, 255, 0.12)'
             }}
           >
             <Apple size={16} />
