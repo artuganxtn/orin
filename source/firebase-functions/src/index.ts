@@ -55,9 +55,22 @@ app.use(express.json({
 }));
 
 import { processEmailOutboxOnce, verifyMailConnectionAtStartup } from './mail/transport.ts';
+import { processSchedulerSlotsOnce } from './scheduler.ts';
+import { processTelegramOutboxOnce } from './telegram.ts';
 
-// Start outbox worker interval in web process
+// Start email outbox worker interval in web process
 setInterval(() => void processEmailOutboxOnce().catch(() => {}), 5000);
+
+// Start trade slot scheduler interval (runs every 30s to evaluate daily schedule by time)
+setInterval(() => void processSchedulerSlotsOnce().catch((err) => {
+  if (process.env.NODE_ENV !== 'test') console.warn('[SCHEDULER_INTERVAL_WARN]', err?.message || err);
+}), 30000);
+
+// Start telegram outbox dispatcher interval (runs every 5s to deliver queued trade signals)
+setInterval(() => void processTelegramOutboxOnce().catch((err) => {
+  if (process.env.NODE_ENV !== 'test') console.warn('[TELEGRAM_OUTBOX_INTERVAL_WARN]', err?.message || err);
+}), 5000);
+
 void verifyMailConnectionAtStartup().catch((err) => {
   console.warn('[MAIL_STARTUP_VERIFY_WARN]', err?.message || err);
 });
