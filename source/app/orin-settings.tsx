@@ -44,8 +44,8 @@ export function OrinSettingsProvider({children,initialSettings,onSettingsChange}
 }
 
 const fallbackOrinContext = {
-  prefs: parsePreferences({}, DEFAULT_MARKET_CONFIGURATION),
-  configuration: DEFAULT_MARKET_CONFIGURATION,
+  prefs: parsePreferences({}, DEFAULT_CONFIGURATION),
+  configuration: DEFAULT_CONFIGURATION,
   settings: null,
   status: 'synced' as const,
   error: '',
