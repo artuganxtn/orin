@@ -14,19 +14,135 @@ export async function controlRead(u: Identity, module: string, q: Data = {}) {
   const searchStr = String(q.search || '').trim().toLowerCase();
   const statusFilter = String(q.status || 'all').trim().toLowerCase();
 
-  if (module === 'support-ai' || module === 'support') {
-    return {
-      rows: [{
-        id: 'adam-ai',
-        name: 'Adam AI Assistant',
-        model: 'gemini-1.5-flash',
-        status: 'active',
-        locale: 'ar/en',
-        updatedAt: Date.now()
-      }],
-      nextCursor: null,
-      hasMore: false
-    };
+  if (module === 'support-ai') {
+    const section = String(q.section || 'overview');
+    return await withTx(async (client) => {
+      if (section === 'overview') {
+        const countRes = await client.query(
+          "SELECT COUNT(*) FROM knowledge_base WHERE status = 'published' AND reviewed = TRUE"
+        ).catch(() => ({ rows: [{ count: 0 }] }));
+        const publishedCount = Number(countRes.rows[0]?.count || 0);
+
+        const cfgRes = await client.query(
+          "SELECT data FROM docs WHERE collection = 'system' AND id = 'support_ai_config'"
+        ).catch(() => ({ rows: [] }));
+        const savedConfig = cfgRes.rows[0]?.data || {};
+
+        return {
+          runtime: {
+            status: (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) ? 'ready' : 'configured-unverified',
+            checkedAt: Date.now(),
+            credentialPresent: !!(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY),
+            operatorEnabled: true
+          },
+          publishedKnowledge: publishedCount,
+          usage: { totalTokens: 0 },
+          config: {
+            enabled: true,
+            provider: 'gemini',
+            model: 'gemini-2.0-flash',
+            maxTokensPerReply: 700,
+            dailyTokenBudget: 50000,
+            systemInstructions: '',
+            revision: 1,
+            ...savedConfig
+          }
+        };
+      }
+
+      if (section === 'knowledge') {
+        const kRes = await client.query(
+          `SELECT id, title, content, status, reviewed, revision, updated_at AS "updatedAt"
+           FROM knowledge_base
+           ORDER BY updated_at DESC`
+        ).catch(() => ({ rows: [] }));
+        return {
+          rows: kRes.rows.map(r => ({
+            id: r.id,
+            title: r.title,
+            content: r.content,
+            status: r.status,
+            reviewed: !!r.reviewed,
+            revision: Number(r.revision || 1),
+            updatedAt: r.updatedAt ? new Date(r.updatedAt).getTime() : Date.now()
+          })),
+          nextCursor: null,
+          hasMore: false
+        };
+      }
+
+      if (section === 'conversations') {
+        if (q.thread) {
+          const docRes = await client.query(
+            "SELECT id, data, updated_at FROM docs WHERE collection = 'support_threads' AND id = $1",
+            [q.thread]
+          ).catch(() => ({ rows: [] }));
+          const row = docRes.rows[0];
+          if (!row) {
+            return {
+              thread: { id: q.thread, ownerId: q.thread, handoffRequested: false, updatedAt: Date.now() },
+              rows: [],
+              nextMessagesCursor: null
+            };
+          }
+          const tData = row.data || {};
+          return {
+            thread: {
+              id: row.id,
+              ownerId: row.id,
+              handoffRequested: !!tData.handoffRequested,
+              updatedAt: new Date(row.updated_at).getTime()
+            },
+            rows: (tData.messages || []).map((m: any) => ({
+              id: m.id || randomUUID(),
+              kind: m.kind || 'customer',
+              text: m.text || '',
+              createdAt: m.createdAt || Date.now()
+            })),
+            nextMessagesCursor: null
+          };
+        }
+
+        const threadsRes = await client.query(
+          "SELECT id, data, updated_at FROM docs WHERE collection = 'support_threads' ORDER BY updated_at DESC LIMIT 50"
+        ).catch(() => ({ rows: [] }));
+
+        return {
+          rows: threadsRes.rows.map(r => ({
+            id: r.id,
+            ownerId: r.id,
+            handoffRequested: !!r.data?.handoffRequested,
+            updatedAt: new Date(r.updated_at).getTime()
+          })),
+          nextCursor: null,
+          hasMore: false
+        };
+      }
+
+      if (section === 'tickets') {
+        const tRes = await client.query(
+          "SELECT id, data, updated_at FROM docs WHERE collection = 'support_tickets' ORDER BY updated_at DESC LIMIT 50"
+        ).catch(() => ({ rows: [] }));
+
+        return {
+          rows: tRes.rows.map(r => {
+            const d = r.data || {};
+            return {
+              id: r.id,
+              title: d.title || 'طلب تصعيد',
+              uid: d.uid || d.userId || r.id,
+              status: d.status || 'open',
+              priority: d.priority || 'high',
+              updatedAt: new Date(r.updated_at).getTime()
+            };
+          }),
+          nextCursor: null,
+          hasMore: false
+        };
+      }
+
+      return { rows: [], nextCursor: null, hasMore: false };
+    });
   }
 
   return await withTx(async (client) => {
@@ -201,7 +317,69 @@ export async function controlRead(u: Identity, module: string, q: Data = {}) {
     } else if (module === 'content' || module === 'configuration') {
       sql = `SELECT id, data, updated_at AS "updatedAt" FROM docs WHERE collection = 'system' ORDER BY updated_at DESC`;
     } else if (module === 'tickets') {
-      sql = `SELECT id, owner_id AS "ownerId", data, updated_at AS "updatedAt" FROM docs WHERE collection = 'support_tickets' ORDER BY updated_at DESC`;
+      if (q.ticket) {
+        const tRes = await client.query("SELECT id, data, updated_at FROM docs WHERE collection = 'support_tickets' AND id = $1", [q.ticket]);
+        if (tRes.rowCount === 0) {
+          return { ticket: null, notes: [], nextNotesCursor: null };
+        }
+        const tRow = tRes.rows[0];
+        const tData = tRow.data || {};
+        const nRes = await client.query("SELECT id, data, updated_at FROM docs WHERE collection = 'support_ticket_notes' AND data->>'ticketId' = $1 ORDER BY updated_at DESC LIMIT 50", [q.ticket]).catch(() => ({ rows: [] }));
+
+        return {
+          ticket: {
+            id: tRow.id,
+            ...tData,
+            updatedAt: new Date(tRow.updated_at).getTime()
+          },
+          notes: nRes.rows.map(r => ({
+            id: r.id,
+            ...(r.data || {}),
+            createdAt: new Date(r.updated_at).getTime()
+          })),
+          nextNotesCursor: null
+        };
+      }
+
+      const tRes = await client.query("SELECT id, data, updated_at FROM docs WHERE collection = 'support_tickets' ORDER BY updated_at DESC LIMIT 200");
+      let ticketRows = tRes.rows.map(r => {
+        const d = r.data || {};
+        return {
+          id: r.id,
+          ...d,
+          uid: d.uid || d.userId || r.id,
+          status: d.status || 'open',
+          priority: d.priority || 'normal',
+          updatedAt: new Date(r.updated_at).getTime()
+        };
+      });
+
+      if (statusFilter !== 'all') {
+        if (statusFilter === 'active') {
+          ticketRows = ticketRows.filter(r => ['open', 'in_progress', 'waiting'].includes(r.status));
+        } else {
+          ticketRows = ticketRows.filter(r => r.status === statusFilter);
+        }
+      }
+      if (q.priority && q.priority !== 'all') {
+        ticketRows = ticketRows.filter(r => r.priority === q.priority);
+      }
+      if (q.assignee && q.assignee !== 'all') {
+        if (q.assignee === 'mine') {
+          ticketRows = ticketRows.filter(r => r.assigneeId === u.id);
+        } else if (q.assignee === 'unassigned') {
+          ticketRows = ticketRows.filter(r => !r.assigneeId);
+        }
+      }
+      if (searchStr) {
+        ticketRows = ticketRows.filter(r => JSON.stringify(r).toLowerCase().includes(searchStr));
+      }
+
+      return {
+        rows: ticketRows.slice(offset, offset + limit),
+        nextCursor: ticketRows.length > offset + limit ? String(offset + limit) : null,
+        hasMore: ticketRows.length > offset + limit
+      };
     } else if (module === 'trade-slots' || module === 'trade_slots') {
       sql = `SELECT id, name, local_time AS "localTime", timezone, days_of_week AS "daysOfWeek", asset, direction, duration_sec AS "durationSec", settlement_bps AS "settlementBps", eligibility, opens_offset_min AS "opensOffsetMin", closes_after_min AS "closesAfterMin", mode, enabled, updated_at AS "updatedAt" FROM trade_slots ORDER BY local_time ASC`;
     } else if (module === 'scheduled-runs' || module === 'scheduled_runs') {
@@ -736,6 +914,120 @@ export async function controlAction(u: Identity, input: Data) {
         [noteId, u.id, noteData]
       );
       return { ok: true, noteId, ticketId };
+    });
+  }
+
+  // 12d. Support Knowledge Management
+  if (action === 'support.knowledge.save') {
+    const docId = String(target || payload.id || 'kb-' + randomUUID());
+    const title = String(payload.title || '').trim();
+    const content = String(payload.content || '').trim();
+    const revision = Number(input.revision || payload.revision || 0) + 1;
+    return await withTx(async (client) => {
+      await client.query(
+        `INSERT INTO knowledge_base (id, title, content, status, reviewed, revision, updated_at)
+         VALUES ($1, $2, $3, 'draft', FALSE, $4, NOW())
+         ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, content = EXCLUDED.content, status = 'draft', reviewed = FALSE, revision = knowledge_base.revision + 1, updated_at = NOW()`,
+        [docId, title, content, revision]
+      );
+      const auditPayload = JSON.stringify({ actorId: u.id, action, docId, title, revision });
+      const auditHash = createHash('sha256').update(auditPayload).digest('hex');
+      await client.query(
+        `INSERT INTO audit (actor_id, action, reference, payload, payload_hash)
+         VALUES ($1, $2, $3, $4::jsonb, $5)`,
+        [u.id, action, docId, auditPayload, auditHash]
+      );
+      return { ok: true, id: docId, revision, status: 'draft' };
+    });
+  }
+
+  if (action === 'support.knowledge.publish') {
+    const docId = String(target || payload.id || '');
+    return await withTx(async (client) => {
+      const res = await client.query(
+        `UPDATE knowledge_base SET status = 'published', reviewed = TRUE, updated_at = NOW() WHERE id = $1 RETURNING id, revision`,
+        [docId]
+      );
+      if (res.rowCount === 0) throw new ApiError('Knowledge document not found', 404);
+      const auditPayload = JSON.stringify({ actorId: u.id, action, docId });
+      const auditHash = createHash('sha256').update(auditPayload).digest('hex');
+      await client.query(
+        `INSERT INTO audit (actor_id, action, reference, payload, payload_hash)
+         VALUES ($1, $2, $3, $4::jsonb, $5)`,
+        [u.id, action, docId, auditPayload, auditHash]
+      );
+      return { ok: true, id: docId, status: 'published', reviewed: true };
+    });
+  }
+
+  if (action === 'support.knowledge.unpublish') {
+    const docId = String(target || payload.id || '');
+    return await withTx(async (client) => {
+      const res = await client.query(
+        `UPDATE knowledge_base SET status = 'draft', reviewed = FALSE, updated_at = NOW() WHERE id = $1 RETURNING id, revision`,
+        [docId]
+      );
+      if (res.rowCount === 0) throw new ApiError('Knowledge document not found', 404);
+      const auditPayload = JSON.stringify({ actorId: u.id, action, docId });
+      const auditHash = createHash('sha256').update(auditPayload).digest('hex');
+      await client.query(
+        `INSERT INTO audit (actor_id, action, reference, payload, payload_hash)
+         VALUES ($1, $2, $3, $4::jsonb, $5)`,
+        [u.id, action, docId, auditPayload, auditHash]
+      );
+      return { ok: true, id: docId, status: 'draft', reviewed: false };
+    });
+  }
+
+  if (action === 'support.ai.configure') {
+    const nextRev = Number(input.revision || payload.revision || 0) + 1;
+    const configData = {
+      ...payload,
+      revision: nextRev,
+      updatedAt: Date.now()
+    };
+    return await withTx(async (client) => {
+      await client.query(
+        `INSERT INTO docs (collection, id, data, updated_at)
+         VALUES ('system', 'support_ai_config', $1::jsonb, NOW())
+         ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+        [JSON.stringify(configData)]
+      );
+      const auditPayload = JSON.stringify({ actorId: u.id, action, revision: nextRev });
+      const auditHash = createHash('sha256').update(auditPayload).digest('hex');
+      await client.query(
+        `INSERT INTO audit (actor_id, action, reference, payload, payload_hash)
+         VALUES ($1, $2, 'support_ai_config', $3::jsonb, $4)`,
+        [u.id, action, auditPayload, auditHash]
+      );
+      return { ok: true, revision: nextRev, config: configData };
+    });
+  }
+
+  if (action === 'support.ai.resume') {
+    const threadId = String(target || payload.threadId || payload.id);
+    return await withTx(async (client) => {
+      const docRes = await client.query(
+        `SELECT data FROM docs WHERE collection = 'support_threads' AND id = $1 FOR UPDATE`,
+        [threadId]
+      );
+      if (docRes.rowCount > 0) {
+        const tData = docRes.rows[0].data || {};
+        tData.handoffRequested = false;
+        tData.updatedAt = Date.now();
+        await client.query(
+          `UPDATE docs SET data = $1::jsonb, updated_at = NOW() WHERE collection = 'support_threads' AND id = $2`,
+          [JSON.stringify(tData), threadId]
+        );
+      }
+      const auditPayload = JSON.stringify({ actorId: u.id, action, threadId });
+      const auditHash = createHash('sha256').update(auditPayload).digest('hex');
+      await client.query(
+        `INSERT INTO audit (actor_id, action, reference, payload, payload_hash)
+         VALUES ($1, $2, $3, $4::jsonb, $5)`,
+        [u.id, action, threadId, auditPayload, auditHash]
+      );
+      return { ok: true, threadId, resumed: true };
     });
   }
 

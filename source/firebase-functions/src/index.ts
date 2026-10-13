@@ -21,7 +21,7 @@ import { submitKyc, getKycStatus, verifyKycCustomer, listKycFiles, readKycFile }
 import { supportAssistantCapability, supportAssistantReply, escalateSupportTicket } from './support.ts';
 import { operationQueues, readAudit, readTickets } from './control-operations.ts';
 import { controlAction, controlRead } from './control-center.ts';
-import { controlRbacMiddleware } from './control-rbac.ts';
+import { controlRbacMiddleware, checkControlPermission } from './control-rbac.ts';
 
 import {
   getTradingAccounts,
@@ -892,9 +892,51 @@ api.get('/control/user', async (req: Request, res: Response) => {
   }
 });
 
+api.get('/control/session', async (req: Request, res: Response) => {
+  try {
+    const permCheck = await checkControlPermission(req.user!.id);
+    if (!permCheck.allowed) {
+      return res.status(403).json({ error: 'غير مصرح بالدخول لمركز التحكم.' });
+    }
+    res.json({
+      available: true,
+      uid: req.user!.id,
+      roles: permCheck.roles,
+      permissions: permCheck.permissions,
+      reauthSeconds: 300,
+      capabilities: {
+        payments: true,
+        execution: true,
+        kycDocuments: true,
+        push: true,
+        scheduler: true
+      }
+    });
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+api.post('/control/action', async (req: Request, res: Response) => {
+  try {
+    const permCheck = await checkControlPermission(req.user!.id);
+    if (!permCheck.allowed) {
+      return res.status(403).json({ error: 'صلاحيات الإدارة غير كافية.' });
+    }
+    const result = await controlAction(req.user!, req.body || {});
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message, code: err.code });
+  }
+});
+
 api.get('/control/:module', async (req: Request, res: Response) => {
   try {
     const moduleName = String(req.params.module || '');
+    const permCheck = await checkControlPermission(req.user!.id);
+    if (!permCheck.allowed) {
+      return res.status(403).json({ error: 'غير مصرح بالدخول لمركز التحكم.' });
+    }
     const result = await controlRead(req.user!, moduleName, req.query);
     res.json(result);
   } catch (err: any) {
