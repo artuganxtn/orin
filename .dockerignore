@@ -11,5 +11,4 @@ source/firebase-dist
 source/firebase-functions/lib
 source/android-app
 **/.pgdata
-**/*.apk
 **/*.log

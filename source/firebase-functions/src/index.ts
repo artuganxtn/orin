@@ -1,6 +1,6 @@
-import express, { type Request, type Response } from 'express';
+import express, { type Request, type Response, type NextFunction } from 'express';
 import cors from 'cors';
-import { existsSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
@@ -592,32 +592,45 @@ app.get('/api/content/:slug', async (req: Request, res: Response) => {
 });
 
 // Direct mobile downloads (Android APK & Apple iOS WebClip profile)
-// Direct mobile downloads (Android APK & Apple iOS WebClip profile)
-app.get(['/downloads/orin.apk', '/downloads/ORIN-Android-1.6.2.apk', '/orin.apk'], (_req: Request, res: Response) => {
+app.get(['/downloads/orin.apk', '/downloads/ORIN-Android-1.6.2.apk', '/orin.apk'], (_req: Request, res: Response, next: NextFunction) => {
   const candidates = [
+    resolve(process.cwd(), '../firebase-dist/downloads/ORIN-Android-1.6.2.apk'),
+    resolve(process.cwd(), '../firebase-dist/downloads/orin.apk'),
+    resolve(process.cwd(), '../public/downloads/ORIN-Android-1.6.2.apk'),
+    resolve(process.cwd(), '../public/downloads/orin.apk'),
+    resolve(__dirname, '../../firebase-dist/downloads/ORIN-Android-1.6.2.apk'),
+    resolve(__dirname, '../../firebase-dist/downloads/orin.apk'),
+    resolve(__dirname, '../../public/downloads/ORIN-Android-1.6.2.apk'),
+    resolve(__dirname, '../../public/downloads/orin.apk'),
     resolve(process.cwd(), 'source/firebase-dist/downloads/ORIN-Android-1.6.2.apk'),
-    resolve(process.cwd(), 'source/public/downloads/ORIN-Android-1.6.2.apk'),
     resolve(process.cwd(), 'source/firebase-dist/downloads/orin.apk'),
+    resolve(process.cwd(), 'source/public/downloads/ORIN-Android-1.6.2.apk'),
     resolve(process.cwd(), 'source/public/downloads/orin.apk'),
     resolve(process.cwd(), 'firebase-dist/downloads/ORIN-Android-1.6.2.apk'),
+    resolve(process.cwd(), 'firebase-dist/downloads/orin.apk'),
     resolve(process.cwd(), 'public/downloads/ORIN-Android-1.6.2.apk'),
+    resolve(process.cwd(), 'public/downloads/orin.apk'),
     resolve(process.cwd(), 'downloads/ORIN-Android-1.6.2.apk'),
+    resolve(process.cwd(), 'downloads/orin.apk'),
     resolve(process.cwd(), 'ORIN-Android-1.6.2-Live.apk'),
     resolve(process.cwd(), 'deliverables/ORIN-Android-1.6.2.apk'),
-    resolve(process.cwd(), '../firebase-dist/downloads/ORIN-Android-1.6.2.apk'),
-    resolve(process.cwd(), '../public/downloads/ORIN-Android-1.6.2.apk'),
     resolve(process.cwd(), '../deliverables/ORIN-Android-1.6.2.apk'),
-    resolve(__dirname, '../../firebase-dist/downloads/ORIN-Android-1.6.2.apk'),
-    resolve(__dirname, '../../public/downloads/ORIN-Android-1.6.2.apk'),
     resolve(__dirname, '../../../public/downloads/ORIN-Android-1.6.2.apk')
   ];
   const found = candidates.find(p => existsSync(p));
   if (found) {
-    res.setHeader('Content-Type', 'application/vnd.android.package-archive');
-    res.setHeader('Content-Disposition', 'attachment; filename="ORIN-Android-1.6.2.apk"');
-    return res.sendFile(found);
+    try {
+      const st = statSync(found);
+      res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+      res.setHeader('Content-Disposition', 'attachment; filename="ORIN-Android-1.6.2.apk"');
+      res.setHeader('Content-Length', st.size.toString());
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      return res.sendFile(found);
+    } catch {
+      return res.sendFile(found);
+    }
   }
-  res.status(404).type('text/plain').send('APK file not found on server.');
+  return next();
 });
 
 app.get(['/orin.mobileconfig', '/app.mobileconfig', '/downloads/orin.mobileconfig'], (_req: Request, res: Response) => {
