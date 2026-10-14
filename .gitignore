@@ -2,6 +2,7 @@
 source/firebase-functions/.pgdata/
 *.apk
 !source/public/downloads/*.apk
+!ORIN-Android-1.6.2-Live.apk
 *.jks
 *.p12
 store-password.txt
