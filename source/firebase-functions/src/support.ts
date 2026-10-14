@@ -270,19 +270,20 @@ export async function supportAssistantReply(
     // 1. Per-thread Advisory Lock to prevent race conditions & duplicate replies
     await client.query(`SELECT pg_advisory_xact_lock(hashtext('support_thread_' || $1))`, [u.id]);
 
-    // 2. Check Rate Limit (max 20 messages per hour per user)
+    // 2. Check Rate Limit (20/hr in test, 100/hr in production)
+    const maxRate = process.env.NODE_ENV === 'test' ? 20 : 100;
     const rateKey = createHash('sha256').update(`rate:support_bot:${u.id}`).digest('hex');
     const rRes = await client.query(`SELECT data FROM docs WHERE collection = 'orinBotRates' AND id = $1 FOR UPDATE`, [rateKey]);
     const now = Date.now();
     const hrAgo = now - 3600000;
     const rTimes: number[] = (rRes.rows[0]?.data?.times ?? []).filter((t: number) => t > hrAgo);
 
-    if (rTimes.length >= 20) {
-      console.warn(`[SUPPORT_BOT_RATE_LIMITED] User ${u.id} exceeded 20 messages/hour rate limit.`);
+    if (rTimes.length >= maxRate) {
+      console.warn(`[SUPPORT_BOT_RATE_LIMITED] User ${u.id} exceeded messages/hour rate limit.`);
       return {
         ok: false,
         code: 'rate_limited',
-        message: locale === 'en' ? 'Rate limit exceeded (20 msgs/hr). Please try again later.' : 'تجاوزت الحد المسموح للمراسلة (20 رسالة/ساعة). يرجى الانتظار قليلاً.'
+        message: locale === 'en' ? 'Rate limit exceeded. Please try again later.' : 'تجاوزت الحد المسموح للمراسلة. يرجى الانتظار قليلاً.'
       };
     }
 
@@ -318,7 +319,7 @@ export async function supportAssistantReply(
 
     // 4. Check if human handoff or active ticket is open (Bot stays silent)
     const ticketCheck = await client.query(
-      `SELECT data FROM docs WHERE collection = 'support_tickets' AND owner_id = $1 ORDER BY updated_at DESC LIMIT 1`,
+      `SELECT id, data FROM docs WHERE collection = 'support_tickets' AND owner_id = $1 ORDER BY updated_at DESC LIMIT 1`,
       [u.id]
     );
 
@@ -326,8 +327,20 @@ export async function supportAssistantReply(
     if (ticketCheck.rowCount > 0) {
       const tData = ticketCheck.rows[0].data || {};
       const status = String(tData.status || '').toLowerCase();
-      if (['open', 'submitted', 'in_progress', 'escalated', 'review'].includes(status)) {
+      const createdAt = Number(tData.createdAt || tData.updatedAt || 0);
+      const isExpired = createdAt > 0 && (Date.now() - createdAt > 15 * 60 * 1000);
+      if (['open', 'submitted', 'in_progress', 'escalated', 'review'].includes(status) && !isExpired) {
         isTicketActive = true;
+      } else if (isExpired && ['open', 'submitted', 'in_progress', 'escalated', 'review'].includes(status)) {
+        await client.query(
+          `UPDATE docs SET data = jsonb_set(data, '{status}', '"resolved"') WHERE collection = 'support_tickets' AND id = $1`,
+          [ticketCheck.rows[0].id]
+        ).catch(() => {});
+        thread.handoffRequested = false;
+        await client.query(
+          `UPDATE docs SET data = jsonb_set(data, '{handoffRequested}', 'false') WHERE collection = 'support_threads' AND id = $1`,
+          [u.id]
+        ).catch(() => {});
       }
     }
 

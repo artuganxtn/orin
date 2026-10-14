@@ -975,6 +975,25 @@ api.post('/support/messages', async (req: Request, res: Response) => {
   }
 });
 
+api.post('/support/resolve', async (req: Request, res: Response) => {
+  try {
+    await withTx(async (client) => {
+      await client.query(
+        `UPDATE docs SET data = jsonb_set(data, '{status}', '"resolved"') WHERE collection = 'support_tickets' AND owner_id = $1`,
+        [req.user!.id]
+      );
+      await client.query(
+        `UPDATE docs SET data = jsonb_set(data, '{handoffRequested}', 'false') WHERE collection = 'support_threads' AND id = $1`,
+        [req.user!.id]
+      );
+    });
+    const result = await getSupportMessages(req.user!);
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 400).json({ error: err.message, code: err.code });
+  }
+});
+
 // Referral Code Attribution
 api.post('/referrals/attribute', async (req: Request, res: Response) => {
   try {
