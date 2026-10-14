@@ -1,8 +1,12 @@
 import express, { type Request, type Response } from 'express';
 import cors from 'cors';
 import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 import { authMiddleware } from './auth-middleware.ts';
 import { paymentsHandle } from './payments-http.ts';
 import { programSummary, programAction, adminPrograms, accountActivity, getReferralsSummary } from './programs.ts';
