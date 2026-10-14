@@ -1,7 +1,7 @@
-export type SupportMessage={id:string;text:string;kind:'customer'|'staff'|'assistant';senderId:string;createdAt:number;pendingWrite?:boolean;assistant?:{knowledgeVersion:string;citationIds:string[];inReplyTo:string}};
+export type SupportMessage={id:string;text:string;kind:'customer'|'staff'|'assistant'|'system_notice';senderId:string;createdAt:number;pendingWrite?:boolean;assistant?:{knowledgeVersion?:string;citationIds?:string[];inReplyTo?:string;id?:string;name?:string}};
 export type SupportTicket={id:string;status:'open'|'in_progress'|'waiting'|'resolved'|'closed';createdAt:number};
 export type SupportAssistantCapability={available:boolean;reason:'ready'|'security_backend_required'|'model_not_configured'|'model_configuration_invalid'|'model_unreachable';knowledgeVersion:string;requiredServices:string[];activeTicket?:SupportTicket|null};
-export type SupportAssistantResult={status:'answered'|'pending'|'handoff'|'unavailable';replyId?:string;handoff?:boolean;ticket?:SupportTicket};
+export type SupportAssistantResult={status:'answered'|'pending'|'handoff'|'unavailable'|'ready'|'ok';replyId?:string;messageId?:string;reply?:string;kind?:'customer'|'staff'|'assistant'|'system_notice';handoff?:boolean;ticket?:SupportTicket};
 export type SupportAssistantPhase='reading'|'generating'|'saving';
 export type SupportAssistantOptions={onChunk?:(text:string)=>void;onStatus?:(phase:SupportAssistantPhase)=>void;signal?:AbortSignal};
 export type SupportSnapshot={messages:SupportMessage[];handoffRequested:boolean;hasOlder:boolean};

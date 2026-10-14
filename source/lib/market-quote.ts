@@ -33,7 +33,7 @@ async function request(pair:string,provider:'coinbase'|'bitstamp'|'internal',con
   const response=await fetch(url,{signal:controller.signal,credentials:'omit',headers:{Accept:'application/json'}});status=response.status;
   if(!response.ok)throw new Error(`HTTP ${status}`);
   if(!response.headers.get('content-type')?.includes('application/json'))throw new Error('Expected JSON quote');
-  const json=await response.json();
+  const json: any=await response.json();
   if(provider==='internal'){
    if(typeof json.price!=='number'||json.price<=0)throw new Error('Invalid internal quote');
    return json as MarketQuote;

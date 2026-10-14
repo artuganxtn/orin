@@ -282,12 +282,13 @@ export async function getSupportMessages(user: { id: string }) {
   });
 }
 
-export async function sendSupportMessage(user: { id: string }, input: { id?: string; text: string }) {
+export async function sendSupportMessage(user: { id: string }, input: { id?: string; text: string; locale?: string }) {
   const text = String(input.text || '').trim();
   if (!text) throw new ClientError('نص الرسالة مطلوب. / Message text required.', 400);
   const msgId = input.id || randomUUID();
+  const locale = input.locale === 'en' ? 'en' : 'ar';
 
-  return await withTx(async (client) => {
+  await withTx(async (client) => {
     const docRes = await client.query(
       `SELECT data FROM docs WHERE collection = 'support_threads' AND id = $1 FOR UPDATE`,
       [user.id]
@@ -318,9 +319,17 @@ export async function sendSupportMessage(user: { id: string }, input: { id?: str
         [user.id, JSON.stringify(thread)]
       );
     }
-
-    return thread;
   });
+
+  // Exactly one trigger point: server-side after customer message is stored
+  try {
+    const { supportAssistantReply } = await import('./support.ts');
+    await supportAssistantReply(user, { message: text, messageId: msgId, locale });
+  } catch (err: any) {
+    console.warn('[SUPPORT_BOT_TRIGGER_WARN]', err?.message || err);
+  }
+
+  return await getSupportMessages(user);
 }
 
 // 4. Referral Code Attribution

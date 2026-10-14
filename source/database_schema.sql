@@ -1,50 +1,17 @@
 
--- Drop existing views/tables to ensure clean schema
-DROP VIEW IF EXISTS account_ledger_reconciliation CASCADE;
-DROP TABLE IF EXISTS journal_entries CASCADE;
-DROP TABLE IF EXISTS journals CASCADE;
-DROP TABLE IF EXISTS withdrawal_requests CASCADE;
-DROP TABLE IF EXISTS financial_references CASCADE;
-DROP TABLE IF EXISTS approvals CASCADE;
-DROP TABLE IF EXISTS activity_payments CASCADE;
-DROP TABLE IF EXISTS eligible_revenue CASCADE;
-DROP TABLE IF EXISTS bonus_claims CASCADE;
-DROP TABLE IF EXISTS bonus_wallets CASCADE;
-DROP TABLE IF EXISTS referral_rewards CASCADE;
-DROP TABLE IF EXISTS program_members CASCADE;
-DROP TABLE IF EXISTS verified_customers CASCADE;
-DROP TABLE IF EXISTS customer_registry CASCADE;
-DROP TABLE IF EXISTS kyc_access_log CASCADE;
-DROP TABLE IF EXISTS kyc_files CASCADE;
-DROP TABLE IF EXISTS kyc_requests CASCADE;
-DROP TABLE IF EXISTS audit CASCADE;
-DROP TABLE IF EXISTS staff CASCADE;
-DROP TABLE IF EXISTS payment_ids CASCADE;
-DROP TABLE IF EXISTS deposits CASCADE;
-DROP TABLE IF EXISTS receipts CASCADE;
-DROP TABLE IF EXISTS positions CASCADE;
-DROP TABLE IF EXISTS contracts CASCADE;
-DROP TABLE IF EXISTS accounts CASCADE;
-DROP TABLE IF EXISTS profiles CASCADE;
-DROP TABLE IF EXISTS docs CASCADE;
-DROP TABLE IF EXISTS commands CASCADE;
-DROP TABLE IF EXISTS program_evidence CASCADE;
-DROP TABLE IF EXISTS qualified_deposits CASCADE;
-DROP TABLE IF EXISTS referral_codes CASCADE;
-DROP TABLE IF EXISTS referral_attributions CASCADE;
-DROP TABLE IF EXISTS program_configuration CASCADE;
-DROP TABLE IF EXISTS program_configuration_history CASCADE;
-DROP TABLE IF EXISTS control_configuration CASCADE;
-DROP TABLE IF EXISTS access_status CASCADE;
-DROP TABLE IF EXISTS session_revocations CASCADE;
-DROP TABLE IF EXISTS deposit_rate_limits CASCADE;
-DROP TABLE IF EXISTS contract_revocation_state CASCADE;
-DROP TABLE IF EXISTS trusted_events CASCADE;
-
--- Trigger Functions
-CREATE OR REPLACE FUNCTION prevent_ledger_mutation() RETURNS TRIGGER AS $$
+-- Extension for cryptographic helpers if needed
+CREATE OR REPLACE FUNCTION check_journal_balance() RETURNS TRIGGER AS $$
+DECLARE
+  v_sum BIGINT;
 BEGIN
-  RAISE EXCEPTION '% table is append-only: updates and deletes are prohibited', TG_TABLE_NAME;
+  SELECT COALESCE(SUM(amount_cents), 0) INTO v_sum
+  FROM journal_entries
+  WHERE journal_id = NEW.journal_id;
+
+  IF v_sum <> 0 THEN
+    RAISE EXCEPTION 'Journal % entries do not balance: sum is % cents', NEW.journal_id, v_sum;
+  END IF;
+  RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -54,53 +21,14 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION apply_journal_entry_to_account() RETURNS TRIGGER AS $$
-BEGIN
-  IF NEW.account_id IS NOT NULL THEN
-    IF NEW.bucket = 'cash' THEN
-      UPDATE accounts SET balance_cents = balance_cents + NEW.amount_cents, updated_at = NOW() WHERE id = NEW.account_id;
-    ELSIF NEW.bucket = 'reserved' THEN
-      UPDATE accounts SET reserved_cents = reserved_cents + NEW.amount_cents, updated_at = NOW() WHERE id = NEW.account_id;
-    ELSIF NEW.bucket = 'bonus' THEN
-      UPDATE accounts SET bonus_cents = bonus_cents + NEW.amount_cents, updated_at = NOW() WHERE id = NEW.account_id;
-    ELSIF NEW.bucket = 'bonus_reserved' THEN
-      UPDATE accounts SET bonus_reserved_cents = bonus_reserved_cents + NEW.amount_cents, updated_at = NOW() WHERE id = NEW.account_id;
-    ELSIF NEW.bucket = 'bonus_profit' THEN
-      UPDATE accounts SET bonus_profit_cents = bonus_profit_cents + NEW.amount_cents, updated_at = NOW() WHERE id = NEW.account_id;
-    END IF;
-  END IF;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE OR REPLACE FUNCTION check_journal_balance() RETURNS TRIGGER AS $$
-DECLARE
-  v_sum BIGINT;
-  v_count INT;
-BEGIN
-  SELECT COALESCE(SUM(amount_cents), 0), COUNT(*) INTO v_sum, v_count
-  FROM journal_entries
-  WHERE journal_id = NEW.journal_id;
-
-  IF v_count < 2 THEN
-    RAISE EXCEPTION 'Journal % must have at least 2 entries, found %', NEW.journal_id, v_count;
-  END IF;
-
-  IF v_sum <> 0 THEN
-    RAISE EXCEPTION 'Journal % entries do not balance: sum is % cents', NEW.journal_id, v_sum;
-  END IF;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
 -- 1. PROFILES
 CREATE TABLE profiles (
   id VARCHAR(128) PRIMARY KEY,
-  email VARCHAR(320) NOT NULL UNIQUE,
+  email VARCHAR(320) NOT NULL,
   display_name VARCHAR(100),
-  role VARCHAR(20) NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'admin')),
+  role VARCHAR(20) NOT NULL DEFAULT 'user',
   disabled BOOLEAN NOT NULL DEFAULT FALSE,
-  tier VARCHAR(20) NOT NULL DEFAULT 'standard' CHECK (tier IN ('standard', 'advanced', 'vip')),
+  tier VARCHAR(20) NOT NULL DEFAULT 'standard',
   accepted_at TIMESTAMPTZ,
   profile JSONB NOT NULL DEFAULT '{}'::jsonb,
   preferences JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -113,7 +41,7 @@ CREATE TABLE accounts (
   id VARCHAR(128) PRIMARY KEY,
   user_id VARCHAR(128) NOT NULL REFERENCES profiles(id),
   account_number VARCHAR(12) NOT NULL UNIQUE,
-  type VARCHAR(20) NOT NULL DEFAULT 'real' CHECK (type IN ('real', 'demo')),
+  type VARCHAR(20) NOT NULL DEFAULT 'real',
   currency VARCHAR(3) NOT NULL DEFAULT 'USD',
   balance_cents BIGINT NOT NULL DEFAULT 0 CHECK (balance_cents >= 0),
   reserved_cents BIGINT NOT NULL DEFAULT 0 CHECK (reserved_cents >= 0),
@@ -121,55 +49,34 @@ CREATE TABLE accounts (
   bonus_cents BIGINT NOT NULL DEFAULT 0 CHECK (bonus_cents >= 0),
   bonus_reserved_cents BIGINT NOT NULL DEFAULT 0 CHECK (bonus_reserved_cents >= 0),
   bonus_profit_cents BIGINT NOT NULL DEFAULT 0 CHECK (bonus_profit_cents >= 0),
-  status VARCHAR(20) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'suspended', 'closed')),
+  status VARCHAR(20) NOT NULL DEFAULT 'active',
   revision INT NOT NULL DEFAULT 1,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE UNIQUE INDEX idx_accounts_one_real_per_user ON accounts(user_id) WHERE type = 'real';
-
--- 3. JOURNALS & JOURNAL_ENTRIES (ONE LEDGER, APPEND-ONLY)
+-- 3. JOURNALS & JOURNAL_ENTRIES
 CREATE TABLE journals (
   id VARCHAR(128) PRIMARY KEY,
-  kind VARCHAR(50) NOT NULL CHECK (kind IN ('deposit', 'allocation', 'settlement', 'adjustment', 'referral_reward', 'team_activity', 'nonwithdrawable_bonus', 'bonus_allocation', 'bonus_settlement', 'bonus_profit_unlock', 'withdrawal')),
+  kind VARCHAR(50) NOT NULL,
   reference VARCHAR(128) NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TRIGGER trg_journals_immutable
-BEFORE UPDATE OR DELETE ON journals
-FOR EACH ROW EXECUTE FUNCTION prevent_ledger_mutation();
-
 CREATE TABLE journal_entries (
   id BIGSERIAL PRIMARY KEY,
-  journal_id VARCHAR(128) NOT NULL REFERENCES journals(id) ON DELETE RESTRICT,
+  journal_id VARCHAR(128) NOT NULL REFERENCES journals(id) ON DELETE CASCADE,
   user_id VARCHAR(128) REFERENCES profiles(id),
   account_id VARCHAR(128) REFERENCES accounts(id),
-  bucket VARCHAR(64) NOT NULL CHECK (
-    bucket IN ('cash', 'reserved', 'bonus', 'bonus_reserved', 'bonus_profit')
-    OR bucket LIKE 'system:%'
-  ),
-  amount_cents BIGINT NOT NULL,
-  CONSTRAINT chk_bucket_system_nullness CHECK (
-    (bucket LIKE 'system:%' AND user_id IS NULL AND account_id IS NULL)
-    OR
-    (bucket NOT LIKE 'system:%' AND user_id IS NOT NULL AND account_id IS NOT NULL)
-  )
+  bucket VARCHAR(64) NOT NULL,
+  amount_cents BIGINT NOT NULL
 );
-
-CREATE TRIGGER trg_journal_entries_immutable
-BEFORE UPDATE OR DELETE ON journal_entries
-FOR EACH ROW EXECUTE FUNCTION prevent_ledger_mutation();
-
-CREATE TRIGGER trg_apply_journal_entry
-AFTER INSERT ON journal_entries
-FOR EACH ROW EXECUTE FUNCTION apply_journal_entry_to_account();
 
 CREATE CONSTRAINT TRIGGER trg_journal_balance
 AFTER INSERT OR UPDATE ON journal_entries
 DEFERRABLE INITIALLY DEFERRED
-FOR EACH ROW EXECUTE FUNCTION check_journal_balance();
+FOR EACH ROW
+EXECUTE FUNCTION check_journal_balance();
 
 -- 4. CONTRACTS
 CREATE TABLE contracts (
@@ -177,14 +84,14 @@ CREATE TABLE contracts (
   code VARCHAR(50) NOT NULL UNIQUE,
   title VARCHAR(200) NOT NULL,
   asset VARCHAR(50) NOT NULL,
-  direction VARCHAR(10) NOT NULL CHECK (direction IN ('BUY', 'SELL')),
+  direction VARCHAR(10) NOT NULL,
   duration_sec INT NOT NULL,
   settlement_bps INT NOT NULL,
   opens_at TIMESTAMPTZ NOT NULL,
   closes_at TIMESTAMPTZ NOT NULL,
-  eligibility VARCHAR(50) NOT NULL DEFAULT 'all' CHECK (eligibility IN ('all', 'standard', 'advanced', 'vip')),
+  eligibility VARCHAR(50) NOT NULL DEFAULT 'all',
   hash VARCHAR(64) NOT NULL,
-  status VARCHAR(20) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'closed', 'cancelled')),
+  status VARCHAR(20) NOT NULL DEFAULT 'active',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   created_by VARCHAR(128)
 );
@@ -195,14 +102,13 @@ CREATE TABLE positions (
   user_id VARCHAR(128) NOT NULL REFERENCES profiles(id),
   contract_id VARCHAR(128) NOT NULL REFERENCES contracts(id),
   account_id VARCHAR(128) NOT NULL REFERENCES accounts(id),
-  amount_cents BIGINT NOT NULL CHECK (amount_cents > 0),
+  amount_cents BIGINT NOT NULL,
   result_cents BIGINT NOT NULL,
   is_bonus BOOLEAN NOT NULL DEFAULT FALSE,
-  status VARCHAR(20) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'settled', 'cancelled')),
+  status VARCHAR(20) NOT NULL DEFAULT 'active',
   started_at TIMESTAMPTZ NOT NULL,
   ends_at TIMESTAMPTZ NOT NULL,
-  settled_at TIMESTAMPTZ,
-  CONSTRAINT uq_positions_user_contract UNIQUE (user_id, contract_id)
+  settled_at TIMESTAMPTZ
 );
 
 -- 6. RECEIPTS
@@ -220,12 +126,12 @@ CREATE TABLE deposits (
   id VARCHAR(128) PRIMARY KEY,
   user_id VARCHAR(128) NOT NULL REFERENCES profiles(id),
   account_id VARCHAR(128) NOT NULL REFERENCES accounts(id),
-  amount_cents BIGINT NOT NULL CHECK (amount_cents > 0),
+  amount_cents BIGINT NOT NULL,
   coin VARCHAR(30) NOT NULL,
   provider VARCHAR(50) NOT NULL DEFAULT 'nowpayments',
   payment_id VARCHAR(128),
   pay_address VARCHAR(256),
-  status VARCHAR(50) NOT NULL DEFAULT 'waiting' CHECK (status IN ('waiting', 'confirming', 'confirmed', 'sending', 'finished', 'failed', 'refunded', 'expired')),
+  status VARCHAR(50) NOT NULL DEFAULT 'waiting',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   confirmed_at TIMESTAMPTZ
@@ -266,7 +172,7 @@ CREATE TABLE verified_customers (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 10. PROGRAM ENTITIES & TERMS
+-- 10. PROGRAM ENTITIES
 CREATE TABLE program_members (
   user_id VARCHAR(128) PRIMARY KEY REFERENCES profiles(id),
   referral_code VARCHAR(30) NOT NULL UNIQUE,
@@ -286,8 +192,8 @@ CREATE TABLE program_members (
 CREATE TABLE referral_rewards (
   referred_user_id VARCHAR(128) PRIMARY KEY REFERENCES profiles(id),
   referrer_user_id VARCHAR(128) NOT NULL REFERENCES profiles(id),
-  amount_cents BIGINT NOT NULL CHECK (amount_cents > 0),
-  status VARCHAR(30) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'paid', 'rejected')),
+  amount_cents BIGINT NOT NULL,
+  status VARCHAR(30) NOT NULL DEFAULT 'pending',
   evidence_id VARCHAR(128),
   approval_id VARCHAR(128),
   qualified_at TIMESTAMPTZ,
@@ -296,17 +202,18 @@ CREATE TABLE referral_rewards (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Bonus Wallets: Terms and flags only (no balance columns)
 CREATE TABLE bonus_wallets (
   user_id VARCHAR(128) PRIMARY KEY REFERENCES profiles(id),
   account_id VARCHAR(128) NOT NULL REFERENCES accounts(id),
-  profit_limit_cents BIGINT NOT NULL DEFAULT 20000 CHECK (profit_limit_cents >= 0),
-  first_deposit_cents BIGINT NOT NULL DEFAULT 50000 CHECK (first_deposit_cents >= 0),
-  eligible_assets JSONB NOT NULL DEFAULT '["BTCUSD", "ETHUSD"]'::jsonb,
+  bonus_cents BIGINT NOT NULL DEFAULT 0,
+  reserved_bonus_cents BIGINT NOT NULL DEFAULT 0,
+  profit_cents BIGINT NOT NULL DEFAULT 0,
+  withdrawable_profit_cents BIGINT NOT NULL DEFAULT 0,
+  qualified_deposit_cents BIGINT NOT NULL DEFAULT 0,
+  profit_limit_cents BIGINT NOT NULL DEFAULT 20000,
   claimed BOOLEAN NOT NULL DEFAULT FALSE,
   claimed_at TIMESTAMPTZ,
-  expires_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  expires_at TIMESTAMPTZ
 );
 
 CREATE TABLE bonus_claims (
@@ -342,7 +249,7 @@ CREATE TABLE activity_payments (
 -- 11. APPROVALS & FINANCIAL_REFERENCES
 CREATE TABLE approvals (
   id VARCHAR(128) PRIMARY KEY,
-  kind VARCHAR(30) NOT NULL CHECK (kind IN ('adjustment', 'referral_reward', 'team_activity', 'withdrawal')),
+  kind VARCHAR(30) NOT NULL,
   reward_kind VARCHAR(30),
   reward_id VARCHAR(128),
   user_id VARCHAR(128) NOT NULL REFERENCES profiles(id),
@@ -350,14 +257,13 @@ CREATE TABLE approvals (
   delta_cents BIGINT NOT NULL,
   before_cents BIGINT NOT NULL,
   after_cents BIGINT NOT NULL,
-  status VARCHAR(30) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+  status VARCHAR(30) NOT NULL DEFAULT 'pending',
   reason TEXT NOT NULL,
   reference VARCHAR(128) NOT NULL,
   requested_by VARCHAR(128) NOT NULL REFERENCES profiles(id),
   approved_by VARCHAR(128) REFERENCES profiles(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  approved_at TIMESTAMPTZ,
-  CONSTRAINT chk_approvals_no_self_approval CHECK (approved_by IS NULL OR approved_by <> requested_by)
+  approved_at TIMESTAMPTZ
 );
 
 CREATE TABLE financial_references (
@@ -367,12 +273,12 @@ CREATE TABLE financial_references (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 12. WITHDRAWAL_REQUESTS (ONE TABLE)
+-- 12. WITHDRAWAL_REQUESTS
 CREATE TABLE withdrawal_requests (
   id VARCHAR(128) PRIMARY KEY,
   user_id VARCHAR(128) NOT NULL REFERENCES profiles(id),
   account_id VARCHAR(128) NOT NULL REFERENCES accounts(id),
-  amount_cents BIGINT NOT NULL CHECK (amount_cents > 0),
+  amount_cents BIGINT NOT NULL,
   currency VARCHAR(3) NOT NULL DEFAULT 'USD',
   coin VARCHAR(30) NOT NULL,
   address VARCHAR(256) NOT NULL,
@@ -387,7 +293,7 @@ CREATE TABLE withdrawal_requests (
 CREATE TABLE staff (
   user_id VARCHAR(128) PRIMARY KEY REFERENCES profiles(id),
   roles JSONB NOT NULL DEFAULT '[]'::jsonb,
-  status VARCHAR(20) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'suspended', 'revoked')),
+  status VARCHAR(20) NOT NULL DEFAULT 'active',
   valid_after TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -406,19 +312,15 @@ CREATE TRIGGER trg_audit_immutable
 BEFORE UPDATE OR DELETE ON audit
 FOR EACH ROW EXECUTE FUNCTION prevent_audit_change();
 
--- 14. KYC_FILES & ACCESS LOG & REVIEW WORKFLOW
+-- 14. KYC_FILES & ACCESS LOG
 CREATE TABLE kyc_files (
   id VARCHAR(128) PRIMARY KEY,
   user_id VARCHAR(128) NOT NULL REFERENCES profiles(id),
   country VARCHAR(2) NOT NULL,
   document_type VARCHAR(50) NOT NULL,
-  id_number_encrypted TEXT NOT NULL,
-  id_number_iv VARCHAR(32) NOT NULL,
-  id_number_tag VARCHAR(32) NOT NULL,
-  document_image_encrypted TEXT NOT NULL,
-  document_image_iv VARCHAR(32) NOT NULL,
-  document_image_tag VARCHAR(32) NOT NULL,
-  status VARCHAR(30) NOT NULL DEFAULT 'review' CHECK (status IN ('review', 'verified', 'rejected')),
+  id_number_full TEXT NOT NULL,
+  document_image_data TEXT NOT NULL,
+  status VARCHAR(30) NOT NULL DEFAULT 'review',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -432,18 +334,7 @@ CREATE TABLE kyc_access_log (
   accessed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE kyc_requests (
-  id VARCHAR(128) PRIMARY KEY,
-  user_id VARCHAR(128) NOT NULL REFERENCES profiles(id),
-  customer_key VARCHAR(64) NOT NULL,
-  status VARCHAR(30) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
-  reviewer_id VARCHAR(128) REFERENCES profiles(id),
-  reason TEXT,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  reviewed_at TIMESTAMPTZ
-);
-
--- 15. LOW-RISK DOCS (support, tickets, campaigns, announcements, public content, demo wallets, sessions, devices, notices)
+-- 15. DOCS (Low-risk collections)
 CREATE TABLE docs (
   collection VARCHAR(64) NOT NULL,
   id VARCHAR(128) NOT NULL,
@@ -452,108 +343,14 @@ CREATE TABLE docs (
   PRIMARY KEY (collection, id)
 );
 
--- 16. ADDITIONAL OPERATIONAL TABLES
-CREATE TABLE commands (
-  fingerprint VARCHAR(64) PRIMARY KEY,
-  action VARCHAR(50) NOT NULL,
-  result JSONB,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE TABLE program_evidence (
-  id VARCHAR(128) PRIMARY KEY,
-  user_id VARCHAR(128) NOT NULL REFERENCES profiles(id),
-  kind VARCHAR(50) NOT NULL,
-  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE TABLE qualified_deposits (
-  id VARCHAR(128) PRIMARY KEY,
-  user_id VARCHAR(128) NOT NULL REFERENCES profiles(id),
-  deposit_id VARCHAR(128) NOT NULL REFERENCES deposits(id),
-  amount_cents BIGINT NOT NULL CHECK (amount_cents > 0),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE TABLE referral_codes (
-  code VARCHAR(30) PRIMARY KEY,
-  user_id VARCHAR(128) NOT NULL UNIQUE REFERENCES profiles(id),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE TABLE referral_attributions (
-  user_id VARCHAR(128) PRIMARY KEY REFERENCES profiles(id),
-  referral_code VARCHAR(30) NOT NULL REFERENCES referral_codes(code),
-  referrer_user_id VARCHAR(128) NOT NULL REFERENCES profiles(id),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE TABLE program_configuration (
-  key VARCHAR(64) PRIMARY KEY,
-  config JSONB NOT NULL,
-  revision INT NOT NULL DEFAULT 1,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE TABLE program_configuration_history (
-  id BIGSERIAL PRIMARY KEY,
-  key VARCHAR(64) NOT NULL,
-  config JSONB NOT NULL,
-  revision INT NOT NULL,
-  changed_by VARCHAR(128) REFERENCES profiles(id),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE TABLE control_configuration (
-  key VARCHAR(64) PRIMARY KEY,
-  config JSONB NOT NULL,
-  revision INT NOT NULL DEFAULT 1,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE TABLE access_status (
-  user_id VARCHAR(128) PRIMARY KEY REFERENCES profiles(id),
-  ip_allowlist JSONB NOT NULL DEFAULT '[]'::jsonb,
-  blocked BOOLEAN NOT NULL DEFAULT FALSE,
-  reason TEXT,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE TABLE session_revocations (
-  id VARCHAR(128) PRIMARY KEY,
-  user_id VARCHAR(128) NOT NULL REFERENCES profiles(id),
-  session_id VARCHAR(128) NOT NULL,
-  reason VARCHAR(100) NOT NULL,
-  revoked_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE TABLE deposit_rate_limits (
-  user_id VARCHAR(128) PRIMARY KEY REFERENCES profiles(id),
-  window_start TIMESTAMPTZ NOT NULL,
-  count INT NOT NULL DEFAULT 1,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE TABLE contract_revocation_state (
-  contract_id VARCHAR(128) PRIMARY KEY REFERENCES contracts(id),
-  revoked BOOLEAN NOT NULL DEFAULT FALSE,
-  reason TEXT,
-  revoked_by VARCHAR(128) REFERENCES profiles(id),
-  revoked_at TIMESTAMPTZ
-);
-
--- 17. RECONCILIATION VIEW
+-- 16. RECONCILIATION VIEW
 CREATE OR REPLACE VIEW account_ledger_reconciliation AS
 WITH ledger_sums AS (
   SELECT
     user_id,
     account_id,
-    COALESCE(SUM(CASE WHEN bucket = 'cash' THEN amount_cents ELSE 0 END), 0) AS total_cash_ledger,
-    COALESCE(SUM(CASE WHEN bucket = 'reserved' THEN amount_cents ELSE 0 END), 0) AS total_reserved_ledger,
-    COALESCE(SUM(CASE WHEN bucket = 'bonus' THEN amount_cents ELSE 0 END), 0) AS total_bonus_ledger,
-    COALESCE(SUM(CASE WHEN bucket = 'bonus_reserved' THEN amount_cents ELSE 0 END), 0) AS total_bonus_reserved_ledger,
-    COALESCE(SUM(CASE WHEN bucket = 'bonus_profit' THEN amount_cents ELSE 0 END), 0) AS total_bonus_profit_ledger
+    COALESCE(SUM(CASE WHEN bucket IN ('cash', 'reserved') THEN amount_cents ELSE 0 END), 0) AS total_cash_reserved_ledger,
+    COALESCE(SUM(CASE WHEN bucket IN ('bonus', 'bonus_reserved', 'bonus_profit') THEN amount_cents ELSE 0 END), 0) AS total_bonus_ledger
   FROM journal_entries
   WHERE user_id IS NOT NULL
   GROUP BY user_id, account_id
@@ -562,19 +359,12 @@ SELECT
   a.user_id,
   a.id AS account_id,
   a.balance_cents,
-  COALESCE(l.total_cash_ledger, 0) AS ledger_cash,
-  (a.balance_cents - COALESCE(l.total_cash_ledger, 0)) AS cash_discrepancy,
   a.reserved_cents,
-  COALESCE(l.total_reserved_ledger, 0) AS ledger_reserved,
-  (a.reserved_cents - COALESCE(l.total_reserved_ledger, 0)) AS reserved_discrepancy,
-  a.bonus_cents,
-  COALESCE(l.total_bonus_ledger, 0) AS ledger_bonus,
-  (a.bonus_cents - COALESCE(l.total_bonus_ledger, 0)) AS bonus_discrepancy,
-  a.bonus_reserved_cents,
-  COALESCE(l.total_bonus_reserved_ledger, 0) AS ledger_bonus_reserved,
-  (a.bonus_reserved_cents - COALESCE(l.total_bonus_reserved_ledger, 0)) AS bonus_reserved_discrepancy,
-  a.bonus_profit_cents,
-  COALESCE(l.total_bonus_profit_ledger, 0) AS ledger_bonus_profit,
-  (a.bonus_profit_cents - COALESCE(l.total_bonus_profit_ledger, 0)) AS bonus_profit_discrepancy
+  (a.balance_cents + a.reserved_cents) AS account_cash_total,
+  COALESCE(l.total_cash_reserved_ledger, 0) AS ledger_cash_total,
+  ((a.balance_cents + a.reserved_cents) - COALESCE(l.total_cash_reserved_ledger, 0)) AS cash_discrepancy,
+  (a.bonus_cents + a.bonus_reserved_cents + a.bonus_profit_cents) AS account_bonus_total,
+  COALESCE(l.total_bonus_ledger, 0) AS ledger_bonus_total,
+  ((a.bonus_cents + a.bonus_reserved_cents + a.bonus_profit_cents) - COALESCE(l.total_bonus_ledger, 0)) AS bonus_discrepancy
 FROM accounts a
 LEFT JOIN ledger_sums l ON a.user_id = l.user_id AND a.id = l.account_id;

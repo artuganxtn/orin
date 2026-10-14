@@ -20,6 +20,7 @@ await build({
     'src/db.ts',
     'src/email-registration-http.ts',
     'src/firebase-admin-init.ts',
+    'src/client-services.ts',
     'src/migrate.ts'
   ],
   outdir: 'lib',
