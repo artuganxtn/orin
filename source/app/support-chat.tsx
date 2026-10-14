@@ -35,6 +35,7 @@ function SupportSession({uid}:{uid:string}){
  useEffect(()=>{if(!uid)return;try{saveOutbox(uid,pending)}catch{setError(t('تعذر حفظ المسودة على الجهاز.','Could not save the draft on this device.'))}},[pending,uid]);
  useEffect(()=>{setPending(old=>old.filter(p=>!snapshot.messages.some(m=>m.id===p.id&&!m.pendingWrite)));if(streamFor&&snapshot.messages.some(m=>m.assistant?.inReplyTo===streamFor)){setStreamText('');setStreamFor('');setRetryReply('')}},[snapshot.messages,streamFor]);
  useEffect(()=>{if(nearBottom.current)bottom.current?.scrollIntoView({block:'nearest'})},[snapshot.messages.length,pending.length,streamText,assistantBusy,open]);
+ useEffect(()=>{if(assistantBusy){const t=setTimeout(()=>{if(alive.current)setAssistantBusy(false)},12000);return()=>clearTimeout(t)}},[assistantBusy]);
  async function requestReply(messageId:string){
   if(!transport?.askAssistant||replyController.current||handoffRef.current)return;
   const controller=new AbortController();replyController.current=controller;setAssistantBusy(true);setAssistantNote('');setRetryReply('');setStreamFor(messageId);setStreamText('');setPhase('reading');
@@ -73,7 +74,7 @@ function SupportSession({uid}:{uid:string}){
   void new Promise<void>(resolve=>setTimeout(resolve,Math.max(0,1100-(Date.now()-lastSend.current)))).then(async()=>{
     try{
       await transport.send(uid,row.id,row.text);
-      if(alive.current)setAssistantBusy(true);
+      if(alive.current&&!snapshot.handoffRequested)setAssistantBusy(true);
     }catch{
       if(alive.current){
         setPending(old=>old.map(p=>p.id===row.id?{...p,state:'failed'}:p));

@@ -491,7 +491,7 @@ export async function controlAction(u: Identity, input: Data) {
     const durationSec = Number(payload.durationSec || 60);
     const settlementBps = Number(payload.settlementBps || 850);
     const eligibility = String(payload.eligibility || 'all');
-    const mode = String(payload.mode || 'review') === 'auto' ? 'auto' : 'review';
+    const mode = String(payload.mode || 'auto') === 'review' ? 'review' : 'auto';
     const enabled = payload.enabled !== false && payload.enabled !== 'false';
 
     return await withTx(async (client) => {

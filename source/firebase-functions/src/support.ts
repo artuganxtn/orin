@@ -328,19 +328,20 @@ export async function supportAssistantReply(
       const status = String(tData.status || '').toLowerCase();
       if (['open', 'submitted', 'in_progress', 'escalated', 'review'].includes(status)) {
         isTicketActive = true;
-      } else if (['resolved', 'closed'].includes(status)) {
-        if (thread.handoffRequested) {
-          thread.handoffRequested = false;
-          await client.query(
-            `UPDATE docs SET data = jsonb_set(data, '{handoffRequested}', 'false') WHERE collection = 'support_threads' AND id = $1`,
-            [u.id]
-          ).catch(() => {});
-        }
       }
     }
 
-    if (thread.handoffRequested || isTicketActive) {
-      console.log(`[SUPPORT_BOT_SILENT] Handoff active for user ${u.id}. AI bot staying silent.`);
+    // If no active ticket exists but handoff was flagged, reset it so assistant can answer
+    if (!isTicketActive && thread.handoffRequested) {
+      thread.handoffRequested = false;
+      await client.query(
+        `UPDATE docs SET data = jsonb_set(data, '{handoffRequested}', 'false') WHERE collection = 'support_threads' AND id = $1`,
+        [u.id]
+      ).catch(() => {});
+    }
+
+    if (isTicketActive) {
+      console.log(`[SUPPORT_BOT_SILENT] Active support ticket for user ${u.id}. AI bot staying silent.`);
       return {
         ok: true,
         status: 'handoff',
@@ -467,12 +468,15 @@ export async function supportAssistantReply(
     const apiKey = (process.env.ORIN_SUPPORT_AI_API_KEY || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.ORIN_SUPPORT_AI_TOKEN || '').trim();
 
     if (apiKey) {
-      const candidateModels = [
+      const candidateModels = Array.from(new Set([
         process.env.ORIN_SUPPORT_AI_MODEL,
         process.env.GEMINI_MODEL,
+        'gemini-2.5-flash-lite',
+        'gemini-2.5-flash',
+        'gemini-2.0-flash',
         'gemini-1.5-flash',
         'gemini-1.5-pro'
-      ].filter(Boolean) as string[];
+      ].filter(Boolean) as string[]));
 
       for (const modelName of candidateModels) {
         try {

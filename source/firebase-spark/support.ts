@@ -6,6 +6,7 @@ export function supportTransport(
   actor: () => string = () => '',
   assistantRequest?: (path: string, init: RequestInit) => Promise<Response>
 ): SupportTransport {
+  let activeReceive: ((snapshot: { messages: SupportMessage[]; handoffRequested: boolean; hasOlder: boolean }) => void) | null = null;
   return {
     async assistantCapability() {
       if (!assistantRequest) {
@@ -75,6 +76,7 @@ export function supportTransport(
       if (!res.ok) throw new Error('Reply failed');
     },
     watch(uid, receive, connection) {
+      activeReceive = receive;
       let active = true;
       const poll = async () => {
         if (!active) return;
@@ -101,7 +103,11 @@ export function supportTransport(
       };
       void poll();
       const timer = setInterval(poll, 5000);
-      return () => { active = false; clearInterval(timer); };
+      return () => {
+        active = false;
+        clearInterval(timer);
+        if (activeReceive === receive) activeReceive = null;
+      };
     },
     async send(uid, id, body) {
       const text = supportText(body);
@@ -114,6 +120,18 @@ export function supportTransport(
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || 'Failed to send message');
+      }
+      const data = await res.json().catch(() => null);
+      if (data && activeReceive) {
+        const msgs: SupportMessage[] = (data.messages || []).map((m: any) => ({
+          id: m.id,
+          text: m.text,
+          kind: m.kind,
+          senderId: m.senderId,
+          createdAt: m.createdAt || Date.now(),
+          ...(m.assistant ? { assistant: m.assistant } : {})
+        }));
+        activeReceive({ messages: msgs, handoffRequested: !!data.handoffRequested, hasOlder: false });
       }
     },
     async handoff(uid, messageId) {

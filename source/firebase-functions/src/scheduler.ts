@@ -57,9 +57,9 @@ export async function processSchedulerSlotsOnce(nowMs = Date.now()): Promise<{ r
       const runDate = getCurrentDateStrInTz(nowMs, slot.timezone || 'Europe/Istanbul');
       const targetTimeMs = computeSlotTargetTime(slot.local_time, slot.timezone || 'Europe/Istanbul', runDate);
 
-      // Check if run date matches scheduled days of week
-      const runDateObj = new Date(targetTimeMs);
-      const dayOfWeek = runDateObj.getUTCDay();
+      // Check if run date matches scheduled days of week (calculated in slot's timezone date)
+      const [y, m, d] = runDate.split('-').map(Number);
+      const dayOfWeek = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
       if (!days.includes(dayOfWeek)) continue;
 
       // Check existing run for (slot_id, run_date)
@@ -71,7 +71,7 @@ export async function processSchedulerSlotsOnce(nowMs = Date.now()): Promise<{ r
       if (runCheck.rowCount > 0) continue;
 
       const windowStartMs = targetTimeMs;
-      const windowGraceEndMs = targetTimeMs + 10 * 60 * 1000; // 10 min grace
+      const windowGraceEndMs = targetTimeMs + Number(slot.closes_after_min || 60) * 60 * 1000;
 
       if (nowMs < windowStartMs) {
         continue; // Not due yet
@@ -117,9 +117,8 @@ async function executeSlot(slot: any, client: any, nowMs: number, runDate: strin
   const closesAtMs = opensAtMs + Number(slot.closes_after_min || 60) * 60 * 1000;
   const hashVal = createHash('sha256').update(code + ':' + slot.asset + ':' + slot.direction + ':' + slot.settlement_bps).digest('hex');
 
-  const isAuto = slot.mode === 'auto';
-  const initialStatus = isAuto ? 'active' : 'cancelled';
-  const runStatus = isAuto ? 'published' : 'draft';
+  const initialStatus = 'active';
+  const runStatus = 'published';
 
   await client.query(
     `INSERT INTO profiles (id, email, display_name, role)
@@ -129,7 +128,7 @@ async function executeSlot(slot: any, client: any, nowMs: number, runDate: strin
 
   await client.query(
     `INSERT INTO contracts (id, code, title, asset, direction, duration_sec, settlement_bps, status, opens_at, closes_at, eligibility, hash, admin_id, created_at, published_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TO_TIMESTAMP($9/1000.0), TO_TIMESTAMP($10/1000.0), $11, $12, 'scheduler', NOW(), ${isAuto ? 'NOW()' : 'NULL'})`,
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TO_TIMESTAMP($9/1000.0), TO_TIMESTAMP($10/1000.0), $11, $12, 'scheduler', NOW(), NOW())`,
     [contractId, code, title, slot.asset, slot.direction, Number(slot.duration_sec), Number(slot.settlement_bps), initialStatus, opensAtMs, closesAtMs, slot.eligibility || 'all', hashVal]
   );
 
@@ -153,47 +152,27 @@ async function executeSlot(slot: any, client: any, nowMs: number, runDate: strin
     closesAtMs
   };
 
-  if (isAuto) {
-    const tpl = renderMessageTemplate('agent_slot', cInfo, slot.name);
-    const channelId = process.env.TELEGRAM_MODE === 'test' ? (process.env.TELEGRAM_TEST_CHANNEL_ID || '@testchannel') : (process.env.TELEGRAM_CHANNEL_ID || '@channel');
-    const outboxPayload = JSON.stringify({
-      method: 'sendMessage',
-      body: {
-        chat_id: channelId,
-        text: tpl.text,
-        parse_mode: 'HTML',
-        reply_markup: tpl.reply_markup
-      }
-    });
+  const tplKind = slot.id === 'slot-2030' ? 'agent_slot' : 'regular_slot';
+  const tpl = renderMessageTemplate(tplKind, cInfo, slot.name);
+  const channelId = process.env.TELEGRAM_MODE === 'test' ? (process.env.TELEGRAM_TEST_CHANNEL_ID || '@testchannel') : (process.env.TELEGRAM_CHANNEL_ID || '@channel');
+  const outboxPayload = JSON.stringify({
+    method: 'sendMessage',
+    body: {
+      chat_id: channelId,
+      text: tpl.text,
+      parse_mode: 'HTML',
+      reply_markup: tpl.reply_markup
+    }
+  });
 
-    await client.query(
-      `INSERT INTO telegram_outbox (id, kind, contract_id, payload, status, created_at, updated_at)
-       VALUES ($1, 'channel_post', $2, $3::jsonb, 'pending', NOW(), NOW())
-       ON CONFLICT (kind, contract_id) DO NOTHING`,
-      ['outbox-post-' + contractId, contractId, outboxPayload]
-    );
-  } else {
-    const adminChatId = (process.env.ADMIN_TELEGRAM_IDS || '').split(',')[0] || '@adminchat';
-    const tpl = renderMessageTemplate('admin_preview', cInfo, slot.name);
-    const outboxPayload = JSON.stringify({
-      method: 'sendMessage',
-      body: {
-        chat_id: adminChatId,
-        text: tpl.text,
-        parse_mode: 'HTML',
-        reply_markup: tpl.reply_markup
-      }
-    });
+  await client.query(
+    `INSERT INTO telegram_outbox (id, kind, contract_id, payload, status, created_at, updated_at)
+     VALUES ($1, 'channel_post', $2, $3::jsonb, 'pending', NOW(), NOW())
+     ON CONFLICT (kind, contract_id) DO NOTHING`,
+    ['outbox-post-' + contractId, contractId, outboxPayload]
+  );
 
-    await client.query(
-      `INSERT INTO telegram_outbox (id, kind, contract_id, payload, status, created_at, updated_at)
-       VALUES ($1, 'admin_preview', $2, $3::jsonb, 'pending', NOW(), NOW())
-       ON CONFLICT (kind, contract_id) DO NOTHING`,
-      ['outbox-preview-' + contractId, contractId, outboxPayload]
-    );
-  }
-
-  return { code, contractId, runId, isAuto };
+  return { code, contractId, runId, isAuto: true };
 }
 
 export async function triggerSlotRunDirectly(slotId: string, force = true): Promise<{ ok: boolean; code?: string; contractId?: string; isAuto?: boolean; outboxProcessed?: number }> {

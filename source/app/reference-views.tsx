@@ -204,7 +204,7 @@ export function ReferenceTrade(p:TradeProps){
     <button onClick={()=>{if(p.onExecuteCode&&p.code.trim())p.onExecuteCode(p.code,p.amount);else p.lookup();}} disabled={!p.state||!p.code.trim()||p.busy}>{p.busy?t('جارِ التحقق…','Verifying…'):t('تحقق','Verify')}</button>
    </div>
    <InvitationActions onCode={p.setCode}/>
-   {locked&&<span className="locked-inline"><LockKeyhole size={14}/>{t('التسوية المقفلة','Locked settlement')} <b className="num">{percent(locked.settlement_bps)}</b> · {locked.duration_sec/60} {t('دقيقة','min')}</span>}
+   {locked&&<span className="locked-inline"><LockKeyhole size={14}/>{t('التسوية المقفلة','Locked settlement')} <b className="num">{percent(locked.settlement_bps)}</b> · {locked.duration_sec < 60 ? `${locked.duration_sec} ${t('ثانية','sec')}` : `${Math.round(locked.duration_sec / 60)} ${t('دقيقة','min')}`}</span>}
   </div>}
   {p.active&&invited&&<div className="active-ticket">
    <div><span>{t('المركز نشط','Position active')}</span><strong className="num">{remaining(p.active.ends_at-p.now)}</strong></div>

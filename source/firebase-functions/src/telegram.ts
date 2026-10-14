@@ -40,7 +40,7 @@ export function renderMessageTemplate(
   const assetEsc = escapeHtml(c.asset);
   const dirText = c.direction === 'BUY' ? '🟢 شراء صعود (BUY)' : '🔴 بيع هبوط (SELL)';
   const dirTextEsc = escapeHtml(dirText);
-  const durationMin = Math.round(c.durationSec / 60);
+  const durationStr = c.durationSec < 60 ? `${c.durationSec} ثانية` : `${Math.round(c.durationSec / 60)} دقيقة`;
   const pctText = (c.settlementBps / 100).toFixed(1) + '%';
   const startTimeStr = formatTurkeyTime(c.opensAtMs);
   const endTimeStr = formatTurkeyTime(c.closesAtMs);
@@ -64,7 +64,7 @@ export function renderMessageTemplate(
       `📌 <b>الفترة:</b> ${slotNameEsc}\n` +
       `📊 <b>الأصل:</b> ${assetEsc}\n` +
       `🎯 <b>الاتجاه:</b> ${dirTextEsc}\n` +
-      `⏱️ <b>المدة:</b> ${durationMin} دقيقة\n` +
+      `⏱️ <b>المدة:</b> ${durationStr}\n` +
       `📈 <b>النسبة:</b> ${pctText}\n` +
       `⏰ <b>التوقيت (تركيا):</b> ${startTimeStr} - ${endTimeStr}\n` +
       `🔑 <b>الكود المقترح:</b>\n` +
@@ -91,7 +91,7 @@ export function renderMessageTemplate(
     `📌 <b>الصفقة:</b> ${titleEsc}\n` +
     `📊 <b>الأصل المالي:</b> ${assetEsc}\n` +
     `🎯 <b>نوع الصفقة:</b> ${dirTextEsc}\n` +
-    `⏱️ <b>مدة الصفقة:</b> ${durationMin} دقيقة\n` +
+    `⏱️ <b>مدة الصفقة:</b> ${durationStr}\n` +
     `📈 <b>نسبة الأرباح المقفلة:</b> ${pctText}\n` +
     `⏰ <b>فترة المشاركة (توقيت تركيا):</b> ${startTimeStr} - ${endTimeStr}\n` +
     `🔑 <b>كود الدخول في الصفقة:</b>\n` +
