@@ -34,12 +34,12 @@ export function AppDownloadCard({ compact = false }: { compact?: boolean }) {
               gap: '8px',
               padding: '10px 12px',
               borderRadius: '12px',
-              background: 'linear-gradient(135deg, rgba(32, 183, 146, 0.15), rgba(16, 172, 137, 0.05))',
-              border: '1px solid rgba(32, 183, 146, 0.3)',
-              color: '#34d399',
+              background: 'var(--orin-surface-soft, rgba(32, 183, 146, 0.12))',
+              border: '1px solid #10b981',
+              color: '#059669',
               textDecoration: 'none',
               fontSize: '13px',
-              fontWeight: 600,
+              fontWeight: 700,
               transition: 'all 0.2s ease'
             }}
           >
@@ -58,14 +58,13 @@ export function AppDownloadCard({ compact = false }: { compact?: boolean }) {
               gap: '8px',
               padding: '10px 12px',
               borderRadius: '12px',
-              background: 'linear-gradient(135deg, rgba(7, 136, 255, 0.12), rgba(0, 100, 244, 0.05))',
-              border: '1px solid #0788ff',
-              color: '#0788ff',
+              background: 'var(--orin-surface-soft, rgba(7, 136, 255, 0.12))',
+              border: '1px solid var(--orin-line, #0788ff)',
+              color: 'var(--orin-ink, #0284c7)',
               textDecoration: 'none',
               fontSize: '13px',
               fontWeight: 700,
-              transition: 'all 0.2s ease',
-              boxShadow: '0 2px 8px rgba(7, 136, 255, 0.12)'
+              transition: 'all 0.2s ease'
             }}
           >
             <Apple size={16} />

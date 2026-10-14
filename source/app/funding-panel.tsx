@@ -335,44 +335,44 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
 
     // Screenshot 3 — Withdraw Form
     return (
-      <section className="fp">
+      <section className="fp" style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box', overflowX: 'hidden' }}>
         <Header title={t('سحب الأموال', 'Withdraw funds')} sub={t('حساب حقيقي · USD', 'Real account · USD')} />
 
-        <div className="fp-hero-pay" style={{ borderRadius: '20px', padding: '20px', background: 'radial-gradient(90% 140% at 15% 50%,#1f6eff 0%,transparent 60%),linear-gradient(120deg,#0a339c 0%,#09226b 100%)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div className="fp-hero-pay" style={{ borderRadius: '20px', padding: '18px 20px', background: 'radial-gradient(90% 140% at 15% 50%,#1f6eff 0%,transparent 60%),linear-gradient(120deg,#0a339c 0%,#09226b 100%)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
           <div>
             <b style={{ fontSize: '22px', fontWeight: 800, display: 'block' }}>ORIN Pay</b>
             <small style={{ fontSize: '13px', color: '#b9cdf5' }}>{t('سحب العملات الرقمية', 'Crypto withdrawal')}</small>
           </div>
-          <span style={{ width: '48px', height: '48px', borderRadius: '14px', background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.25)', display: 'grid', placeItems: 'center' }}>
+          <span style={{ width: '48px', height: '48px', borderRadius: '14px', background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.25)', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
             <Wallet size={24} />
           </span>
         </div>
 
         {loading || (
           <>
-            <div className="fp-card" style={{ background: '#fff', border: '1px solid var(--fp-line)', borderRadius: '20px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div className="fp-card" style={{ background: '#fff', border: '1px solid var(--fp-line)', borderRadius: '20px', padding: '18px', display: 'flex', flexDirection: 'column', gap: '12px', width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
               <h2 style={{ fontSize: '18px', fontWeight: 700, margin: 0, color: 'var(--fp-ink)' }}>{t('تفاصيل السحب', 'Withdrawal details')}</h2>
 
               <label className="fp-label" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--fp-muted)', marginTop: '4px' }}>{t('شبكة التحويل', 'Transfer Network')}</label>
-              <div className="fp-select" style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '10px', height: '52px', border: '1px solid #dbe4f2', borderRadius: '14px', padding: '0 14px', background: 'var(--fp-soft)' }}>
+              <div className="fp-select" style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '10px', height: '52px', border: '1px solid #dbe4f2', borderRadius: '14px', padding: '0 14px', background: 'var(--fp-soft)', width: '100%', boxSizing: 'border-box' }}>
                 <Mark kind={wNet} size={28} />
-                <b style={{ flex: 1, fontSize: '15px', fontFamily: 'Arial, sans-serif' }} dir="ltr">{net.label} · {net.network}</b>
-                <ChevronDown size={18} style={{ color: '#5d6f8e' }} />
+                <b style={{ flex: 1, minWidth: 0, fontSize: '14.5px', fontFamily: 'Arial, sans-serif' }} dir="ltr">{net.label} · {net.network}</b>
+                <ChevronDown size={18} style={{ color: '#5d6f8e', flexShrink: 0 }} />
                 <select aria-label={t('شبكة التحويل', 'Network')} value={wNet} onChange={e => setWNet(e.target.value as PaymentCoin)} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%' }}>
                   {PAYMENT_COINS.map(c => <option key={c.id} value={c.id}>{c.label} · {c.network}</option>)}
                 </select>
               </div>
 
               <label className="fp-label" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--fp-muted)' }}>{t('مبلغ السحب', 'Withdrawal Amount')}</label>
-              <div className="fp-input" style={{ display: 'flex', alignItems: 'stretch', height: '52px', border: '1px solid #dbe4f2', borderRadius: '14px', overflow: 'hidden', background: 'var(--fp-soft)' }}>
-                <input inputMode="decimal" dir="ltr" placeholder={t('أدخل المبلغ', 'Enter amount')} value={wAmount} onChange={e => setWAmount(e.target.value)} style={{ flex: 1, border: 0, background: 'transparent', outline: 'none', padding: '0 16px', fontSize: '16px' }} />
-                <span className="fp-suffix" style={{ display: 'grid', placeItems: 'center', padding: '0 16px', background: '#f0f4fa', borderInlineStart: '1px solid #dbe4f2', fontWeight: 700, fontSize: '14px', color: '#4a5d7f' }}>USDT</span>
+              <div className="fp-input" style={{ display: 'flex', alignItems: 'stretch', height: '52px', border: '1px solid #dbe4f2', borderRadius: '14px', overflow: 'hidden', background: 'var(--fp-soft)', width: '100%', boxSizing: 'border-box' }}>
+                <input inputMode="decimal" dir="ltr" placeholder={t('أدخل المبلغ', 'Enter amount')} value={wAmount} onChange={e => setWAmount(e.target.value)} style={{ flex: 1, minWidth: 0, border: 0, background: 'transparent', outline: 'none', padding: '0 16px', fontSize: '16px', color: 'var(--fp-ink)' }} />
+                <span className="fp-suffix" style={{ display: 'grid', placeItems: 'center', padding: '0 16px', background: '#f0f4fa', borderInlineStart: '1px solid #dbe4f2', fontWeight: 700, fontSize: '14px', color: '#4a5d7f', flexShrink: 0 }}>USDT</span>
               </div>
 
               <label className="fp-label" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--fp-muted)' }}>{t('عنوان المحفظة', 'Wallet Address')}</label>
-              <div className="fp-input" style={{ display: 'flex', alignItems: 'stretch', height: '52px', border: '1px solid #dbe4f2', borderRadius: '14px', overflow: 'hidden', background: 'var(--fp-soft)' }}>
-                <input dir="ltr" autoComplete="off" spellCheck={false} placeholder={t('أدخل عنوان محفظتك', 'Enter your wallet address')} value={wAddress} onChange={e => setWAddress(e.target.value.trim())} style={{ flex: 1, border: 0, background: 'transparent', outline: 'none', padding: '0 16px', fontSize: '15px' }} />
-                <span style={{ display: 'grid', placeItems: 'center', padding: '0 14px', color: '#5d6f8e' }}>
+              <div className="fp-input" style={{ display: 'flex', alignItems: 'stretch', height: '52px', border: '1px solid #dbe4f2', borderRadius: '14px', overflow: 'hidden', background: 'var(--fp-soft)', width: '100%', boxSizing: 'border-box' }}>
+                <input dir="ltr" autoComplete="off" spellCheck={false} placeholder={t('أدخل عنوان محفظتك', 'Enter your wallet address')} value={wAddress} onChange={e => setWAddress(e.target.value.trim())} style={{ flex: 1, minWidth: 0, border: 0, background: 'transparent', outline: 'none', padding: '0 16px', fontSize: '14.5px', color: 'var(--fp-ink)' }} />
+                <span style={{ display: 'grid', placeItems: 'center', padding: '0 14px', color: '#5d6f8e', flexShrink: 0 }}>
                   <ScanLine size={20} />
                 </span>
               </div>
@@ -381,20 +381,20 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
             </div>
 
             {lockRemainingDays > 0 && (
-              <p className="fp-note warn" style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px', borderRadius: '14px', background: '#fff6e6', border: '1px solid #f5dfb3', color: '#8a5b13', fontSize: '13px' }}>
-                <LockKeyhole size={18} style={{ color: '#e09a1c', flex: 'none' }} />
+              <p className="fp-note warn" style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px', borderRadius: '14px', background: '#fff6e6', border: '1px solid #f5dfb3', color: '#8a5b13', fontSize: '13px', width: '100%', boxSizing: 'border-box' }}>
+                <LockKeyhole size={18} style={{ color: '#e09a1c', flexShrink: 0 }} />
                 <span><b>{t('فترة الحجز 29 يومًا', '29-day holding period')}</b> · {latestDeposit ? t(`متبقي ${lockRemainingDays} يومًا لإتاحة السحب.`, `${lockRemainingDays} days until withdrawals open.`) : t('يتاح السحب بعد 29 يومًا من أول إيداع مؤكد.', 'Withdrawals open 29 days after your first confirmed deposit.')}</span>
               </p>
             )}
 
             <ErrorBox />
 
-            <button type="button" className="fp-btn primary big" onClick={requestWithdrawal} style={{ width: '100%', height: '54px', borderRadius: '16px', background: 'linear-gradient(180deg,#1c8cff 0%,#0064f4 100%)', color: '#fff', border: 0, fontSize: '16px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer', boxShadow: '0 10px 22px rgba(10,108,255,0.3)' }}>
+            <button type="button" className="fp-btn primary big" onClick={requestWithdrawal} style={{ width: '100%', height: '54px', borderRadius: '16px', background: 'linear-gradient(180deg,#1c8cff 0%,#0064f4 100%)', color: '#fff', border: 0, fontSize: '16px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer', boxShadow: '0 10px 22px rgba(10,108,255,0.3)', boxSizing: 'border-box' }}>
               <Fwd size={18} />
               {t('طلب السحب', 'Request Withdrawal')}
             </button>
 
-            <button type="button" className="fp-btn outline big" onClick={() => nav.navigate('/support')} style={{ width: '100%', height: '54px', borderRadius: '16px', background: '#fff', color: '#173a77', border: '1px solid #9fbff0', fontSize: '15px', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer' }}>
+            <button type="button" className="fp-btn outline big" onClick={() => nav.navigate('/support')} style={{ width: '100%', height: '54px', borderRadius: '16px', background: '#fff', color: '#173a77', border: '1px solid #9fbff0', fontSize: '15px', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer', boxSizing: 'border-box' }}>
               <MessageCircleMore size={20} />
               {t('التواصل مع الدعم', 'Contact Support')}
             </button>

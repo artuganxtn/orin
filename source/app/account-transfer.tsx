@@ -88,8 +88,8 @@ export function AccountTransfer({ account, onSaved }: { account: TradingAccount 
 
   if (showHistory) {
     return (
-      <section className="account-transfer" style={{ padding: '4px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+      <section className="account-transfer" style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box', padding: '4px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', marginBottom: '16px', width: '100%', boxSizing: 'border-box' }}>
           <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: 'var(--orin-ink)' }}>{t('سجل التحويلات', 'Transfer History')}</h2>
           <button type="button" className="btn-outline" onClick={() => setShowHistory(false)} style={{ fontSize: '13px', padding: '6px 12px' }}>
             {t('العودة للتحويل', 'Back to Transfer')}
@@ -97,18 +97,18 @@ export function AccountTransfer({ account, onSaved }: { account: TradingAccount 
         </div>
 
         {operations.length > 0 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%', boxSizing: 'border-box' }}>
             {operations.map(op => (
-              <div key={op.id} style={{ background: '#fff', border: '1px solid var(--orin-line)', borderRadius: '16px', padding: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div>
-                  <b style={{ display: 'block', fontSize: '15px', color: 'var(--orin-ink)' }}>
+              <div key={op.id} style={{ background: '#fff', border: '1px solid var(--orin-line)', borderRadius: '16px', padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap', width: '100%', boxSizing: 'border-box' }}>
+                <div style={{ minWidth: 0 }}>
+                  <b style={{ display: 'block', fontSize: '14.5px', color: 'var(--orin-ink)' }}>
                     {label(op.from)} ← {label(op.to)}
                   </b>
                   <small style={{ color: 'var(--orin-muted)', fontSize: '12px' }}>
                     {new Date(op.createdAt).toLocaleDateString('ar-SA')} · {op.id}
                   </small>
                 </div>
-                <span style={{ color: '#0788ff', fontWeight: 700, fontSize: '16px' }} dir="ltr">
+                <span style={{ color: '#0788ff', fontWeight: 700, fontSize: '15px' }} dir="ltr">
                   {(op.amountCents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT
                 </span>
               </div>
@@ -124,65 +124,65 @@ export function AccountTransfer({ account, onSaved }: { account: TradingAccount 
   }
 
   return (
-    <section className="account-transfer" style={{ display: 'flex', flexDirection: 'column', gap: '14px', padding: '4px' }}>
+    <section className="account-transfer" style={{ display: 'flex', flexDirection: 'column', gap: '14px', padding: '2px', width: '100%', maxWidth: '100%', boxSizing: 'border-box', overflowX: 'hidden' }}>
       {/* Header Info Bar */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div>
-          <h2 style={{ margin: 0, fontSize: '22px', fontWeight: 800, color: 'var(--orin-ink)' }}>{t('التحويل بين العقود', 'Transfer Between Contracts')}</h2>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', width: '100%', boxSizing: 'border-box' }}>
+        <div style={{ minWidth: 0 }}>
+          <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: 'var(--orin-ink)' }}>{t('التحويل بين العقود', 'Transfer Between Contracts')}</h2>
           <p style={{ margin: '2px 0 0', fontSize: '13px', color: 'var(--orin-muted)' }}>{t('اختر نوعي العقود وحدد مبلغ التحويل', 'Select contract types and enter amount')}</p>
         </div>
 
-        <button type="button" onClick={() => setShowHistory(true)} style={{ border: 0, background: 'none', color: '#0788ff', fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+        <button type="button" onClick={() => setShowHistory(true)} style={{ border: 0, background: 'none', color: '#0788ff', fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', flexShrink: 0 }}>
           <History size={16} />
           {t('سجل التحويلات', 'Transfer History')} ({operations.length})
         </button>
       </div>
 
       {/* From / To Direction Selector Card */}
-      <div style={{ background: '#fff', border: '1px solid var(--orin-line)', borderRadius: '20px', padding: '20px', position: 'relative', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <div style={{ background: '#fff', border: '1px solid var(--orin-line)', borderRadius: '20px', padding: '16px', position: 'relative', display: 'flex', flexDirection: 'column', gap: '14px', width: '100%', boxSizing: 'border-box' }}>
         {/* Swap Direction Button */}
         <button
           type="button"
           onClick={() => setFrom(to)}
           aria-label={t('عكس اتجاه التحويل', 'Swap direction')}
-          style={{ position: 'absolute', left: '20px', top: '50%', transform: 'translateY(-50%)', width: '42px', height: '42px', borderRadius: '50%', background: '#fff', border: '1.5px solid #dbe4f2', display: 'grid', placeItems: 'center', color: '#0788ff', cursor: 'pointer', boxShadow: '0 4px 12px rgba(7,136,255,0.15)', zIndex: 2 }}
+          style={{ position: 'absolute', insetInlineStart: '16px', top: '50%', transform: 'translateY(-50%)', width: '40px', height: '40px', borderRadius: '50%', background: '#fff', border: '1.5px solid #dbe4f2', display: 'grid', placeItems: 'center', color: '#0788ff', cursor: 'pointer', boxShadow: '0 4px 12px rgba(7,136,255,0.15)', zIndex: 2 }}
         >
           <ArrowDownUp size={18} />
         </button>
 
         {/* From Section */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', paddingEnd: '50px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', paddingInlineStart: '52px', minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', flexWrap: 'wrap' }}>
             <small style={{ fontSize: '12.5px', color: 'var(--orin-muted)' }}>{t('من', 'From')}</small>
             <small style={{ fontSize: '12.5px', color: '#0788ff', fontWeight: 600 }} dir="ltr">
               {t('المتاح', 'Available')}: {availableBal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT
             </small>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#0788ff', display: 'inline-block' }} />
-            <strong style={{ fontSize: '17px', color: 'var(--orin-ink)', fontWeight: 700 }}>{label(from)}</strong>
+            <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#0788ff', display: 'inline-block', flexShrink: 0 }} />
+            <strong style={{ fontSize: '16px', color: 'var(--orin-ink)', fontWeight: 700 }}>{label(from)}</strong>
           </div>
         </div>
 
         <div style={{ borderTop: '1px solid var(--orin-line)', margin: '0' }} />
 
         {/* To Section */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', paddingEnd: '50px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', paddingInlineStart: '52px', minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', flexWrap: 'wrap' }}>
             <small style={{ fontSize: '12.5px', color: 'var(--orin-muted)' }}>{t('إلى', 'To')}</small>
             <small style={{ fontSize: '12.5px', color: 'var(--orin-muted)' }} dir="ltr">
               {t('الرصيد الحالي', 'Current')}: {(from === 'futures' ? perpBal : futuresBal).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT
             </small>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#00d2c8', display: 'inline-block' }} />
-            <strong style={{ fontSize: '17px', color: 'var(--orin-ink)', fontWeight: 700 }}>{label(to)}</strong>
+            <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#00d2c8', display: 'inline-block', flexShrink: 0 }} />
+            <strong style={{ fontSize: '16px', color: 'var(--orin-ink)', fontWeight: 700 }}>{label(to)}</strong>
           </div>
         </div>
       </div>
 
       {/* Currency Selector Card */}
-      <div style={{ background: '#fff', border: '1px solid var(--orin-line)', borderRadius: '16px', padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div style={{ background: '#fff', border: '1px solid var(--orin-line)', borderRadius: '16px', padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', boxSizing: 'border-box' }}>
         <small style={{ fontSize: '13px', color: 'var(--orin-muted)' }}>{t('العملة', 'Currency')}</small>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#26a17b', color: '#fff', display: 'grid', placeItems: 'center', fontWeight: 700, fontSize: '14px' }}>₮</span>
@@ -191,18 +191,18 @@ export function AccountTransfer({ account, onSaved }: { account: TradingAccount 
       </div>
 
       {/* Amount Input Field */}
-      <div style={{ background: '#fff', border: '1px solid var(--orin-line)', borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      <div style={{ background: '#fff', border: '1px solid var(--orin-line)', borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px', width: '100%', boxSizing: 'border-box' }}>
         <small style={{ fontSize: '13px', color: 'var(--orin-muted)' }}>{t('مبلغ التحويل', 'Transfer Amount')}</small>
-        <div style={{ display: 'flex', alignItems: 'center', height: '50px', border: '1px solid #dbe4f2', borderRadius: '12px', overflow: 'hidden', background: 'var(--orin-surface-soft)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', height: '50px', border: '1px solid #dbe4f2', borderRadius: '12px', overflow: 'hidden', background: 'var(--orin-surface-soft)', width: '100%', boxSizing: 'border-box' }}>
           <input
             inputMode="decimal"
             dir="ltr"
             placeholder={t('أدخل المبلغ', 'Enter amount')}
             value={amount}
             onChange={e => setAmount(e.target.value)}
-            style={{ flex: 1, border: 0, background: 'transparent', outline: 'none', padding: '0 14px', fontSize: '16px' }}
+            style={{ flex: 1, minWidth: 0, border: 0, background: 'transparent', outline: 'none', padding: '0 14px', fontSize: '16px', color: 'var(--orin-ink)' }}
           />
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0 12px', background: '#eef4fc', height: '100%', borderInlineStart: '1px solid #dbe4f2' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0 12px', background: '#eef4fc', height: '100%', borderInlineStart: '1px solid #dbe4f2', flexShrink: 0 }}>
             <span style={{ fontSize: '13px', fontWeight: 700, color: '#4a5d7f' }}>USDT</span>
             <button
               type="button"
@@ -216,17 +216,17 @@ export function AccountTransfer({ account, onSaved }: { account: TradingAccount 
       </div>
 
       {/* Info Alert */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px', borderRadius: '14px', background: '#edf5ff', border: '1px solid #d6e7fc', color: '#3f5a82', fontSize: '13px', lineHeight: 1.6 }}>
-        <Info size={18} style={{ color: '#0788ff', flex: 'none' }} />
-        <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px', borderRadius: '14px', background: '#edf5ff', border: '1px solid #d6e7fc', color: '#3f5a82', fontSize: '13px', lineHeight: 1.6, width: '100%', boxSizing: 'border-box' }}>
+        <Info size={18} style={{ color: '#0788ff', flexShrink: 0 }} />
+        <div style={{ minWidth: 0 }}>
           <b style={{ display: 'block', fontSize: '13.5px', marginBottom: '2px' }}>{t('معلومات التحويل', 'Transfer Info')}</b>
           <span>{t('حدد نوع العقود المحوّل منه وإليه، ثم أدخل المبلغ.', 'Select transfer source & destination, then enter amount.')}</span>
         </div>
       </div>
 
       {done && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px', borderRadius: '14px', background: '#e8f8f1', border: '1px solid #bfe9d6', color: '#11795a', fontSize: '13px' }}>
-          <CheckCircle2 size={18} style={{ flex: 'none' }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px', borderRadius: '14px', background: '#e8f8f1', border: '1px solid #bfe9d6', color: '#11795a', fontSize: '13px', width: '100%', boxSizing: 'border-box' }}>
+          <CheckCircle2 size={18} style={{ flexShrink: 0 }} />
           <span><b>{t('تم التحويل بنجاح', 'Transfer Successful')}</b> · {done}</span>
         </div>
       )}
@@ -237,7 +237,7 @@ export function AccountTransfer({ account, onSaved }: { account: TradingAccount 
         className="btn-primary"
         disabled={busy || !amount || Number(amount) <= 0 || loading}
         onClick={submit}
-        style={{ width: '100%', height: '52px', borderRadius: '16px', background: 'linear-gradient(180deg,#1c8cff 0%,#0064f4 100%)', color: '#fff', border: 0, fontSize: '16px', fontWeight: 700, cursor: 'pointer', boxShadow: '0 10px 22px rgba(10,108,255,0.25)' }}
+        style={{ width: '100%', height: '52px', borderRadius: '16px', background: 'linear-gradient(180deg,#1c8cff 0%,#0064f4 100%)', color: '#fff', border: 0, fontSize: '16px', fontWeight: 700, cursor: 'pointer', boxShadow: '0 10px 22px rgba(10,108,255,0.25)', boxSizing: 'border-box' }}
       >
         {busy ? t('جار التحويل…', 'Transferring…') : t('متابعة التحويل', 'Continue Transfer')}
       </button>

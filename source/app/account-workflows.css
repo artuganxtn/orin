@@ -1,4 +1,5 @@
-.account-transfer,.positions-hub{max-width:900px;margin:auto;color:var(--orin-ink,#162349)}
+.account-transfer{width:100%;max-width:100%;min-width:0;box-sizing:border-box;overflow-x:hidden;margin:0 auto;color:var(--orin-ink,#162349)}
+.positions-hub{max-width:900px;margin:auto;color:var(--orin-ink,#162349)}
 .transfer-intro{display:flex;align-items:center;gap:14px;margin-bottom:22px}.transfer-intro h2{font-size:21px;font-weight:750}.transfer-intro p,.positions-heading p{font-size:13px;line-height:1.8;color:var(--orin-muted,#7c8ba2);margin-top:5px}
 .workflow-icon{display:grid;place-items:center;width:46px;height:46px;flex-shrink:0;color:#0b86ec;background:linear-gradient(145deg,#edf8ff,#dfedfc);border-radius:15px}
 .workflow-account{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px;padding:15px;border:1px solid var(--orin-line,#e1e9f4);border-radius:16px;background:var(--orin-surface,#fff);margin-bottom:20px}

@@ -7,3 +7,45 @@ body{background:#edf4ff;color:#101d4b}.reference-shell{max-width:480px;margin:0 
 .reference-home .home-quote{min-height:50px}.reference-home .performance-grid section>span{font-size:12px}.reference-home .balance-top{font-size:14px}.reference-home .balance-bottom button{font-size:11px}.reference-markets .market-categories button{font-size:13px}.reference-markets .quote-table-head{font-size:13px}.reference-markets .quote-identity b{font-size:12px}.reference-markets .quote-number{font-size:12px}.reference-markets .markets-note{font-size:12px}.reference-trade .chart-tool-row button{font-size:12px}.reference-trade .trade-disclosure{font-size:11px}
 
 @media(max-width:520px){html{scrollbar-width:none}html::-webkit-scrollbar{display:none}}
+
+/* App Download Buttons - High-Contrast Light and Dark Themes */
+.app-dl-btn {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  padding: 10px 12px !important;
+  border-radius: 12px !important;
+  text-decoration: none !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  transition: all 0.2s ease !important;
+}
+
+.app-dl-ios {
+  background: #f1f5f9 !important;
+  border: 1.5px solid #0369a1 !important;
+  color: #0369a1 !important;
+}
+
+.app-dl-android {
+  background: #eefcf6 !important;
+  border: 1.5px solid #10b981 !important;
+  color: #047857 !important;
+}
+
+html[data-theme="dark"] .app-dl-ios,
+.dark .app-dl-ios,
+.orin-auth-card .app-dl-ios {
+  background: #1e293b !important;
+  border-color: #38bdf8 !important;
+  color: #38bdf8 !important;
+}
+
+html[data-theme="dark"] .app-dl-android,
+.dark .app-dl-android,
+.orin-auth-card .app-dl-android {
+  background: #064e3b !important;
+  border-color: #10b981 !important;
+  color: #34d399 !important;
+}

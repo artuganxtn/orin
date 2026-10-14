@@ -49,6 +49,8 @@ def main():
         if chunk.is_file() and chunk.relative_to(assets).as_posix() not in emitted:
             chunk.unlink()
     shutil.rmtree(assets / ".vite")
+    if (assets / "downloads").is_dir():
+        shutil.rmtree(assets / "downloads")
     api_base_url = os.environ.get("ORIN_API_BASE_URL", "").strip()
     if not api_base_url:
         raise SystemExit(

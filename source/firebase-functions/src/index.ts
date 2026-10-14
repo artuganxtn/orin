@@ -588,13 +588,24 @@ app.get('/api/content/:slug', async (req: Request, res: Response) => {
 });
 
 // Direct mobile downloads (Android APK & Apple iOS WebClip profile)
+// Direct mobile downloads (Android APK & Apple iOS WebClip profile)
 app.get(['/downloads/orin.apk', '/downloads/ORIN-Android-1.6.2.apk', '/orin.apk'], (_req: Request, res: Response) => {
   const candidates = [
+    resolve(process.cwd(), 'source/firebase-dist/downloads/ORIN-Android-1.6.2.apk'),
+    resolve(process.cwd(), 'source/public/downloads/ORIN-Android-1.6.2.apk'),
+    resolve(process.cwd(), 'source/firebase-dist/downloads/orin.apk'),
+    resolve(process.cwd(), 'source/public/downloads/orin.apk'),
+    resolve(process.cwd(), 'firebase-dist/downloads/ORIN-Android-1.6.2.apk'),
+    resolve(process.cwd(), 'public/downloads/ORIN-Android-1.6.2.apk'),
+    resolve(process.cwd(), 'downloads/ORIN-Android-1.6.2.apk'),
+    resolve(process.cwd(), 'ORIN-Android-1.6.2-Live.apk'),
+    resolve(process.cwd(), 'deliverables/ORIN-Android-1.6.2.apk'),
     resolve(process.cwd(), '../firebase-dist/downloads/ORIN-Android-1.6.2.apk'),
     resolve(process.cwd(), '../public/downloads/ORIN-Android-1.6.2.apk'),
     resolve(process.cwd(), '../deliverables/ORIN-Android-1.6.2.apk'),
-    resolve(process.cwd(), 'public/downloads/ORIN-Android-1.6.2.apk'),
-    resolve(process.cwd(), 'downloads/ORIN-Android-1.6.2.apk')
+    resolve(__dirname, '../../firebase-dist/downloads/ORIN-Android-1.6.2.apk'),
+    resolve(__dirname, '../../public/downloads/ORIN-Android-1.6.2.apk'),
+    resolve(__dirname, '../../../public/downloads/ORIN-Android-1.6.2.apk')
   ];
   const found = candidates.find(p => existsSync(p));
   if (found) {
@@ -602,14 +613,20 @@ app.get(['/downloads/orin.apk', '/downloads/ORIN-Android-1.6.2.apk', '/orin.apk'
     res.setHeader('Content-Disposition', 'attachment; filename="ORIN-Android-1.6.2.apk"');
     return res.sendFile(found);
   }
-  res.status(404).json({ error: 'APK package not found' });
+  res.status(404).type('text/plain').send('APK file not found on server.');
 });
 
 app.get(['/orin.mobileconfig', '/app.mobileconfig', '/downloads/orin.mobileconfig'], (_req: Request, res: Response) => {
   const candidates = [
+    resolve(process.cwd(), 'source/firebase-dist/orin.mobileconfig'),
+    resolve(process.cwd(), 'source/public/orin.mobileconfig'),
+    resolve(process.cwd(), 'firebase-dist/orin.mobileconfig'),
+    resolve(process.cwd(), 'public/orin.mobileconfig'),
     resolve(process.cwd(), '../firebase-dist/orin.mobileconfig'),
     resolve(process.cwd(), '../public/orin.mobileconfig'),
-    resolve(process.cwd(), 'public/orin.mobileconfig')
+    resolve(__dirname, '../../firebase-dist/orin.mobileconfig'),
+    resolve(__dirname, '../../public/orin.mobileconfig'),
+    resolve(__dirname, '../../../public/orin.mobileconfig')
   ];
   const found = candidates.find(p => existsSync(p));
   if (found) {
@@ -617,7 +634,7 @@ app.get(['/orin.mobileconfig', '/app.mobileconfig', '/downloads/orin.mobileconfi
     res.setHeader('Content-Disposition', 'attachment; filename="orin.mobileconfig"');
     return res.sendFile(found);
   }
-  res.status(404).json({ error: 'iOS profile not found' });
+  res.status(404).type('text/plain').send('iOS configuration profile not found.');
 });
 
 // 4. Authenticated routes under /api
@@ -1534,10 +1551,15 @@ app.use('/api', (req: Request, res: Response) => {
 
 // 6. Built web app as static files
 const candidates = [
+  resolve(process.cwd(), 'source/firebase-dist'),
+  resolve(process.cwd(), 'firebase-dist'),
+  resolve(__dirname, '../../firebase-dist'),
   resolve(process.cwd(), '../firebase-dist'),
   resolve(process.cwd(), '../firebase-web/dist'),
   resolve(process.cwd(), '../dist'),
-  resolve(process.cwd(), 'public')
+  resolve(process.cwd(), 'dist'),
+  resolve(process.cwd(), 'public'),
+  resolve(process.cwd(), 'source/public')
 ];
 let staticPath = candidates.find(p => existsSync(p));
 if (staticPath) {
