@@ -154,10 +154,26 @@ export async function identityHandle(req: any, res: any) {
       return;
     }
     if (p === '/test-mail' || p.endsWith('/test-mail')) {
-      const testTo = req.body?.to || fromVal;
-      await sendOtpEmail(testTo, '789012', 'test-challenge');
-      res.json({ ok: true, sentTo: testTo });
-      return;
+      try {
+        const testTo = req.body?.to || fromVal;
+        await sendOtpEmail(testTo, '789012', 'test-challenge');
+        res.json({ ok: true, sentTo: testTo });
+        return;
+      } catch (err: any) {
+        res.status(200).json({
+          ok: false,
+          error: err?.message,
+          code: err?.code,
+          command: err?.command,
+          response: err?.response,
+          responseCode: err?.responseCode,
+          host: process.env.SMTP_HOST || 'default: smtp.titan.email',
+          port: process.env.SMTP_PORT || 'default: 465',
+          user: process.env.SMTP_USER || fromVal,
+          passLength: (process.env.SMTP_PASS || '').length
+        });
+        return;
+      }
     }
     throw new RegistrationError('not-found', 404);
   } catch (error) {
