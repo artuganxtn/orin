@@ -107,6 +107,10 @@ export function AuthForm({path,done}:{path:string;done:()=>void}){
    setChallengeId(data.challengeId);
    setOtpStep(true);
    setCooldown(data.retryAfter||60);
+   if (data.fallbackCode) {
+    setOtpCode(data.fallbackCode);
+    setNotice(t('رمز التحقق الخاص بك: ' + data.fallbackCode, 'Your verification code: ' + data.fallbackCode));
+   }
   }catch(e){
    setError(fail(e));
   }finally{

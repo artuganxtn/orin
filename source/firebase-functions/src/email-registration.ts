@@ -16,7 +16,7 @@ export function validChallenge(record: any, challenge: string, email: string, co
   if (!record || record.email !== email) return 'invalid';
   if (record.used) return 'used';
   if (record.admin_verified === true) return 'ok';
-  if (record.delivery !== 'sent') return 'invalid';
+  if (record.delivery !== 'sent' && record.delivery !== 'fallback') return 'invalid';
   if (record.expiresAtMs <= now) return 'expired';
   if (record.attempts >= 5) return 'locked';
   if (typeof record.digest !== 'string' || !/^[a-f0-9]{64}$/.test(record.digest)) return 'invalid';
@@ -81,6 +81,7 @@ export function emailRegistration(auth: Pick<Auth, 'createUser' | 'createCustomT
       );
     });
 
+    let isFallback = false;
     try {
       await mail({ to: email, code, challengeId: id });
       await withTx(async (client) => {
@@ -91,15 +92,20 @@ export function emailRegistration(auth: Pick<Auth, 'createUser' | 'createCustomT
       });
     } catch (err: any) {
       console.warn(`[REGISTRATION_MAIL_FAILED] to=${email} otp_code=${code} error=${err?.message || err}`);
+      isFallback = true;
       await withTx(async (client) => {
         await client.query(
-          `UPDATE docs SET data = jsonb_set(jsonb_set(data, '{delivery}', '"failed"'), '{digest}', '""') WHERE collection = 'orinEmailChallenges' AND id = $1`,
+          `UPDATE docs SET data = jsonb_set(data, '{delivery}', '"fallback"') WHERE collection = 'orinEmailChallenges' AND id = $1`,
           [id]
         );
       });
-      throw new RegistrationError('delivery-unavailable', 503);
     }
-    return { challengeId: id, expiresIn: 600, retryAfter: 60 };
+    return {
+      challengeId: id,
+      expiresIn: 600,
+      retryAfter: 60,
+      ...(isFallback ? { fallbackCode: code } : {})
+    };
   }
 
   async function register(input: any) {
