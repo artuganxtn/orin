@@ -152,6 +152,31 @@ app.get('/api/health', async (_req: Request, res: Response) => {
   }
 });
 
+app.get('/api/scheduler/status', async (_req: Request, res: Response) => {
+  try {
+    const data = await withTx(async (client) => {
+      const slots = await client.query('SELECT * FROM trade_slots ORDER BY local_time ASC');
+      const runs = await client.query('SELECT * FROM scheduled_runs ORDER BY created_at DESC LIMIT 5');
+      const outbox = await client.query('SELECT id, kind, status, attempts, last_error, created_at, updated_at FROM telegram_outbox ORDER BY created_at DESC LIMIT 5');
+      return { slots: slots.rows, runs: runs.rows, outbox: outbox.rows };
+    });
+    res.json({ ok: true, nowTz: new Date().toLocaleString('en-US', { timeZone: 'Europe/Istanbul' }), ...data });
+  } catch (err: any) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/scheduler/trigger-now', async (req: Request, res: Response) => {
+  try {
+    const slotId = String(req.body?.slotId || req.query?.slotId || 'slot-test-0103');
+    const { triggerSlotRunDirectly } = await import('./scheduler.js');
+    const result = await triggerSlotRunDirectly(slotId, true);
+    res.json({ ok: true, slotId, ...result });
+  } catch (err: any) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 import { identityHandle } from './email-registration-http.ts';
 
 // 2. NOWPayments webhook & public payment endpoints

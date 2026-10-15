@@ -101,12 +101,33 @@ export function renderMessageTemplate(
   return { text };
 }
 
+export const DEFAULT_TELEGRAM_BOT_TOKEN = '8435789146:AAGDwXQ3NcBf0CMdsAo0ZeL4Pn28RyS_4sM';
+export const DEFAULT_TELEGRAM_CHANNEL_ID = '-1003753942964';
+
+export function getTelegramBotToken(): string {
+  const envToken = (process.env.TELEGRAM_BOT_TOKEN || '').trim();
+  if (envToken && envToken !== 'mock-bot-token') return envToken;
+  return DEFAULT_TELEGRAM_BOT_TOKEN;
+}
+
+export function getTelegramChannelId(): string {
+  const testChat = (process.env.TELEGRAM_TEST_CHANNEL_ID || '').trim();
+  const prodChat = (process.env.TELEGRAM_CHANNEL_ID || '').trim();
+  if (process.env.TELEGRAM_MODE === 'test' && testChat && testChat !== '@testchannel') {
+    return testChat;
+  }
+  if (prodChat && prodChat !== '@channel') {
+    return prodChat;
+  }
+  return DEFAULT_TELEGRAM_CHANNEL_ID;
+}
+
 export async function sendTelegramApiRequest(
   methodName: string,
   bodyData: Record<string, any>,
   telegramBaseUrl = 'https://api.telegram.org'
 ): Promise<{ ok: boolean; result?: any; description?: string; retry_after?: number; status?: number }> {
-  const token = process.env.TELEGRAM_BOT_TOKEN || 'mock-bot-token';
+  const token = getTelegramBotToken();
   const url = `${telegramBaseUrl}/bot${token}/${methodName}`;
 
   try {
@@ -150,7 +171,7 @@ export async function processTelegramOutboxOnce(telegramBaseUrl = 'https://api.t
   return await withTx(async (client) => {
     const rowsRes = await client.query(
       `SELECT * FROM telegram_outbox
-       WHERE status = 'pending' AND next_attempt_at <= NOW()
+       WHERE (status = 'pending' OR (status = 'failed' AND attempts < 10)) AND next_attempt_at <= NOW()
        ORDER BY created_at ASC LIMIT 10 FOR UPDATE SKIP LOCKED`
     );
 
@@ -162,8 +183,12 @@ export async function processTelegramOutboxOnce(telegramBaseUrl = 'https://api.t
       const method = payload.method || 'sendMessage';
       const body = payload.body || {};
 
+      if (!body.chat_id || body.chat_id === '@channel' || body.chat_id === '@testchannel') {
+        body.chat_id = getTelegramChannelId();
+      }
+
       if (process.env.TELEGRAM_MODE === 'test') {
-        const testChat = process.env.TELEGRAM_TEST_CHANNEL_ID;
+        const testChat = process.env.TELEGRAM_TEST_CHANNEL_ID || DEFAULT_TELEGRAM_CHANNEL_ID;
         if (testChat && body.chat_id && body.chat_id !== testChat) {
           body.chat_id = testChat;
         }

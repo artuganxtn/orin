@@ -1,6 +1,6 @@
 import { randomUUID, randomBytes, createHash } from 'node:crypto';
 import { withTx } from './db.ts';
-import { renderMessageTemplate } from './telegram.ts';
+import { renderMessageTemplate, getTelegramChannelId } from './telegram.ts';
 
 export interface TradeSlotRow {
   id: string;
@@ -154,7 +154,7 @@ async function executeSlot(slot: any, client: any, nowMs: number, runDate: strin
 
   const tplKind = slot.id === 'slot-2030' ? 'agent_slot' : 'regular_slot';
   const tpl = renderMessageTemplate(tplKind, cInfo, slot.name);
-  const channelId = process.env.TELEGRAM_MODE === 'test' ? (process.env.TELEGRAM_TEST_CHANNEL_ID || '@testchannel') : (process.env.TELEGRAM_CHANNEL_ID || '@channel');
+  const channelId = getTelegramChannelId();
   const outboxPayload = JSON.stringify({
     method: 'sendMessage',
     body: {
