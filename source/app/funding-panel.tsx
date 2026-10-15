@@ -5,6 +5,8 @@ import { Copy, LockKeyhole, RefreshCw, Clock3, Info, ArrowLeft, ArrowRight, Chev
 import { createDeposit, listDeposits, paymentReadiness, refreshDeposit } from '@/lib/payment-client';
 import { PAYMENT_COINS, type PaymentCoin, type PaymentReadiness, type DepositView, type DepositStatus } from '@/lib/payments';
 import type { TradingAccount } from '@/lib/trading-accounts';
+import { demoWalletRequest } from '@/lib/demo-wallet-client';
+import type { DemoWalletView } from '@/lib/demo-wallet';
 import { useOrin } from './orin-settings';
 import { useNavigation } from './orin-navigation';
 import './funding-panel.css';
@@ -69,6 +71,7 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
   const [qr, setQr] = useState('');
   const [step, setStep] = useState<1 | 2>(1);
   const [wNet, setWNet] = useState<PaymentCoin>('usdttrc20'), [wAmount, setWAmount] = useState(''), [wAddress, setWAddress] = useState(''), [wNotice, setWNotice] = useState<any>(null);
+  const [walletView, setWalletView] = useState<DemoWalletView | null>(null);
   const requestId = useRef<string | null>(null), mounted = useRef(true), submitting = useRef(false);
 
   const load = useCallback(async () => {
@@ -79,6 +82,7 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
       setReady(state);
       const history = await listDeposits(account.id);
       if (mounted.current) setItems(history.items);
+      demoWalletRequest(account.id).then(w => { if (mounted.current) setWalletView(w); }).catch(() => {});
     } catch (e) {
       if (mounted.current) setError((e as Error).message);
     }
@@ -201,27 +205,38 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
   /* ───────────── WITHDRAWAL VIEW (Screenshot 3 & 4) ───────────── */
   if (kind === 'withdraw') {
     const net = PAYMENT_COINS.find(c => c.id === wNet)!;
+    const spotBal = ((walletView?.wallet?.perpetualCents ?? 0) / 100);
+    const futuresBal = ((walletView?.wallet?.futuresCents ?? account?.balanceCents ?? 0) / 100);
+    const maxWithdraw = spotBal > 0 ? spotBal.toFixed(2) : '0';
 
     const requestWithdrawal = () => {
       setError(''); setWNotice(null);
-      if (!/^\d{1,7}(\.\d{1,2})?$/.test(wAmount) || Number(wAmount) <= 0) {
+      const val = Number(wAmount);
+      if (!/^\d{1,7}(\.\d{1,2})?$/.test(wAmount) || val <= 0) {
         setError(t('أدخل مبلغ سحب صالحًا.', 'Enter a valid withdrawal amount.'));
         return;
       }
-      if (wAddress.trim().length < 20) {
+      if (wAddress.trim().length < 15) {
         setError(t('أدخل عنوان محفظة صالحًا.', 'Enter a valid wallet address.'));
         return;
       }
-      if (lockRemainingDays > 0) {
-        setError(latestDeposit ? t(`لا يمكن السحب قبل مرور 29 يومًا من تاريخ الإيداع. متبقي ${lockRemainingDays} يومًا.`, `Withdrawals open 29 days after deposit. ${lockRemainingDays} days remaining.`) : t('لا يمكن السحب إلا بعد مرور 29 يومًا من تاريخ أول إيداع مؤكد.', 'Withdrawals open 29 days after your first confirmed deposit.'));
+      if (val > spotBal) {
+        setError(t(
+          `رصيد العقود الفورية المتاح للسحب هو ${spotBal.toFixed(2)} USDT. أموال العقود الآجلة (${futuresBal.toFixed(2)} USDT) مقفلة للتحدي، يرجى تحويلها إلى العقود الفورية أولاً للسحب.`,
+          `Available Spot balance for withdrawal is ${spotBal.toFixed(2)} USDT. Futures balance (${futuresBal.toFixed(2)} USDT) is locked. Transfer to Spot first to withdraw.`
+        ));
         return;
       }
 
+      // Always 5% withdrawal fee
+      const fee = Math.round(val * 0.05 * 100) / 100;
+      const netAmount = Math.max(0, Math.round((val - fee) * 100) / 100);
+
       setWNotice({
-        id: 'WD-DEMO-001',
-        amount: Number(wAmount),
-        fee: 25.00,
-        netAmount: Math.max(0, Number(wAmount) - 25),
+        id: 'WD-' + Date.now().toString(36).toUpperCase(),
+        amount: val,
+        fee: fee,
+        netAmount: netAmount,
         address: wAddress,
         coin: wNet,
         network: net.network,
@@ -353,6 +368,30 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
             <div className="fp-card" style={{ background: '#fff', border: '1px solid var(--fp-line)', borderRadius: '20px', padding: '18px', display: 'flex', flexDirection: 'column', gap: '12px', width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
               <h2 style={{ fontSize: '18px', fontWeight: 700, margin: 0, color: 'var(--fp-ink)' }}>{t('تفاصيل السحب', 'Withdrawal details')}</h2>
 
+              {/* Wallet Pockets Info Card */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px 14px', borderRadius: '14px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '13px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ color: 'var(--fp-muted)' }}>{t('المتاح للسحب (العقود الفورية)', 'Available for withdrawal (Spot)')}:</span>
+                  <strong style={{ color: '#0788ff', fontSize: '14.5px' }} dir="ltr">{spotBal.toFixed(2)} USDT</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ color: 'var(--fp-muted)' }}>{t('العقود الآجلة (مقفل للتحدي)', 'Futures (Locked for challenge)')}:</span>
+                  <span style={{ color: '#64748b', fontWeight: 600 }} dir="ltr">{futuresBal.toFixed(2)} USDT</span>
+                </div>
+                {futuresBal > 0 && (
+                  <div style={{ borderTop: '1px dashed #cbd5e1', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                    <small style={{ color: 'var(--fp-muted)' }}>{t('أموال العقود الآجلة قابلة للتحويل إلى الفورية للسحب', 'Transfer Futures to Spot anytime to withdraw')}</small>
+                    <button
+                      type="button"
+                      onClick={() => nav.navigate('/transfer')}
+                      style={{ border: 0, background: '#0788ff', color: '#fff', borderRadius: '6px', padding: '4px 10px', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
+                    >
+                      {t('تحويل للعقود الفورية', 'Transfer to Spot')}
+                    </button>
+                  </div>
+                )}
+              </div>
+
               <label className="fp-label" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--fp-muted)', marginTop: '4px' }}>{t('شبكة التحويل', 'Transfer Network')}</label>
               <div className="fp-select" style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '10px', height: '52px', border: '1px solid #dbe4f2', borderRadius: '14px', padding: '0 14px', background: 'var(--fp-soft)', width: '100%', boxSizing: 'border-box' }}>
                 <Mark kind={wNet} size={28} />
@@ -366,8 +405,29 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
               <label className="fp-label" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--fp-muted)' }}>{t('مبلغ السحب', 'Withdrawal Amount')}</label>
               <div className="fp-input" style={{ display: 'flex', alignItems: 'stretch', height: '52px', border: '1px solid #dbe4f2', borderRadius: '14px', overflow: 'hidden', background: 'var(--fp-soft)', width: '100%', boxSizing: 'border-box' }}>
                 <input inputMode="decimal" dir="ltr" placeholder={t('أدخل المبلغ', 'Enter amount')} value={wAmount} onChange={e => setWAmount(e.target.value)} style={{ flex: 1, minWidth: 0, border: 0, background: 'transparent', outline: 'none', padding: '0 16px', fontSize: '16px', color: 'var(--fp-ink)' }} />
-                <span className="fp-suffix" style={{ display: 'grid', placeItems: 'center', padding: '0 16px', background: '#f0f4fa', borderInlineStart: '1px solid #dbe4f2', fontWeight: 700, fontSize: '14px', color: '#4a5d7f', flexShrink: 0 }}>USDT</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0 12px', background: '#f0f4fa', borderInlineStart: '1px solid #dbe4f2', flexShrink: 0 }}>
+                  <span style={{ fontWeight: 700, fontSize: '13px', color: '#4a5d7f' }}>USDT</span>
+                  <button
+                    type="button"
+                    onClick={() => setWAmount(maxWithdraw)}
+                    style={{ border: 0, background: '#0788ff', color: '#fff', padding: '4px 8px', borderRadius: '6px', fontSize: '11.5px', fontWeight: 700, cursor: 'pointer' }}
+                  >
+                    {t('الكل', 'All')}
+                  </button>
+                </div>
               </div>
+
+              {/* Real-time 5% Fee Calculation */}
+              {Number(wAmount) > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderRadius: '12px', background: '#f0fdf4', border: '1px solid #bbf7d0', fontSize: '13px' }}>
+                  <span style={{ color: '#166534' }}>
+                    {t('رسوم السحب (5%):', 'Withdrawal Fee (5%):')} <b dir="ltr">-{(Number(wAmount) * 0.05).toFixed(2)} USDT</b>
+                  </span>
+                  <span style={{ color: '#166534', fontWeight: 700 }}>
+                    {t('صافي الاستلام:', 'Net payout:')} <b dir="ltr" style={{ color: '#0788ff' }}>{(Number(wAmount) * 0.95).toFixed(2)} USDT</b>
+                  </span>
+                </div>
+              )}
 
               <label className="fp-label" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--fp-muted)' }}>{t('عنوان المحفظة', 'Wallet Address')}</label>
               <div className="fp-input" style={{ display: 'flex', alignItems: 'stretch', height: '52px', border: '1px solid #dbe4f2', borderRadius: '14px', overflow: 'hidden', background: 'var(--fp-soft)', width: '100%', boxSizing: 'border-box' }}>
@@ -377,13 +437,13 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
                 </span>
               </div>
 
-              <Note kind="info">{t('تأكد من تطابق عنوان المحفظة مع الشبكة المختارة', 'Make sure wallet address matches the selected network')}</Note>
+              <Note kind="info">{t('رسوم السحب ثابتة 5% دائمًا. أموال العقود الآجلة مقفلة للتحدي ويمكن سحبها بعد تحويلها للعقود الفورية.', 'Withdrawal fee is always 5%. Futures contracts are locked for the challenge and withdrawable after transfer to Spot.')}</Note>
             </div>
 
             {lockRemainingDays > 0 && (
               <p className="fp-note warn" style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px', borderRadius: '14px', background: '#fff6e6', border: '1px solid #f5dfb3', color: '#8a5b13', fontSize: '13px', width: '100%', boxSizing: 'border-box' }}>
                 <LockKeyhole size={18} style={{ color: '#e09a1c', flexShrink: 0 }} />
-                <span><b>{t('فترة الحجز 29 يومًا', '29-day holding period')}</b> · {latestDeposit ? t(`متبقي ${lockRemainingDays} يومًا لإتاحة السحب.`, `${lockRemainingDays} days until withdrawals open.`) : t('يتاح السحب بعد 29 يومًا من أول إيداع مؤكد.', 'Withdrawals open 29 days after your first confirmed deposit.')}</span>
+                <span><b>{t('تحدي الـ 29 يومًا نشط', '29-day challenge active')}</b> · {t(`متبقي ${lockRemainingDays} يومًا. أموال العقود الآجلة مقفلة، وللسحب يجب تحويلها للعقود الفورية (رسوم خروج مبكر 20%). رسوم السحب 5% دائماً.`, `${lockRemainingDays} days left. Futures funds are locked; transfer to Spot to withdraw (20% early exit fee). 5% withdrawal fee always.`)}</span>
               </p>
             )}
 

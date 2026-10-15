@@ -1,7 +1,37 @@
 export type WalletPocket='futures'|'perpetual';
 export type DemoWallet={ownerId:string;accountId:string;currency:'USD';futuresCents:number;perpetualCents:number;version:number;lastOperationId:string;updatedAt:number};
-export type DemoOperation={id:string;ownerId:string;accountId:string;currency:'USD';kind:'reset'|'transfer';from:WalletPocket|'reset';to:WalletPocket;amountCents:number;beforeFuturesCents:number;beforePerpetualCents:number;afterFuturesCents:number;afterPerpetualCents:number;version:number;createdAt:number};
-export type DemoWalletView={wallet:DemoWallet|null;operations:DemoOperation[]};
+export type DemoChallengeInfo = {
+  earliestDepositAt: number | null;
+  elapsedDays: number;
+  lockRemainingDays: number;
+  isBefore29Days: boolean;
+  transferFeeRate: number;
+  withdrawalFeeRate: number;
+};
+export type DemoOperation = {
+  id: string;
+  ownerId?: string;
+  accountId?: string;
+  currency?: 'USD';
+  kind: 'reset' | 'transfer';
+  from: WalletPocket | 'reset';
+  to: WalletPocket;
+  amountCents: number;
+  feeCents?: number;
+  feeRate?: number;
+  netAmountCents?: number;
+  beforeFuturesCents?: number;
+  beforePerpetualCents?: number;
+  afterFuturesCents: number;
+  afterPerpetualCents: number;
+  version?: number;
+  createdAt: number;
+};
+export type DemoWalletView = {
+  wallet: DemoWallet | null;
+  operations: DemoOperation[];
+  challenge?: DemoChallengeInfo;
+};
 export const DEMO_LIMIT_CENTS=100_000_000;
 export function parseUsdAmount(value:string){
  const text=value.trim().replace(/[٠-٩]/g,c=>String('٠١٢٣٤٥٦٧٨٩'.indexOf(c))).replace('٫','.');

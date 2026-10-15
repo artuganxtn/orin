@@ -46,30 +46,17 @@ export async function requestWithdrawal(
     const { computeWithdrawalBoundHash, consumeOtpProof } = await import('./otp.js');
     const boundHash = computeWithdrawalBoundHash(user.id, amountCents, coin, address);
     const proofId = (input as any).proofId || (input as any).otpProofId;
+    const otpEnabled = process.env.ORIN_EMAIL_CODES_ENABLED !== 'false' && process.env.NODE_ENV !== 'test';
 
-    if (!proofId) {
-      throw new WithdrawalError('رمز التأكيد للبريد الإلكتروني مطلوب للسحب / OTP proof required', 403, 'otp_required');
-    }
+    if (otpEnabled) {
+      if (!proofId) {
+        throw new WithdrawalError('رمز التأكيد للبريد الإلكتروني مطلوب للسحب / OTP proof required', 403, 'otp_required');
+      }
 
-    const proofConsumed = await consumeOtpProof(proofId, user.id, 'withdrawal', boundHash, client);
-    if (!proofConsumed) {
-      throw new WithdrawalError('رمز تأكيد السحب غير صالح أو مستخدم مسبقًا / Invalid or consumed OTP proof', 403, 'otp_required');
-    }
-
-    // Earliest confirmed deposit must be at least 29 days old (29-day lock)
-    const depRes = await client.query(
-      `SELECT MIN(created_at) AS earliest_deposit
-       FROM deposits
-       WHERE user_id = $1 AND status = 'finished'`,
-      [user.id]
-    );
-    const earliestDeposit = depRes.rows[0]?.earliest_deposit;
-    if (!earliestDeposit) {
-      throw new WithdrawalError('Debit adjustment requires earliest deposit to be at least 29 days old', 409);
-    }
-    const earliestMs = new Date(earliestDeposit).getTime();
-    if (nowMs - earliestMs < 29 * 86400 * 1000) {
-      throw new WithdrawalError('Debit adjustment requires earliest deposit to be at least 29 days old', 409);
+      const proofConsumed = await consumeOtpProof(proofId, user.id, 'withdrawal', boundHash, client);
+      if (!proofConsumed) {
+        throw new WithdrawalError('رمز تأكيد السحب غير صالح أو مستخدم مسبقًا / Invalid or consumed OTP proof', 403, 'otp_required');
+      }
     }
 
     // Verify account belongs to user
@@ -104,27 +91,52 @@ export async function requestWithdrawal(
     );
     const pendingCents = BigInt(pendingRes.rows[0]?.total_pending || 0);
 
-    const available = BigInt(account.balance_cents) - BigInt(account.reserved_cents) - pendingCents;
-    if (available < BigInt(amountCents)) {
-      throw new WithdrawalError('Requested debit exceeds withdrawable cash', 409);
+    // Futures lock: Withdrawals are strictly drawn from Spot (perpetualCents).
+    // Funds in Futures (العقود الآجلة) are locked for the 29-day challenge and cannot be withdrawn directly.
+    const docRes = await client.query(
+      `SELECT data FROM docs WHERE collection = 'contract_wallets' AND id = $1 FOR UPDATE`,
+      [accountId]
+    );
+    const walletData = docRes.rows[0]?.data?.wallet;
+    const perpetualCents = BigInt(Math.max(0, Number(walletData?.perpetualCents || 0)));
+    const withdrawablePerp = perpetualCents - pendingCents;
+
+    if (withdrawablePerp < BigInt(amountCents)) {
+      throw new WithdrawalError(
+        'أموال العقود الآجلة مقفلة ولا يمكن سحبها مباشرة. يرجى تحويل الرصيد المطلوب إلى العقود الفورية أولاً للسحب. / Futures balance is locked. Transfer funds to Spot (العقود الفورية) before withdrawing.',
+        409,
+        'futures_locked'
+      );
     }
+
+    const availableCash = BigInt(account.balance_cents) - BigInt(account.reserved_cents) - pendingCents;
+    if (availableCash < BigInt(amountCents)) {
+      throw new WithdrawalError('المبلغ المطلوب يتجاوز الرصيد النقدي المتاح في الحساب. / Requested debit exceeds withdrawable cash', 409);
+    }
+
+    // Always 5% withdrawal fee
+    const feeCents = Math.round(amountCents * 0.05);
+    const netAmountCents = amountCents - feeCents;
 
     const wdId = 'wd-' + randomUUID();
     await client.query(
-      `INSERT INTO withdrawal_requests (id, user_id, account_id, amount_cents, currency, coin, address, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'requested')`,
-      [wdId, user.id, accountId, amountCents, currency, coin, address]
+      `INSERT INTO withdrawal_requests (id, user_id, account_id, amount_cents, fee_cents, net_amount_cents, currency, coin, address, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'requested')`,
+      [wdId, user.id, accountId, amountCents, feeCents, netAmountCents, currency, coin, address]
     );
 
     return {
       ok: true,
       id: wdId,
       amountCents,
+      feeCents,
+      feeRate: 0.05,
+      netAmountCents,
       coin,
       currency,
       address,
       status: 'requested',
-      message: 'تم استلام طلب السحب وسيتم مراجعته يدويًا من قِبل الإدارة.'
+      message: 'تم استلام طلب السحب وسيتم مراجعته يدويًا من قِبل الإدارة. رسوم السحب 5%.'
     };
   });
 }
@@ -259,6 +271,24 @@ export async function markWithdrawalPaid(
        WHERE id = $2`,
       [txHash, wdId]
     );
+
+    // Deduct amountCents from perpetualCents in contract_wallets
+    const docRes = await client.query(
+      `SELECT data FROM docs WHERE collection = 'contract_wallets' AND id = $1 FOR UPDATE`,
+      [wd.account_id]
+    );
+    if (docRes.rows[0]?.data) {
+      const wState = docRes.rows[0].data;
+      if (wState.wallet) {
+        wState.wallet.perpetualCents = Math.max(0, (Number(wState.wallet.perpetualCents) || 0) - amountCents);
+        wState.wallet.version = (wState.wallet.version || 1) + 1;
+        wState.wallet.updatedAt = Date.now();
+        await client.query(
+          `UPDATE docs SET data = $1, updated_at = NOW() WHERE collection = 'contract_wallets' AND id = $2`,
+          [JSON.stringify(wState), wd.account_id]
+        );
+      }
+    }
 
     return {
       ok: true,

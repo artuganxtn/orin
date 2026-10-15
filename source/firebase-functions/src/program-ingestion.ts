@@ -163,6 +163,38 @@ export async function recordConfirmedDeposit(e: {
       [journalId, e.uid, e.accountId, e.cents]
     );
 
+    // 4b. Ensure deposit goes directly into Futures (العقود الآجلة)
+    const docRes = await client.query(
+      `SELECT data FROM docs WHERE collection = 'contract_wallets' AND id = $1 FOR UPDATE`,
+      [e.accountId]
+    );
+    let walletState = docRes.rows[0]?.data;
+    if (!walletState) {
+      walletState = {
+        wallet: {
+          ownerId: e.uid,
+          accountId: e.accountId,
+          currency: 'USD',
+          futuresCents: e.cents,
+          perpetualCents: 0,
+          version: 1,
+          updatedAt: Date.now()
+        },
+        operations: []
+      };
+    } else {
+      walletState.wallet = walletState.wallet || {};
+      walletState.wallet.futuresCents = (Number(walletState.wallet.futuresCents) || 0) + e.cents;
+      walletState.wallet.version = (walletState.wallet.version || 1) + 1;
+      walletState.wallet.updatedAt = Date.now();
+    }
+    await client.query(
+      `INSERT INTO docs (collection, id, data, updated_at)
+       VALUES ('contract_wallets', $1, $2, NOW())
+       ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+      [e.accountId, JSON.stringify(walletState)]
+    );
+
     // 5. Qualified deposit & bonus profit unlock
     if (e.eligible) {
       const qdRes = await client.query('SELECT amount_cents FROM qualified_deposits WHERE user_id = $1', [e.uid]);

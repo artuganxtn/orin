@@ -169,6 +169,28 @@ export async function getDemoWallet(user: { id: string }, accountId: string) {
       const currentPerp = Math.min(currentTotal, Math.max(0, Number(data.wallet.perpetualCents || 0)));
       data.wallet.perpetualCents = currentPerp;
       data.wallet.futuresCents = currentTotal - currentPerp;
+
+      // Calculate challenge and fee status
+      const depRes = await client.query(
+        `SELECT MIN(created_at) AS earliest_deposit
+         FROM deposits
+         WHERE user_id = $1 AND (status = 'finished' OR credited = true)`,
+        [user.id]
+      );
+      const earliestDeposit = depRes.rows[0]?.earliest_deposit;
+      const earliestMs = earliestDeposit ? new Date(earliestDeposit).getTime() : null;
+      const elapsedDays = earliestMs ? Math.floor((Date.now() - earliestMs) / 86400000) : 0;
+      const lockRemainingDays = earliestMs ? Math.max(0, 29 - elapsedDays) : 29;
+      const isBefore29Days = lockRemainingDays > 0;
+
+      data.challenge = {
+        earliestDepositAt: earliestMs,
+        elapsedDays,
+        lockRemainingDays,
+        isBefore29Days,
+        transferFeeRate: isBefore29Days ? 0.20 : 0.0,
+        withdrawalFeeRate: 0.05
+      };
     }
 
     return data;
@@ -234,17 +256,64 @@ export async function operateDemoWallet(
 
     let nextFutures = state.wallet.futuresCents;
     let nextPerp = state.wallet.perpetualCents;
+    let feeCents = 0;
+    let feeRate = 0;
+    let netAmountCents = amountCents;
 
     if (kind === 'reset') {
       nextFutures = initialFutures;
       nextPerp = 0;
     } else if (kind === 'transfer') {
       if (input.from === 'futures') {
-        if (nextFutures < amountCents) throw new ClientError('الرصيد المتاح غير كافٍ للتحويل. / Insufficient available balance.', 400);
+        if (nextFutures < amountCents) {
+          throw new ClientError('الرصيد المتاح في العقود الآجلة غير كافٍ للتحويل. / Insufficient available balance in futures.', 400);
+        }
+
+        // Check 29-day challenge status
+        if (isReal) {
+          const depRes = await client.query(
+            `SELECT MIN(created_at) AS earliest_deposit
+             FROM deposits
+             WHERE user_id = $1 AND (status = 'finished' OR credited = true)`,
+            [user.id]
+          );
+          const earliestDeposit = depRes.rows[0]?.earliest_deposit;
+          const earliestMs = earliestDeposit ? new Date(earliestDeposit).getTime() : null;
+          const elapsedDays = earliestMs ? Math.floor((Date.now() - earliestMs) / 86400000) : 0;
+          const lockRemainingDays = earliestMs ? Math.max(0, 29 - elapsedDays) : 29;
+          const isBefore29Days = lockRemainingDays > 0;
+
+          if (isBefore29Days) {
+            feeRate = 0.20; // 20% early exit fee during 29-day challenge
+            feeCents = Math.round(amountCents * feeRate);
+            netAmountCents = amountCents - feeCents;
+
+            // Deduct fee from account cash balance using ledger entry
+            if (feeCents > 0) {
+              const journalId = 'adj-fee-' + requestId;
+              await client.query(
+                `INSERT INTO journals (id, kind, reference)
+                 VALUES ($1, 'adjustment', $2)
+                 ON CONFLICT (id) DO NOTHING`,
+                [journalId, requestId]
+              );
+              await client.query(
+                `INSERT INTO journal_entries (journal_id, user_id, account_id, bucket, amount_cents)
+                 VALUES
+                   ($1, $2, $3, 'cash', $4),
+                   ($1, NULL, NULL, 'system:challenge-early-exit-fee', $5)`,
+                [journalId, user.id, accountId, -feeCents, feeCents]
+              );
+            }
+          }
+        }
+
         nextFutures -= amountCents;
-        nextPerp += amountCents;
+        nextPerp += netAmountCents;
       } else {
-        if (nextPerp < amountCents) throw new ClientError('الرصيد المتاح غير كافٍ للتحويل. / Insufficient available balance.', 400);
+        if (nextPerp < amountCents) {
+          throw new ClientError('الرصيد المتاح في العقود الفورية غير كافٍ للتحويل. / Insufficient available balance in perpetual.', 400);
+        }
         nextPerp -= amountCents;
         nextFutures += amountCents;
       }
@@ -254,6 +323,9 @@ export async function operateDemoWallet(
       id: requestId,
       kind,
       amountCents,
+      feeCents,
+      feeRate,
+      netAmountCents,
       from: kind === 'reset' ? 'reset' : input.from,
       to: kind === 'reset' ? 'futures' : (input.from === 'futures' ? 'perpetual' : 'futures'),
       afterFuturesCents: nextFutures,
