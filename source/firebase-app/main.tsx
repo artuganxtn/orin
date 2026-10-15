@@ -52,9 +52,9 @@ const ADMIN_EMAILS = ['khtaub7341@gmail.com', 'khtaub99@gmail.com', 'mm@mm.mm'];
 const isOwnerEmail=(e?:string|null)=>{const em=e?.toLowerCase().trim()??'';return ADMIN_EMAILS.some(a=>a.toLowerCase()===em);};
 const isAndroidApp = (typeof navigator !== 'undefined' && /ORINAndroid\//.test(navigator.userAgent)) || (typeof window !== 'undefined' && (window.location.hostname === 'orin-99951.web.app' || window.location.hostname === 'orin-99951.firebaseapp.com'));
 const defaultBackendUrl = 'https://firebase-functions-pc5h.onrender.com';
-const paymentsApiUrl = import.meta.env.VITE_ORIN_PAYMENTS_API_URL || (isAndroidApp ? defaultBackendUrl + '/orinPayments' : '');
-const programApiUrl = import.meta.env.VITE_ORIN_PROGRAM_API_URL || (isAndroidApp ? defaultBackendUrl + '/orinApi' : '');
-const securityApiUrl = import.meta.env.VITE_ORIN_SECURITY_API_URL || (isAndroidApp ? defaultBackendUrl + '/orinSecurity' : '');
+const paymentsApiUrl = import.meta.env.VITE_ORIN_PAYMENTS_API_URL || defaultBackendUrl;
+const programApiUrl = import.meta.env.VITE_ORIN_PROGRAM_API_URL || defaultBackendUrl;
+const securityApiUrl = import.meta.env.VITE_ORIN_SECURITY_API_URL || defaultBackendUrl;
 
 configurePayments({base:paymentsApiUrl,token:async()=>{await auth.authStateReady();return auth.currentUser?.getIdToken()??null}});
 const chatService=supportTransport(null,()=>auth.currentUser?.uid??'',apiFetch),referralService=referralTransport(null,createProgramTransport(programApiUrl,async()=>auth.currentUser?.getIdToken()??null));

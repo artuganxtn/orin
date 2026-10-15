@@ -89,7 +89,8 @@ export function emailRegistration(auth: Pick<Auth, 'createUser' | 'createCustomT
           [id]
         );
       });
-    } catch {
+    } catch (err: any) {
+      console.warn(`[REGISTRATION_MAIL_FAILED] to=${email} error=${err?.message || err}`);
       await withTx(async (client) => {
         await client.query(
           `UPDATE docs SET data = jsonb_set(jsonb_set(data, '{delivery}', '"failed"'), '{digest}', '""') WHERE collection = 'orinEmailChallenges' AND id = $1`,

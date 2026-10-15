@@ -104,6 +104,14 @@ app.get('/healthz', async (_req: Request, res: Response) => {
 import compression from 'compression';
 app.use(compression({ level: 6 }));
 
+// Legacy cloud function prefix normalization for Render unified server
+app.use((req: Request, _res: Response, next: NextFunction) => {
+  if (req.url.startsWith('/orinApi/') || req.url.startsWith('/orinPayments/') || req.url.startsWith('/orinSecurity/') || req.url.startsWith('/orinIdentity/')) {
+    req.url = req.url.replace(/^\/(?:orinApi|orinPayments|orinSecurity|orinIdentity)/, '');
+  }
+  next();
+});
+
 app.get('/api/health', async (_req: Request, res: Response) => {
   try {
     const stats = await withTx(async (client) => {

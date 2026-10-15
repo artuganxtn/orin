@@ -33,7 +33,9 @@ export const fail=(e:unknown)=>{
   'auth/too-many-requests':['محاولات كثيرة. حاول مجددًا بعد قليل.','Too many attempts. Please try again later.'],
   'auth/network-request-failed':['تعذر الاتصال. تحقق من الإنترنت.','Unable to connect. Check your internet connection.'],
   'auth/user-disabled':['الوصول إلى الحساب موقوف. تواصل مع الإدارة.','Account access is disabled. Contact administrator.'],
-  'email_unverified':['يرجى تأكيد البريد الإلكتروني بالرمز قبل المتابعة.','Please verify your email address before continuing.']
+  'email_unverified':['يرجى تأكيد البريد الإلكتروني بالرمز قبل المتابعة.','Please verify your email address before continuing.'],
+  'delivery-unavailable':['تعذر إرسال رمز التحقق إلى بريدك الإلكتروني حاليًا. يرجى التواصل مع الدعم أو المحاولة لاحقًا.','Verification email could not be delivered right now. Please contact support or try again later.'],
+  'service-unavailable':['خدمة التسجيل غير متاحة مؤقتًا. يرجى المحاولة بعد قليل.','Registration service is temporarily unavailable. Please try again shortly.']
  };
  return messages[code]?.[ar?0:1]??(ar?'تعذرت العملية. حاول مجددًا.':'The action could not be completed. Please retry.');
 };

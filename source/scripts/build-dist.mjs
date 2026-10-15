@@ -15,8 +15,8 @@ if (mode === 'spark') {
 } else if (mode === 'security') {
   outDir = 'firebase-security-dist';
   env.VITE_FIREBASE_SPARK = 'true';
-  env.VITE_ORIN_PROGRAM_API_URL = env.VITE_ORIN_PROGRAM_API_URL || 'https://europe-west1-orin-99951.cloudfunctions.net/orinApi';
-  env.VITE_ORIN_SECURITY_API_URL = env.VITE_ORIN_SECURITY_API_URL || 'https://europe-west1-orin-99951.cloudfunctions.net/orinSecurity';
+  env.VITE_ORIN_PROGRAM_API_URL = env.VITE_ORIN_PROGRAM_API_URL || 'https://firebase-functions-pc5h.onrender.com';
+  env.VITE_ORIN_SECURITY_API_URL = env.VITE_ORIN_SECURITY_API_URL || 'https://firebase-functions-pc5h.onrender.com';
 } else if (mode === 'render') {
   outDir = 'firebase-dist';
 } else if (mode === 'server') {
