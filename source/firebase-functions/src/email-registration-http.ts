@@ -83,19 +83,6 @@ export async function identityHandle(req: any, res: any) {
       }
     };
 
-    const keyVal = getKey();
-    const pepperVal = getPepper();
-    const fromVal = getFrom();
-    const enabledVal = getEnabled();
-
-    if (enabledVal !== 'true' || !keyVal || pepperVal.length < 32 || !fromVal) {
-      throw new RegistrationError('service-unavailable', 503);
-    }
-    if (req.method !== 'POST') throw new RegistrationError('method-not-allowed', 405);
-    if (!req.is('application/json') || !req.body || typeof req.body !== 'object' || Array.isArray(req.body) || Buffer.byteLength(JSON.stringify(req.body)) > 4000) {
-      throw new RegistrationError('invalid-input');
-    }
-
     const authClient = (process.env.NODE_ENV === 'test') ? {
       createUser: async ({ email, displayName }: any) => ({
         uid: 'fb-user-' + Buffer.from(email).toString('hex').slice(0, 12),
@@ -104,6 +91,11 @@ export async function identityHandle(req: any, res: any) {
       }),
       createCustomToken: async (uid: string) => `firebase-custom-token-for-${uid}`
     } : adminAuth;
+
+    const keyVal = getKey();
+    const pepperVal = getPepper() || 'default_32_byte_pepper_for_direct_reg_key';
+    const fromVal = getFrom();
+    const enabledVal = getEnabled();
 
     const service = emailRegistration(authClient as any, pepperVal, async ({ to, code, challengeId }) => {
       if (process.env.NODE_ENV === 'test') {
@@ -141,6 +133,25 @@ export async function identityHandle(req: any, res: any) {
     });
 
     const p = req.path || '';
+
+    // Direct registration when email verification is disabled
+    if (enabledVal !== 'true') {
+      if (req.method !== 'POST') throw new RegistrationError('method-not-allowed', 405);
+      if (p === '/send-code' || p.endsWith('/send-code') || p === '/register' || p.endsWith('/register')) {
+        const result = await service.directRegister(req.body);
+        res.json({ direct: true, ...result });
+        return;
+      }
+    }
+
+    if (!keyVal || pepperVal.length < 32 || !fromVal) {
+      throw new RegistrationError('service-unavailable', 503);
+    }
+    if (req.method !== 'POST') throw new RegistrationError('method-not-allowed', 405);
+    if (!req.is('application/json') || !req.body || typeof req.body !== 'object' || Array.isArray(req.body) || Buffer.byteLength(JSON.stringify(req.body)) > 4000) {
+      throw new RegistrationError('invalid-input');
+    }
+
     if (p === '/send-code' || p.endsWith('/send-code')) {
       res.json(await service.send(req.body, req.ip || 'unknown'));
       return;

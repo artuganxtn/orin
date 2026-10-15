@@ -98,11 +98,18 @@ export function AuthForm({path,done}:{path:string;done:()=>void}){
    const res=await apiFetch('/api/identity/send-code',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({email:normalizedEmail,name:name.trim()})
+    body:JSON.stringify({email:normalizedEmail,name:name.trim(),password})
    });
    const data = (await res.json()) as any;
    if(!res.ok){
     throw {code:data?.code||'service-unavailable'};
+   }
+   if (data.token) {
+    await signInWithCustomToken(auth, data.token);
+    void ensureSecuritySession().catch(()=>{});
+    setPassword('');setConfirmation('');
+    done();
+    return;
    }
    setChallengeId(data.challengeId);
    setOtpStep(true);

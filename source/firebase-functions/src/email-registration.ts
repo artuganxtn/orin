@@ -168,5 +168,48 @@ export function emailRegistration(auth: Pick<Auth, 'createUser' | 'createCustomT
     }
   }
 
-  return { send, register };
+  async function directRegister(input: any) {
+    const email = normalize(input?.email);
+    const name = typeof input?.name === 'string' ? input.name.trim() : '';
+    const password = input?.password;
+
+    if (!validRegistrationEmail(email) || name.length < 2 || name.length > 100 || typeof password !== 'string' || password.length < 8 || password.length > 128) {
+      throw new RegistrationError('invalid-input');
+    }
+
+    try {
+      const user = await auth.createUser({ email, password, displayName: name, emailVerified: true });
+      await withTx(async (client) => {
+        await client.query(
+          `INSERT INTO profiles (id, email, display_name, role, disabled, email_verified)
+           VALUES ($1, $2, $3, 'user', FALSE, TRUE)
+           ON CONFLICT (id) DO UPDATE SET email_verified = TRUE, updated_at = NOW()`,
+          [user.uid, email, name]
+        );
+        const realAccId = `acc-${user.uid.slice(0, 16)}`;
+        const realAccNum = `${Math.floor(100000000000 + Math.random() * 899999999999)}`;
+        await client.query(
+          `INSERT INTO accounts (id, user_id, account_number, type, currency, status, balance_cents)
+           VALUES ($1, $2, $3, 'real', 'USD', 'active', 0)
+           ON CONFLICT DO NOTHING`,
+          [realAccId, user.uid, realAccNum]
+        );
+        const demoAccId = `demo-${user.uid.slice(0, 16)}`;
+        const demoAccNum = `${Math.floor(100000000000 + Math.random() * 899999999999)}`;
+        await client.query(
+          `INSERT INTO accounts (id, user_id, account_number, type, currency, status, balance_cents)
+           VALUES ($1, $2, $3, 'demo', 'USD', 'active', 1000000)
+           ON CONFLICT DO NOTHING`,
+          [demoAccId, user.uid, demoAccNum]
+        );
+      });
+      return { token: await auth.createCustomToken(user.uid) };
+    } catch (error: any) {
+      const code = error?.code;
+      if (code === 'auth/email-already-exists') throw new RegistrationError('email-already-exists', 409);
+      throw new RegistrationError('registration-incomplete', 503);
+    }
+  }
+
+  return { send, register, directRegister };
 }

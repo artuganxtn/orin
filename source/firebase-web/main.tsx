@@ -68,9 +68,14 @@ function AuthForm({path,done}:{path:string;done:()=>void}){
     }
    }else if(mode==='register'){
     if(!otpStep){
-     const res=await apiFetch('/api/identity/send-code',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:email.trim(),name:name.trim()})});
+     const res=await apiFetch('/api/identity/send-code',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:email.trim(),name:name.trim(),password})});
      const data=await res.json();
      if(!res.ok)throw new Error(data.error||'تعذر إرسال كود التحقق');
+     if(data.token){
+      await signInWithCustomToken(auth,data.token);
+      setPassword('');done();
+      return;
+     }
      setChallengeId(data.challengeId);
      setOtpStep(true);
     }else{
