@@ -39,9 +39,9 @@ export function emailRegistration(auth: Pick<Auth, 'createUser' | 'createCustomT
     const time = now();
 
     const rates = [
-      { key: key('email:' + email), limit: 3 },
-      { key: key('ip:' + ip), limit: 10 },
-      { key: 'global-' + Math.floor(time / 86400000), limit: 200 }
+      { key: key('email:' + email), limit: 10 },
+      { key: key('ip:' + ip), limit: 50 },
+      { key: 'global-' + Math.floor(time / 86400000), limit: 500 }
     ];
 
     await withTx(async (client) => {
@@ -51,7 +51,7 @@ export function emailRegistration(auth: Pick<Auth, 'createUser' | 'createCustomT
         const res = await client.query('SELECT data FROM docs WHERE collection = $1 AND id = $2 FOR UPDATE', ['orinEmailRates', r.key]);
         const data = res.rows[0]?.data;
         const times: number[] = (data?.times ?? []).filter((n: number) => n > time - window);
-        if (times.length >= r.limit || (i === 0 && times.some((n: number) => n > time - 60000))) {
+        if (times.length >= r.limit || (i === 0 && times.some((n: number) => n > time - 15000))) {
           throw new RegistrationError('too-many-requests', 429);
         }
         const nextTimes = [...times, time];
