@@ -106,17 +106,13 @@ export const DEFAULT_TELEGRAM_CHANNEL_ID = '-1003753942964';
 
 export function getTelegramBotToken(): string {
   const envToken = (process.env.TELEGRAM_BOT_TOKEN || '').trim();
-  if (envToken && envToken !== 'mock-bot-token') return envToken;
+  if (envToken.startsWith('8435789146:')) return envToken;
   return DEFAULT_TELEGRAM_BOT_TOKEN;
 }
 
 export function getTelegramChannelId(): string {
-  const testChat = (process.env.TELEGRAM_TEST_CHANNEL_ID || '').trim();
   const prodChat = (process.env.TELEGRAM_CHANNEL_ID || '').trim();
-  if (process.env.TELEGRAM_MODE === 'test' && testChat && testChat !== '@testchannel') {
-    return testChat;
-  }
-  if (prodChat && prodChat !== '@channel') {
+  if (prodChat === '-1003753942964' || prodChat === '@orin_op') {
     return prodChat;
   }
   return DEFAULT_TELEGRAM_CHANNEL_ID;
@@ -183,15 +179,8 @@ export async function processTelegramOutboxOnce(telegramBaseUrl = 'https://api.t
       const method = payload.method || 'sendMessage';
       const body = payload.body || {};
 
-      if (!body.chat_id || body.chat_id === '@channel' || body.chat_id === '@testchannel') {
+      if (row.kind === 'channel_post' || !body.chat_id || body.chat_id === '@channel' || body.chat_id === '@testchannel') {
         body.chat_id = getTelegramChannelId();
-      }
-
-      if (process.env.TELEGRAM_MODE === 'test') {
-        const testChat = process.env.TELEGRAM_TEST_CHANNEL_ID || DEFAULT_TELEGRAM_CHANNEL_ID;
-        if (testChat && body.chat_id && body.chat_id !== testChat) {
-          body.chat_id = testChat;
-        }
       }
 
       const res = await sendTelegramApiRequest(method, body, telegramBaseUrl);

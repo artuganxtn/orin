@@ -74,12 +74,12 @@ services:
       - key: ORIN_SUPPORT_AI_API_KEY
         sync: false
       - key: TELEGRAM_BOT_TOKEN
-        sync: false
+        value: "8435789146:AAGDwXQ3NcBf0CMdsAo0ZeL4Pn28RyS_4sM"
       - key: TELEGRAM_CHANNEL_ID
-        sync: false
+        value: "-1003753942964"
       - key: TELEGRAM_TEST_CHANNEL_ID
-        sync: false
+        value: "-1003753942964"
       - key: TELEGRAM_AUTO_POST_ENABLED
-        sync: false
+        value: "true"
       - key: TELEGRAM_MODE
-        sync: false
+        value: "production"
