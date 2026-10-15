@@ -144,7 +144,7 @@ export async function getDemoWallet(user: { id: string }, accountId: string) {
     const acc = accRes.rows[0];
     const isReal = acc.type === 'real';
     const collName = isReal ? 'contract_wallets' : 'demo_wallets';
-    const initialFutures = isReal ? Number(acc.balance_cents) : 1000000;
+    const initialFutures = isReal ? Math.max(0, Number(acc.balance_cents)) : 1000000;
 
     const docRes = await client.query(
       `SELECT data FROM docs WHERE collection = $1 AND id = $2`,
@@ -163,6 +163,13 @@ export async function getDemoWallet(user: { id: string }, accountId: string) {
       },
       operations: []
     };
+
+    if (isReal) {
+      const currentTotal = Math.max(0, Number(acc.balance_cents));
+      const currentPerp = Math.min(currentTotal, Math.max(0, Number(data.wallet.perpetualCents || 0)));
+      data.wallet.perpetualCents = currentPerp;
+      data.wallet.futuresCents = currentTotal - currentPerp;
+    }
 
     return data;
   });
@@ -193,7 +200,7 @@ export async function operateDemoWallet(
     const acc = accRes.rows[0];
     const isReal = acc.type === 'real';
     const collName = isReal ? 'contract_wallets' : 'demo_wallets';
-    const initialFutures = isReal ? Number(acc.balance_cents) : 1000000;
+    const initialFutures = isReal ? Math.max(0, Number(acc.balance_cents)) : 1000000;
 
     const docRes = await client.query(
       `SELECT data FROM docs WHERE collection = $1 AND id = $2 FOR UPDATE`,
@@ -213,6 +220,13 @@ export async function operateDemoWallet(
       operations: []
     };
 
+    if (isReal) {
+      const currentTotal = Math.max(0, Number(acc.balance_cents));
+      const currentPerp = Math.min(currentTotal, Math.max(0, Number(state.wallet.perpetualCents || 0)));
+      state.wallet.perpetualCents = currentPerp;
+      state.wallet.futuresCents = currentTotal - currentPerp;
+    }
+
     const existingOp = state.operations.find((o: any) => o.id === requestId);
     if (existingOp) {
       return state;
@@ -226,11 +240,11 @@ export async function operateDemoWallet(
       nextPerp = 0;
     } else if (kind === 'transfer') {
       if (input.from === 'futures') {
-        if (nextFutures < amountCents) throw new ClientError('الرصيد غير كافٍ للتحويل.', 400);
+        if (nextFutures < amountCents) throw new ClientError('الرصيد المتاح غير كافٍ للتحويل. / Insufficient available balance.', 400);
         nextFutures -= amountCents;
         nextPerp += amountCents;
       } else {
-        if (nextPerp < amountCents) throw new ClientError('الرصيد غير كافٍ للتحويل.', 400);
+        if (nextPerp < amountCents) throw new ClientError('الرصيد المتاح غير كافٍ للتحويل. / Insufficient available balance.', 400);
         nextPerp -= amountCents;
         nextFutures += amountCents;
       }

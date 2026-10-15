@@ -93,8 +93,6 @@ export async function join(u: Identity, input: any, now = Date.now()) {
   }
 
   return withTx(async (client) => {
-    await requireVerifiedKyc(u, client);
-
     // 1. Fetch Contract
     const cRes = await client.query(
       `SELECT c.*, COALESCE(r.revoked, false) AS is_revoked
@@ -124,11 +122,19 @@ export async function join(u: Identity, input: any, now = Date.now()) {
     }
 
     // 3. Resolve Account & Lock for Update
-    const accRes = await client.query(
-      `SELECT * FROM accounts WHERE user_id = $1 AND type = 'real' FOR UPDATE`,
-      [u.id]
+    let accRes = await client.query(
+      input.accountId
+        ? `SELECT * FROM accounts WHERE user_id = $1 AND id = $2 FOR UPDATE`
+        : `SELECT * FROM accounts WHERE user_id = $1 AND type = 'real' FOR UPDATE`,
+      input.accountId ? [u.id, input.accountId] : [u.id]
     );
-    if (accRes.rows.length === 0) throw new ApiError('حساب تداول حقيقي مطلوب.', 404);
+    if (accRes.rows.length === 0 && !input.accountId) {
+      accRes = await client.query(
+        `SELECT * FROM accounts WHERE user_id = $1 ORDER BY (type = 'real') DESC LIMIT 1 FOR UPDATE`,
+        [u.id]
+      );
+    }
+    if (accRes.rows.length === 0) throw new ApiError('حساب تداول غير موجود.', 404);
     const acc = accRes.rows[0];
 
     // 4. Unique position check (idempotent retry)

@@ -72,8 +72,6 @@ export function paymentService(provider: Pick<NowPayments, 'create' | 'get'>, ip
         throw new ApiError('الحساب موقوف.', 403);
       }
 
-      await requireVerifiedKyc(u, client);
-
       // 2. Check real USD account
       const accRes = await client.query('SELECT * FROM accounts WHERE user_id = $1 AND id = $2', [u.id, accountId]);
       const a = accRes.rows[0];
