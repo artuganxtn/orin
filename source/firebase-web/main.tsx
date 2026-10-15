@@ -73,7 +73,6 @@ function AuthForm({path,done}:{path:string;done:()=>void}){
      if(!res.ok)throw new Error(data.error||'تعذر إرسال كود التحقق');
      setChallengeId(data.challengeId);
      setOtpStep(true);
-     if(data.fallbackCode)setCode(data.fallbackCode);
     }else{
      const res=await apiFetch('/api/identity/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:email.trim(),name:name.trim(),password,code:code.trim(),challengeId})});
      const data=await res.json();
