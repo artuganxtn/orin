@@ -123,11 +123,10 @@ async function executeUserTool(u: Identity, toolName: string, client: any, local
       // Fallback
     }
     return {
-      timezone: 'Europe/Istanbul (UTC+3)',
+      timezone: 'UTC+03:00 (GMT+3)',
       upcomingSlots: [
-        { name: 'الصفقة الأولى - العصر', local_time: '16:45', asset: 'BTCUSD', direction: 'BUY' },
-        { name: 'الصفقة الثانية - المساء', local_time: '18:30', asset: 'ETHUSD', direction: 'BUY' },
-        { name: 'صفقة وكيل أورين - الليل', local_time: '20:30', asset: 'XAUUSD', direction: 'BUY' }
+        { name: 'الصفقة الأولى - الجلسة الأولى', local_time: '17:00', asset: 'BTCUSD', direction: 'BUY' },
+        { name: 'الصفقة الثانية - صفقة وكيل أورين', local_time: '20:30', asset: 'XAUUSD', direction: 'BUY' }
       ]
     };
   }

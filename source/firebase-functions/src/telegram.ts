@@ -41,7 +41,8 @@ export function renderMessageTemplate(
   const dirText = c.direction === 'BUY' ? '🟢 شراء صعود (BUY)' : '🔴 بيع هبوط (SELL)';
   const dirTextEsc = escapeHtml(dirText);
   const durationStr = c.durationSec < 60 ? `${c.durationSec} ثانية` : `${Math.round(c.durationSec / 60)} دقيقة`;
-  const pctText = (c.settlementBps / 100).toFixed(1) + '%';
+  const pctNum = Number(c.settlementBps) / 100;
+  const pctText = (pctNum % 1 === 0 ? pctNum.toFixed(0) : (pctNum * 10 % 1 === 0 ? pctNum.toFixed(1) : pctNum.toFixed(2))) + '%';
   const startTimeStr = formatTurkeyTime(c.opensAtMs);
   const endTimeStr = formatTurkeyTime(c.closesAtMs);
 
@@ -66,7 +67,7 @@ export function renderMessageTemplate(
       `🎯 <b>الاتجاه:</b> ${dirTextEsc}\n` +
       `⏱️ <b>المدة:</b> ${durationStr}\n` +
       `📈 <b>النسبة:</b> ${pctText}\n` +
-      `⏰ <b>التوقيت (تركيا):</b> ${startTimeStr} - ${endTimeStr}\n` +
+      `⏰ <b>التوقيت (UTC+03:00 GMT+3):</b> ${startTimeStr} - ${endTimeStr}\n` +
       `🔑 <b>الكود المقترح:</b>\n` +
       `<code>${codeEsc}</code>\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
@@ -93,7 +94,7 @@ export function renderMessageTemplate(
     `🎯 <b>نوع الصفقة:</b> ${dirTextEsc}\n` +
     `⏱️ <b>مدة الصفقة:</b> ${durationStr}\n` +
     `📈 <b>نسبة الأرباح المقفلة:</b> ${pctText}\n` +
-    `⏰ <b>فترة المشاركة (توقيت تركيا):</b> ${startTimeStr} - ${endTimeStr}\n` +
+    `⏰ <b>فترة المشاركة (UTC+03:00 GMT+3):</b> ${startTimeStr} - ${endTimeStr}\n` +
     `🔑 <b>كود الدخول في الصفقة:</b>\n` +
     `<code>${codeEsc}</code>\n` +
     `━━━━━━━━━━━━━━━━━━━━`;
@@ -179,7 +180,7 @@ export async function processTelegramOutboxOnce(telegramBaseUrl = 'https://api.t
       const method = payload.method || 'sendMessage';
       const body = payload.body || {};
 
-      if (row.kind === 'channel_post' || !body.chat_id || body.chat_id === '@channel' || body.chat_id === '@testchannel') {
+      if (row.kind === 'channel_post' || row.kind === 'channel_code' || !body.chat_id || body.chat_id === '@channel' || body.chat_id === '@testchannel') {
         body.chat_id = getTelegramChannelId();
       }
 
@@ -193,12 +194,14 @@ export async function processTelegramOutboxOnce(telegramBaseUrl = 'https://api.t
           [msgId, row.id]
         );
 
-        await client.query(
-          `UPDATE scheduled_runs SET telegram_message_id = $1, updated_at = NOW() WHERE contract_id = $2`,
-          [msgId, row.contract_id]
-        );
+        if (row.kind === 'channel_post') {
+          await client.query(
+            `UPDATE scheduled_runs SET telegram_message_id = $1, updated_at = NOW() WHERE contract_id = $2`,
+            [msgId, row.contract_id]
+          );
+        }
         processed++;
-        console.log(`[TELEGRAM_OUTBOX_SUCCESS] Outbox ID ${row.id} sent message_id ${msgId}`);
+        console.log(`[TELEGRAM_OUTBOX_SUCCESS] Outbox ID ${row.id} (${row.kind}) sent message_id ${msgId}`);
       } else {
         errors++;
         const nextDelaySec = res.status === 429 ? (res.retry_after || 5) : Math.pow(2, Math.min(row.attempts + 1, 6)) * 5;

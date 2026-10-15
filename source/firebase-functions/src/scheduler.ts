@@ -165,11 +165,29 @@ async function executeSlot(slot: any, client: any, nowMs: number, runDate: strin
     }
   });
 
+  // 1. Enqueue main formatted trade signal announcement
   await client.query(
     `INSERT INTO telegram_outbox (id, kind, contract_id, payload, status, created_at, updated_at)
      VALUES ($1, 'channel_post', $2, $3::jsonb, 'pending', NOW(), NOW())
      ON CONFLICT (kind, contract_id) DO NOTHING`,
     ['outbox-post-' + contractId, contractId, outboxPayload]
+  );
+
+  // 2. Enqueue standalone trade code message for easy 1-tap copying on mobile
+  const codePayload = JSON.stringify({
+    method: 'sendMessage',
+    body: {
+      chat_id: channelId,
+      text: `<code>${code}</code>`,
+      parse_mode: 'HTML'
+    }
+  });
+
+  await client.query(
+    `INSERT INTO telegram_outbox (id, kind, contract_id, payload, status, created_at, updated_at)
+     VALUES ($1, 'channel_code', $2, $3::jsonb, 'pending', NOW() + INTERVAL '1 second', NOW() + INTERVAL '1 second')
+     ON CONFLICT (kind, contract_id) DO NOTHING`,
+    ['outbox-code-' + contractId, contractId, codePayload]
   );
 
   return { code, contractId, runId, isAuto: true };
