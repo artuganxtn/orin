@@ -531,19 +531,24 @@ export async function state(u: Identity, now = Date.now()) {
     }
 
     let totalRealizedCents = Number(acc.realized_cents || 0);
+    let dailyProfitCents = 0;
     try {
       const settledRes = await client.query(
-        `SELECT COALESCE(SUM(result_cents), 0) AS total_settled
+        `SELECT
+           COALESCE(SUM(result_cents), 0) AS total_settled,
+           COALESCE(SUM(CASE WHEN COALESCE(settled_at, ends_at) >= NOW() - INTERVAL '24 hours' THEN result_cents ELSE 0 END), 0) AS daily_settled
          FROM positions
          WHERE user_id = $1 AND status = 'settled'`,
         [u.id]
       );
       const settled = Number(settledRes.rows[0]?.total_settled || 0);
+      dailyProfitCents = Number(settledRes.rows[0]?.daily_settled || 0);
       const bonusProfit = Number(acc.bonus_profit_cents || 0);
       const accRealized = Number(acc.realized_cents || 0);
       totalRealizedCents = settled !== 0 ? (settled + bonusProfit) : (accRealized !== 0 ? accRealized : bonusProfit);
     } catch {
       totalRealizedCents = Number(acc.realized_cents || 0);
+      dailyProfitCents = 0;
     }
 
     return {
@@ -562,6 +567,7 @@ export async function state(u: Identity, now = Date.now()) {
       balanceCents: Number(acc.balance_cents),
       reservedCents: Number(acc.reserved_cents),
       realizedCents: totalRealizedCents,
+      dailyProfitCents,
       bonusCents: Number(acc.bonus_cents),
       bonusReservedCents: Number(acc.bonus_reserved_cents),
       bonusProfitCents: Number(acc.bonus_profit_cents),

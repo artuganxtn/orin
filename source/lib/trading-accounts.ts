@@ -7,6 +7,7 @@ export interface TradingAccount {
   balanceCents: number;
   reservedCents: number;
   realizedCents: number;
+  dailyProfitCents?: number;
   createdAt: number;
 }
 export interface AccountDirectory {

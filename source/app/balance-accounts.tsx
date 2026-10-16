@@ -66,6 +66,21 @@ export function BalanceAccounts({state, onHideBalance, onDirectoryChange, onAdju
   const openList=(value:boolean)=>{setOpen(value);if(value){setCreating(false);void run();}};
   const balance=active ? active.balanceCents+active.reservedCents : state ? state.balanceCents+state.reservedCents : null;
   const realized=active?.realizedCents ?? state?.realizedCents;
+  const now = state?.serverTime ?? Date.now();
+  const dayAgo = now - 24 * 60 * 60 * 1000;
+  const positions24h = (state?.positions ?? []).filter(p => {
+    if (p.status !== 'settled') return false;
+    if (active && (p as any).account_id && (p as any).account_id !== active.id) return false;
+    const time = Number(p.settled_at ?? p.ends_at ?? p.started_at ?? 0);
+    return time >= dayAgo;
+  });
+  const positions24hCents = positions24h.reduce((sum, p) => sum + (Number(p.result_cents) || 0), 0);
+  const backendDaily = active?.dailyProfitCents !== undefined
+    ? Number(active.dailyProfitCents)
+    : state?.dailyProfitCents !== undefined
+    ? Number(state.dailyProfitCents)
+    : undefined;
+  const profit24h = backendDaily !== undefined ? backendDaily : positions24hCents;
   const create=async()=>{
     if(!requestId.current)requestId.current=crypto.randomUUID();
     const next=await run('POST',{id:requestId.current,type:'real'});
@@ -101,7 +116,7 @@ export function BalanceAccounts({state, onHideBalance, onDirectoryChange, onAdju
     </Popover.Root>
     <div className="balance-top"><span>{t('إجمالي الرصيد','Total balance')}</span><button aria-label={prefs.hideBalance?t('إظهار الرصيد','Show balance'):t('إخفاء الرصيد','Hide balance')} onClick={onHideBalance}>{prefs.hideBalance?<EyeOff/>:<Eye/>}</button></div>
     <strong className="balance-total num">{prefs.hideBalance?'••••••':balance===null?'$ —':`$${number(balance/100)}`}</strong>
-    <div className="balance-bottom"><span className={`num ${(realized??0)<0?'loss':'gain'}`}>{prefs.hideBalance?'••••':realized===undefined?'—':`${realized>=0?'+':''}${number(realized/100)} USD`}</span><small>{t('صافي النتائج','Net results')}</small></div>
+    <div className="balance-bottom"><span className={`num ${(profit24h??0)<0?'loss':'gain'}`}>{prefs.hideBalance?'••••':profit24h===undefined?'—':`${profit24h>=0?'+':''}${number(profit24h/100)} USD`}</span><small>{t('أرباح 24 ساعة','24h profit')}</small></div>
     <div className="balance-brand-caption" aria-hidden="true">Trade Beyond Limits</div>
     <div className="balance-available"><Coins size={23}/><span><small>{t('الرصيد المتاح','Available balance')}</small><bdi className="num">{prefs.hideBalance?'••••••':available===undefined?'$ —':`$${number(available/100)}`}</bdi></span></div>
   </section>;

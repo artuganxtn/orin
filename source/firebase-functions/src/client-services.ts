@@ -40,14 +40,20 @@ export async function getTradingAccounts(user: { id: string }, dbClient?: any) {
 
     const accounts = await Promise.all(accRes.rows.map(async (row: any) => {
       let settledPnl = 0;
+      let dailyProfitCents = 0;
       try {
         const sRes = await client.query(
-          `SELECT COALESCE(SUM(result_cents), 0) AS total_settled FROM positions WHERE user_id = $1 AND (account_id = $2 OR account_id IS NULL) AND status = 'settled'`,
+          `SELECT
+             COALESCE(SUM(result_cents), 0) AS total_settled,
+             COALESCE(SUM(CASE WHEN COALESCE(settled_at, ends_at) >= NOW() - INTERVAL '24 hours' THEN result_cents ELSE 0 END), 0) AS daily_settled
+           FROM positions WHERE user_id = $1 AND (account_id = $2 OR account_id IS NULL) AND status = 'settled'`,
           [user.id, row.id]
         );
         settledPnl = Number(sRes.rows[0]?.total_settled || 0);
+        dailyProfitCents = Number(sRes.rows[0]?.daily_settled || 0);
       } catch {
         settledPnl = 0;
+        dailyProfitCents = 0;
       }
       const bonusProfit = Number(row.bonus_profit_cents || 0);
       const accRealized = Number(row.realized_cents || 0);
@@ -60,6 +66,7 @@ export async function getTradingAccounts(user: { id: string }, dbClient?: any) {
         balanceCents: Number(row.balance_cents),
         reservedCents: Number(row.reserved_cents),
         realizedCents,
+        dailyProfitCents,
         createdAt: new Date(row.created_at).getTime()
       };
     }));
