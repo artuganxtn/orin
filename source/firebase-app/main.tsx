@@ -1,4 +1,4 @@
-if (typeof window !== 'undefined' && (window.location.hostname === 'orin-99951.web.app' || window.location.hostname === 'orin-99951.firebaseapp.com')) {
+if (typeof window !== 'undefined' && !/ORINAndroid\//.test(navigator.userAgent) && (window.location.hostname === 'orin-99951.web.app' || window.location.hostname === 'orin-99951.firebaseapp.com')) {
   window.location.replace('https://orin-trader.top' + window.location.pathname + window.location.search + window.location.hash);
 }
 import {configurePayments} from '../lib/payment-client';
