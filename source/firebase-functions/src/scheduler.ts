@@ -62,6 +62,13 @@ export async function processSchedulerSlotsOnce(nowMs = Date.now()): Promise<{ r
       const dayOfWeek = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
       if (!days.includes(dayOfWeek)) continue;
 
+      // Special exemption for today only (2026-10-16):
+      // The 17:00 trade already executed earlier today on production,
+      // so do NOT make or execute today's trade for 16:45.
+      if (slot.id === 'slot-1645' && runDate === '2026-10-16') {
+        continue;
+      }
+
       // Check existing run for (slot_id, run_date)
       const runCheck = await client.query(
         `SELECT id, status FROM scheduled_runs WHERE slot_id = $1 AND run_date = $2`,
@@ -121,38 +128,39 @@ export interface DayPlan {
   d: number;
   s1: DayTradeSession;
   s2: DayTradeSession;
+  s3: DayTradeSession;
 }
 
 export const SCHEDULE_29_DAYS: DayPlan[] = [
-  { d: 1, s1: { name: 'اقتناص قمة البيتكوين - جلسة لندن', asset: 'BTCUSD', dir: 'BUY', dur: 60, bps: 118 }, s2: { name: 'زخم الذهب الفوري - افتتاح نيويورك', asset: 'XAUUSD', dir: 'BUY', dur: 180, bps: 122 } },
-  { d: 2, s1: { name: 'ارتداد اليورو مقابل الدولار', asset: 'EURUSD', dir: 'SELL', dur: 120, bps: 112 }, s2: { name: 'اختراق مقاومة الإيثيريوم السريعة', asset: 'ETHUSD', dir: 'BUY', dur: 90, bps: 128 } },
-  { d: 3, s1: { name: 'موجة صعود الذهب - تداولات المساء', asset: 'XAUUSD', dir: 'BUY', dur: 180, bps: 125 }, s2: { name: 'فرصة سولانا السريعة - زخم السيولة', asset: 'SOLUSD', dir: 'BUY', dur: 60, bps: 115 } },
-  { d: 4, s1: { name: 'تداول كسر اتجاه الجنيه الإسترليني', asset: 'GBPUSD', dir: 'BUY', dur: 120, bps: 120 }, s2: { name: 'صفقة البيتكوين المسائية - حركة الحيتان', asset: 'BTCUSD', dir: 'BUY', dur: 60, bps: 120 } },
-  { d: 5, s1: { name: 'ضغط شراء الذهب - الجلسة الأوروبية', asset: 'XAUUSD', dir: 'BUY', dur: 180, bps: 110 }, s2: { name: 'اندفاع الإيثيريوم اللحظي - الجلسة الأمريكية', asset: 'ETHUSD', dir: 'BUY', dur: 90, bps: 130 } },
-  { d: 6, s1: { name: 'انعكاس اليورو اللحظي - تأكيد النمط', asset: 'EURUSD', dir: 'BUY', dur: 60, bps: 122 }, s2: { name: 'استقرار الذهب فوق الدعم الرئيسي', asset: 'XAUUSD', dir: 'BUY', dur: 180, bps: 118 } },
-  { d: 7, s1: { name: 'تأكيد اتجاه البيتكوين الصاعد', asset: 'BTCUSD', dir: 'BUY', dur: 60, bps: 115 }, s2: { name: 'اقتناص قاع الجنيه الإسترليني', asset: 'GBPUSD', dir: 'BUY', dur: 120, bps: 125 } },
-  { d: 8, s1: { name: 'زخم الذهب مع افتتاح أسواق السلع', asset: 'XAUUSD', dir: 'BUY', dur: 180, bps: 128 }, s2: { name: 'موجة صعود سولانا - تحرك الزخم', asset: 'SOLUSD', dir: 'BUY', dur: 60, bps: 113 } },
-  { d: 9, s1: { name: 'تأكيد كسر اتجاه الإيثيريوم', asset: 'ETHUSD', dir: 'BUY', dur: 90, bps: 114 }, s2: { name: 'صفقة البيتكوين الفورية - ارتداد الدعم', asset: 'BTCUSD', dir: 'BUY', dur: 60, bps: 126 } },
-  { d: 10, s1: { name: 'تداول الذهب اللحظي - سيولة المساء', asset: 'XAUUSD', dir: 'BUY', dur: 180, bps: 121 }, s2: { name: 'اختراق اليورو مقابل الدولار', asset: 'EURUSD', dir: 'BUY', dur: 120, bps: 120 } },
-  { d: 11, s1: { name: 'فرصة الجنيه الإسترليني - كسر القناة', asset: 'GBPUSD', dir: 'SELL', dur: 60, bps: 116 }, s2: { name: 'اندفاع البيتكوين - زخم السيولة الأمريكية', asset: 'BTCUSD', dir: 'BUY', dur: 60, bps: 124 } },
-  { d: 12, s1: { name: 'صعود الذهب الفوري نحو الهدف الأول', asset: 'XAUUSD', dir: 'BUY', dur: 180, bps: 124 }, s2: { name: 'صفقة الإيثيريوم - تأكيد الاتجاه الصاعد', asset: 'ETHUSD', dir: 'BUY', dur: 90, bps: 117 } },
-  { d: 13, s1: { name: 'زخم سولانا - اختراق مستوى المقاومة', asset: 'SOLUSD', dir: 'BUY', dur: 60, bps: 109 }, s2: { name: 'تداول الذهب الآمن - افتتاح المساء', asset: 'XAUUSD', dir: 'BUY', dur: 180, bps: 131 } },
-  { d: 14, s1: { name: 'ارتداد البيتكوين من منطقة الطلب', asset: 'BTCUSD', dir: 'BUY', dur: 60, bps: 126 }, s2: { name: 'موجة اليورو الهابطة - جني أرباح', asset: 'EURUSD', dir: 'SELL', dur: 120, bps: 115 } },
-  { d: 15, s1: { name: 'تأكيد شراء الذهب - ثبات أعلى المتوسط', asset: 'XAUUSD', dir: 'BUY', dur: 180, bps: 118 }, s2: { name: 'فرصة الإيثيريوم السريعة - ختام الجلسة', asset: 'ETHUSD', dir: 'BUY', dur: 60, bps: 123 } },
-  { d: 16, s1: { name: 'كسر نطاق الجنيه الإسترليني العرضي', asset: 'GBPUSD', dir: 'BUY', dur: 120, bps: 113 }, s2: { name: 'زخم البيتكوين المسائي - اختراق القمة', asset: 'BTCUSD', dir: 'BUY', dur: 60, bps: 128 } },
-  { d: 17, s1: { name: 'صعود الذهب اللحظي - تفاعل مع الأخبار', asset: 'XAUUSD', dir: 'BUY', dur: 180, bps: 122 }, s2: { name: 'ارتداد سولانا الإيجابي - اتجاه صاعد', asset: 'SOLUSD', dir: 'BUY', dur: 60, bps: 119 } },
-  { d: 18, s1: { name: 'تداول الإيثيريوم الفوري - زخم قوي', asset: 'ETHUSD', dir: 'BUY', dur: 90, bps: 111 }, s2: { name: 'صفقة الذهب الذهبية - استمرار الاتجاه', asset: 'XAUUSD', dir: 'BUY', dur: 180, bps: 130 } },
-  { d: 19, s1: { name: 'استقرار اليورو مقابل الدولار الأمريكي', asset: 'EURUSD', dir: 'BUY', dur: 120, bps: 125 }, s2: { name: 'فرصة البيتكوين المسائية - زخم الشراء', asset: 'BTCUSD', dir: 'BUY', dur: 60, bps: 116 } },
-  { d: 20, s1: { name: 'تأكيد اختراق الذهب لمستويات جديدة', asset: 'XAUUSD', dir: 'BUY', dur: 180, bps: 119 }, s2: { name: 'موجة الجنيه الإسترليني - حركة سيولة عالية', asset: 'GBPUSD', dir: 'BUY', dur: 90, bps: 122 } },
-  { d: 21, s1: { name: 'اندفاع الإيثيريوم السريع - سيولة العصر', asset: 'ETHUSD', dir: 'BUY', dur: 60, bps: 115 }, s2: { name: 'صفقة الذهب الاستراتيجية - تداولات الليل', asset: 'XAUUSD', dir: 'BUY', dur: 180, bps: 126 } },
-  { d: 22, s1: { name: 'تداول البيتكوين الآمن - نموذج كسر قاع', asset: 'BTCUSD', dir: 'BUY', dur: 60, bps: 127 }, s2: { name: 'انعكاس سولانا - تأكيد شمعة الابتلاع', asset: 'SOLUSD', dir: 'BUY', dur: 90, bps: 114 } },
-  { d: 23, s1: { name: 'ارتداد اليورو نحو مستويات المقاومة', asset: 'EURUSD', dir: 'BUY', dur: 120, bps: 114 }, s2: { name: 'زخم الذهب الفوري - استهداف قمة اليوم', asset: 'XAUUSD', dir: 'BUY', dur: 180, bps: 127 } },
-  { d: 24, s1: { name: 'صفقة الجنيه الإسترليني - كسر تريند صاعد', asset: 'GBPUSD', dir: 'BUY', dur: 60, bps: 123 }, s2: { name: 'تحرك البيتكوين اللحظي - سيولة حيتان', asset: 'BTCUSD', dir: 'BUY', dur: 60, bps: 118 } },
-  { d: 25, s1: { name: 'صعود الإيثيريوم الاستثماري - الجلسة الأولى', asset: 'ETHUSD', dir: 'BUY', dur: 90, bps: 112 }, s2: { name: 'تداول الذهب الحاسم - الجلسة المسائية', asset: 'XAUUSD', dir: 'BUY', dur: 180, bps: 129 } },
-  { d: 26, s1: { name: 'اختراق سولانا السريع نحو مستويات عليا', asset: 'SOLUSD', dir: 'BUY', dur: 60, bps: 120 }, s2: { name: 'فرصة البيتكوين المؤكدة - ارتداد قوي', asset: 'BTCUSD', dir: 'BUY', dur: 60, bps: 121 } },
-  { d: 27, s1: { name: 'تأكيد شراء اليورو - افتتاح الأسواق', asset: 'EURUSD', dir: 'BUY', dur: 120, bps: 116 }, s2: { name: 'صفقة الذهب المميزة - استقرار الأسعار', asset: 'XAUUSD', dir: 'BUY', dur: 180, bps: 125 } },
-  { d: 28, s1: { name: 'موجة الجنيه الإسترليني الصاعدة', asset: 'GBPUSD', dir: 'BUY', dur: 90, bps: 124 }, s2: { name: 'اندفاع الإيثيريوم - تأكيد كسر خط الاتجاه', asset: 'ETHUSD', dir: 'BUY', dur: 60, bps: 117 } },
-  { d: 29, s1: { name: 'صفقة البيتكوين الختامية - ختام دورة التداول', asset: 'BTCUSD', dir: 'BUY', dur: 60, bps: 118 }, s2: { name: 'صفقة الذهب الختامية - اكتمال مضاعفة الرصيد', asset: 'XAUUSD', dir: 'BUY', dur: 180, bps: 123 } }
+  { d: 1, s1: { name: 'اقتناص قمة البيتكوين - جلسة لندن', asset: 'BTCUSD', dir: 'BUY', dur: 60, bps: 118 }, s2: { name: 'زخم الذهب الفوري - افتتاح نيويورك', asset: 'XAUUSD', dir: 'BUY', dur: 180, bps: 122 }, s3: { name: 'صفقة الوكيل الماسية - اقتناص سيولة وول ستريت', asset: 'BTCUSD', dir: 'BUY', dur: 60, bps: 109 } },
+  { d: 2, s1: { name: 'ارتداد اليورو مقابل الدولار', asset: 'EURUSD', dir: 'SELL', dur: 120, bps: 112 }, s2: { name: 'اختراق مقاومة الإيثيريوم السريعة', asset: 'ETHUSD', dir: 'BUY', dur: 90, bps: 128 }, s3: { name: 'تداول الوكيل الاستراتيجي - قمة الذهب المسائية', asset: 'XAUUSD', dir: 'BUY', dur: 180, bps: 109 } },
+  { d: 3, s1: { name: 'موجة صعود الذهب - تداولات المساء', asset: 'XAUUSD', dir: 'BUY', dur: 180, bps: 125 }, s2: { name: 'فرصة سولانا السريعة - زخم السيولة', asset: 'SOLUSD', dir: 'BUY', dur: 60, bps: 115 }, s3: { name: 'صفقة الوكيل الحصرية - اختراق سولانا الليلي', asset: 'SOLUSD', dir: 'BUY', dur: 90, bps: 108 } },
+  { d: 4, s1: { name: 'تداول كسر اتجاه الجنيه الإسترليني', asset: 'GBPUSD', dir: 'BUY', dur: 120, bps: 120 }, s2: { name: 'صفقة البيتكوين المسائية - حركة الحيتان', asset: 'BTCUSD', dir: 'BUY', dur: 60, bps: 120 }, s3: { name: 'زخم الإيثيريوم الحصري - تداولات الوكيل', asset: 'ETHUSD', dir: 'BUY', dur: 60, bps: 108 } },
+  { d: 5, s1: { name: 'ضغط شراء الذهب - الجلسة الأوروبية', asset: 'XAUUSD', dir: 'BUY', dur: 180, bps: 110 }, s2: { name: 'اندفاع الإيثيريوم اللحظي - الجلسة الأمريكية', asset: 'ETHUSD', dir: 'BUY', dur: 90, bps: 130 }, s3: { name: 'صفقة الوكيل المعتمد - موجة الذهب الصاعدة', asset: 'XAUUSD', dir: 'BUY', dur: 180, bps: 108 } },
+  { d: 6, s1: { name: 'انعكاس اليورو اللحظي - تأكيد النمط', asset: 'EURUSD', dir: 'BUY', dur: 60, bps: 122 }, s2: { name: 'استقرار الذهب فوق الدعم الرئيسي', asset: 'XAUUSD', dir: 'BUY', dur: 180, bps: 118 }, s3: { name: 'اقتناص قاع البيتكوين - جلسة الوكلاء الليلية', asset: 'BTCUSD', dir: 'BUY', dur: 60, bps: 108 } },
+  { d: 7, s1: { name: 'تأكيد اتجاه البيتكوين الصاعد', asset: 'BTCUSD', dir: 'BUY', dur: 60, bps: 115 }, s2: { name: 'اقتناص قاع الجنيه الإسترليني', asset: 'GBPUSD', dir: 'BUY', dur: 120, bps: 125 }, s3: { name: 'تداول الجنيه الإسترليني - فرصة الوكيل المعتمد', asset: 'GBPUSD', dir: 'BUY', dur: 120, bps: 108 } },
+  { d: 8, s1: { name: 'زخم الذهب مع افتتاح أسواق السلع', asset: 'XAUUSD', dir: 'BUY', dur: 180, bps: 128 }, s2: { name: 'موجة صعود سولانا - تحرك الزخم', asset: 'SOLUSD', dir: 'BUY', dur: 60, bps: 113 }, s3: { name: 'انفجار سيولة الإيثيريوم - صفقة الوكيل', asset: 'ETHUSD', dir: 'BUY', dur: 90, bps: 108 } },
+  { d: 9, s1: { name: 'تأكيد كسر اتجاه الإيثيريوم', asset: 'ETHUSD', dir: 'BUY', dur: 90, bps: 114 }, s2: { name: 'صفقة البيتكوين الفورية - ارتداد الدعم', asset: 'BTCUSD', dir: 'BUY', dur: 60, bps: 126 }, s3: { name: 'صفقة الذهب الملكية - كبار المستثمرين والوكلاء', asset: 'XAUUSD', dir: 'BUY', dur: 180, bps: 108 } },
+  { d: 10, s1: { name: 'تداول الذهب اللحظي - سيولة المساء', asset: 'XAUUSD', dir: 'BUY', dur: 180, bps: 121 }, s2: { name: 'اختراق اليورو مقابل الدولار', asset: 'EURUSD', dir: 'BUY', dur: 120, bps: 120 }, s3: { name: 'اختراق البيتكوين الحاسم - صفقة الوكيل', asset: 'BTCUSD', dir: 'BUY', dur: 60, bps: 108 } },
+  { d: 11, s1: { name: 'فرصة الجنيه الإسترليني - كسر القناة', asset: 'GBPUSD', dir: 'SELL', dur: 60, bps: 116 }, s2: { name: 'اندفاع البيتكوين - زخم السيولة الأمريكية', asset: 'BTCUSD', dir: 'BUY', dur: 60, bps: 124 }, s3: { name: 'زخم سولانا الليلي - محفظة الوكيل المعتمد', asset: 'SOLUSD', dir: 'BUY', dur: 60, bps: 108 } },
+  { d: 12, s1: { name: 'صعود الذهب الفوري نحو الهدف الأول', asset: 'XAUUSD', dir: 'BUY', dur: 180, bps: 124 }, s2: { name: 'صفقة الإيثيريوم - تأكيد الاتجاه الصاعد', asset: 'ETHUSD', dir: 'BUY', dur: 90, bps: 117 }, s3: { name: 'ارتداد اليورو المسائي - فرصة الوكيل', asset: 'EURUSD', dir: 'BUY', dur: 120, bps: 108 } },
+  { d: 13, s1: { name: 'زخم سولانا - اختراق مستوى المقاومة', asset: 'SOLUSD', dir: 'BUY', dur: 60, bps: 109 }, s2: { name: 'تداول الذهب الآمن - افتتاح المساء', asset: 'XAUUSD', dir: 'BUY', dur: 180, bps: 131 }, s3: { name: 'صفقة الذهب الخاصة - ارتداد الدعم الليلي', asset: 'XAUUSD', dir: 'BUY', dur: 180, bps: 108 } },
+  { d: 14, s1: { name: 'ارتداد البيتكوين من منطقة الطلب', asset: 'BTCUSD', dir: 'BUY', dur: 60, bps: 126 }, s2: { name: 'موجة اليورو الهابطة - جني أرباح', asset: 'EURUSD', dir: 'SELL', dur: 120, bps: 115 }, s3: { name: 'تداول البيتكوين الحصري - زخم سيولة الحيتان', asset: 'BTCUSD', dir: 'BUY', dur: 60, bps: 108 } },
+  { d: 15, s1: { name: 'تأكيد شراء الذهب - ثبات أعلى المتوسط', asset: 'XAUUSD', dir: 'BUY', dur: 180, bps: 118 }, s2: { name: 'فرصة الإيثيريوم السريعة - ختام الجلسة', asset: 'ETHUSD', dir: 'BUY', dur: 60, bps: 123 }, s3: { name: 'اختراق الإيثيريوم الصاعد - جلسة الوكلاء', asset: 'ETHUSD', dir: 'BUY', dur: 90, bps: 108 } },
+  { d: 16, s1: { name: 'كسر نطاق الجنيه الإسترليني العرضي', asset: 'GBPUSD', dir: 'BUY', dur: 120, bps: 113 }, s2: { name: 'زخم البيتكوين المسائي - اختراق القمة', asset: 'BTCUSD', dir: 'BUY', dur: 60, bps: 128 }, s3: { name: 'صفقة الجنيه الإسترليني - كسر القمة للوكيل', asset: 'GBPUSD', dir: 'BUY', dur: 120, bps: 108 } },
+  { d: 17, s1: { name: 'صعود الذهب اللحظي - تفاعل مع الأخبار', asset: 'XAUUSD', dir: 'BUY', dur: 180, bps: 122 }, s2: { name: 'ارتداد سولانا الإيجابي - اتجاه صاعد', asset: 'SOLUSD', dir: 'BUY', dur: 60, bps: 119 }, s3: { name: 'موجة الذهب الماسية - صفقة الوكلاء المعتمدين', asset: 'XAUUSD', dir: 'BUY', dur: 180, bps: 108 } },
+  { d: 18, s1: { name: 'تداول الإيثيريوم الفوري - زخم قوي', asset: 'ETHUSD', dir: 'BUY', dur: 90, bps: 111 }, s2: { name: 'صفقة الذهب الذهبية - استمرار الاتجاه', asset: 'XAUUSD', dir: 'BUY', dur: 180, bps: 130 }, s3: { name: 'اقتناص سولانا الحصري - جلسة ختام المساء', asset: 'SOLUSD', dir: 'BUY', dur: 60, bps: 108 } },
+  { d: 19, s1: { name: 'استقرار اليورو مقابل الدولار الأمريكي', asset: 'EURUSD', dir: 'BUY', dur: 120, bps: 125 }, s2: { name: 'فرصة البيتكوين المسائية - زخم الشراء', asset: 'BTCUSD', dir: 'BUY', dur: 60, bps: 116 }, s3: { name: 'زخم البيتكوين المؤسسي - تداول الوكيل الخاص', asset: 'BTCUSD', dir: 'BUY', dur: 60, bps: 108 } },
+  { d: 20, s1: { name: 'تأكيد اختراق الذهب لمستويات جديدة', asset: 'XAUUSD', dir: 'BUY', dur: 180, bps: 119 }, s2: { name: 'موجة الجنيه الإسترليني - حركة سيولة عالية', asset: 'GBPUSD', dir: 'BUY', dur: 90, bps: 122 }, s3: { name: 'صفقة الوكيل الختامية - اكتمال مضاعفة الرصيد في 20 يوماً', asset: 'XAUUSD', dir: 'BUY', dur: 180, bps: 108 } },
+  { d: 21, s1: { name: 'اندفاع الإيثيريوم السريع - سيولة العصر', asset: 'ETHUSD', dir: 'BUY', dur: 60, bps: 115 }, s2: { name: 'صفقة الذهب الاستراتيجية - تداولات الليل', asset: 'XAUUSD', dir: 'BUY', dur: 180, bps: 126 }, s3: { name: 'دورة النمو المتقدم - صفقة الإيثيريوم للوكيل', asset: 'ETHUSD', dir: 'BUY', dur: 90, bps: 108 } },
+  { d: 22, s1: { name: 'تداول البيتكوين الآمن - نموذج كسر قاع', asset: 'BTCUSD', dir: 'BUY', dur: 60, bps: 127 }, s2: { name: 'انعكاس سولانا - تأكيد شمعة الابتلاع', asset: 'SOLUSD', dir: 'BUY', dur: 90, bps: 114 }, s3: { name: 'استمرار مضاعفة المحفظة - زخم الذهب الليلي', asset: 'XAUUSD', dir: 'BUY', dur: 180, bps: 108 } },
+  { d: 23, s1: { name: 'ارتداد اليورو نحو مستويات المقاومة', asset: 'EURUSD', dir: 'BUY', dur: 120, bps: 114 }, s2: { name: 'زخم الذهب الفوري - استهداف قمة اليوم', asset: 'XAUUSD', dir: 'BUY', dur: 180, bps: 127 }, s3: { name: 'صفقة البيتكوين الفورية - اقتناص الوكيل', asset: 'BTCUSD', dir: 'BUY', dur: 60, bps: 108 } },
+  { d: 24, s1: { name: 'صفقة الجنيه الإسترليني - كسر تريند صاعد', asset: 'GBPUSD', dir: 'BUY', dur: 60, bps: 123 }, s2: { name: 'تحرك البيتكوين اللحظي - سيولة حيتان', asset: 'BTCUSD', dir: 'BUY', dur: 60, bps: 118 }, s3: { name: 'تداول اليورو الحصري - ارتداد دعم قوي للوكلاء', asset: 'EURUSD', dir: 'BUY', dur: 120, bps: 108 } },
+  { d: 25, s1: { name: 'صعود الإيثيريوم الاستثماري - الجلسة الأولى', asset: 'ETHUSD', dir: 'BUY', dur: 90, bps: 112 }, s2: { name: 'تداول الذهب الحاسم - الجلسة المسائية', asset: 'XAUUSD', dir: 'BUY', dur: 180, bps: 129 }, s3: { name: 'زخم سولانا الماسي - الجلسة الليلية للوكيل', asset: 'SOLUSD', dir: 'BUY', dur: 60, bps: 108 } },
+  { d: 26, s1: { name: 'اختراق سولانا السريع نحو مستويات عليا', asset: 'SOLUSD', dir: 'BUY', dur: 60, bps: 120 }, s2: { name: 'فرصة البيتكوين المؤكدة - ارتداد قوي', asset: 'BTCUSD', dir: 'BUY', dur: 60, bps: 121 }, s3: { name: 'صفقة الذهب الملكية - كسر مستويات المقاومة للوكيل', asset: 'XAUUSD', dir: 'BUY', dur: 180, bps: 108 } },
+  { d: 27, s1: { name: 'تأكيد شراء اليورو - افتتاح الأسواق', asset: 'EURUSD', dir: 'BUY', dur: 120, bps: 116 }, s2: { name: 'صفقة الذهب المميزة - استقرار الأسعار', asset: 'XAUUSD', dir: 'BUY', dur: 180, bps: 125 }, s3: { name: 'اختراق الإيثيريوم المعتمد - تداول الوكلاء', asset: 'ETHUSD', dir: 'BUY', dur: 90, bps: 108 } },
+  { d: 28, s1: { name: 'موجة الجنيه الإسترليني الصاعدة', asset: 'GBPUSD', dir: 'BUY', dur: 90, bps: 124 }, s2: { name: 'اندفاع الإيثيريوم - تأكيد كسر خط الاتجاه', asset: 'ETHUSD', dir: 'BUY', dur: 60, bps: 117 }, s3: { name: 'صفقة البيتكوين الاستراتيجية - سيولة المساء للوكيل', asset: 'BTCUSD', dir: 'BUY', dur: 60, bps: 108 } },
+  { d: 29, s1: { name: 'صفقة البيتكوين الختامية - ختام دورة التداول', asset: 'BTCUSD', dir: 'BUY', dur: 60, bps: 118 }, s2: { name: 'صفقة الذهب الختامية - اكتمال مضاعفة الرصيد', asset: 'XAUUSD', dir: 'BUY', dur: 180, bps: 123 }, s3: { name: 'الصفقة الكبرى للوكيل - تتويج دورة الأرباح الاستثنائية', asset: 'XAUUSD', dir: 'BUY', dur: 180, bps: 108 } }
 ];
 
 export function get29DaySlotPlan(runDate: string, slotId: string): { dayIndex: number; session: DayTradeSession } {
@@ -161,8 +169,12 @@ export function get29DaySlotPlan(runDate: string, slotId: string): { dayIndex: n
   const diffDays = Math.floor((currentMs - cycleStart) / 86400000);
   const dayIndex = ((diffDays % 29) + 29) % 29 + 1;
   const plan = SCHEDULE_29_DAYS[dayIndex - 1] || SCHEDULE_29_DAYS[0];
-  const isSession1 = slotId.includes('1700') || slotId.includes('session1') || slotId.includes('first');
-  const session = isSession1 ? plan.s1 : plan.s2;
+  let session = plan.s1;
+  if (slotId.includes('1830') || slotId.includes('session2') || slotId.includes('second')) {
+    session = plan.s2;
+  } else if (slotId.includes('2030') || slotId.includes('session3') || slotId.includes('third') || slotId.includes('wakil')) {
+    session = plan.s3;
+  }
   return { dayIndex, session };
 }
 
@@ -173,6 +185,7 @@ async function executeSlot(slot: any, client: any, nowMs: number, runDate: strin
   const tradeDuration = Number(session.dur || slot.duration_sec || 60);
   const tradeBps = Number(session.bps || slot.settlement_bps || 118);
   const tradeTitle = session.name || slot.name || 'صفقة معتمدة';
+  const slotEligibility = slot.eligibility || (slot.id === 'slot-2030' ? 'advanced' : 'all');
 
   const contractId = 'contract-auto-' + randomUUID();
   const code = 'ORIN-' + randomBytes(6).toString('hex').toUpperCase();
@@ -200,7 +213,7 @@ async function executeSlot(slot: any, client: any, nowMs: number, runDate: strin
   await client.query(
     `INSERT INTO contracts (id, code, title, asset, direction, duration_sec, settlement_bps, status, opens_at, closes_at, eligibility, hash, admin_id, created_at, published_at)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TO_TIMESTAMP($9/1000.0), TO_TIMESTAMP($10/1000.0), $11, $12, 'scheduler', NOW(), NOW())`,
-    [contractId, code, tradeTitle, tradeAsset, tradeDirection, tradeDuration, tradeBps, initialStatus, opensAtMs, closesAtMs, slot.eligibility || 'all', hashVal]
+    [contractId, code, tradeTitle, tradeAsset, tradeDirection, tradeDuration, tradeBps, initialStatus, opensAtMs, closesAtMs, slotEligibility, hashVal]
   );
 
   const runId = 'run-' + randomUUID();
@@ -223,7 +236,10 @@ async function executeSlot(slot: any, client: any, nowMs: number, runDate: strin
     closesAtMs
   };
 
-  const tpl = renderMessageTemplate('regular_slot', cInfo, tradeTitle);
+  const templateKind = (slotEligibility === 'advanced' || slot.id.includes('wakil') || slot.id.includes('2030'))
+    ? 'wakil_slot'
+    : 'regular_slot';
+  const tpl = renderMessageTemplate(templateKind, cInfo, tradeTitle);
   const channelId = getTelegramChannelId();
   const outboxPayload = JSON.stringify({
     method: 'sendMessage',

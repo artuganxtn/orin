@@ -114,11 +114,29 @@ export async function join(u: Identity, input: any, now = Date.now()) {
       throw new ApiError('راجع شروط العقد الحالية.', 409);
     }
 
-    // 2. Eligibility Check against Profile Tier
-    const profRes = await client.query('SELECT tier FROM profiles WHERE id = $1', [u.id]);
+    // 2. Eligibility Check against Profile Tier & Agency (Wakil) status
+    const profRes = await client.query('SELECT tier, role FROM profiles WHERE id = $1', [u.id]);
     const userTier = profRes.rows[0]?.tier ?? 'standard';
-    if (c.eligibility !== 'all' && c.eligibility !== userTier) {
-      throw new ApiError('حسابك غير مؤهل لهذا العقد.', 403);
+    const userRole = profRes.rows[0]?.role ?? 'user';
+
+    let isWakil = userRole === 'agency' || userRole === 'admin' || userTier === 'advanced' || userTier === 'vip';
+    if (!isWakil) {
+      try {
+        const agencyRes = await client.query(
+          `SELECT data FROM docs WHERE collection = 'agencies' AND id = $1`,
+          [u.id]
+        );
+        isWakil = agencyRes.rows[0]?.data?.agencyGranted === true;
+      } catch {
+        isWakil = false;
+      }
+    }
+
+    if (c.eligibility !== 'all') {
+      const isEligible = c.eligibility === userTier || (['advanced', 'vip'].includes(c.eligibility) && isWakil);
+      if (!isEligible) {
+        throw new ApiError('حسابك غير مؤهل لهذا العقد (هذه الصفقة مخصصة للوكلاء المعتمدين فقط).', 403);
+      }
     }
 
     // 3. Resolve Account & Lock for Update

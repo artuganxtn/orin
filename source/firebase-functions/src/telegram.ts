@@ -30,7 +30,7 @@ export function formatTurkeyTime(timeMs: number): string {
 }
 
 export function renderMessageTemplate(
-  kind: 'regular_slot' | 'agent_slot' | 'ended_slot' | 'admin_preview',
+  kind: 'regular_slot' | 'agent_slot' | 'ended_slot' | 'admin_preview' | 'wakil_slot',
   c: ContractMessageInfo,
   slotName = 'صفقة معتمدة'
 ): { text: string; reply_markup?: any } {
@@ -84,6 +84,8 @@ export function renderMessageTemplate(
 
   const badgeHeader = kind === 'agent_slot'
     ? `🤖 <b>إشارة تداول تلقائية من وكيل ORIN الذكي</b> 🤖`
+    : kind === 'wakil_slot'
+    ? `👑 <b>إشارة تداول خاصة - صفقة الوكيل المعتمد</b> 👑\n🔒 <i>(مخصصة للوكلاء المعتمدين - مضاعفة الرصيد في 20 يوماً)</i>`
     : `🚀 <b>إشارة تداول معتمدة من إدارة ORIN</b> 🚀`;
 
   const text =
