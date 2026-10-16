@@ -7,6 +7,23 @@
       "**/.*",
       "**/node_modules/**"
     ],
+    "redirects": [
+      {
+        "source": "/register",
+        "destination": "https://orin-trader.top/register",
+        "type": 301
+      },
+      {
+        "source": "/login",
+        "destination": "https://orin-trader.top/login",
+        "type": 301
+      },
+      {
+        "source": "/referral{,/**}",
+        "destination": "https://orin-trader.top/referral",
+        "type": 301
+      }
+    ],
     "rewrites": [
       {
         "source": "/api/security/**",
