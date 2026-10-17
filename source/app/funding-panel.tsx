@@ -264,6 +264,22 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
           network: net.network,
           createdAt: Date.now()
         });
+        setWAmount('');
+        setWalletView(old => {
+          if (!old?.wallet) return old;
+          const deductCents = Math.round(val * 100);
+          const currentPerp = Number(old.wallet.perpetualCents || 0);
+          const perpDeduct = Math.min(currentPerp, deductCents);
+          const remainingDeduct = deductCents - perpDeduct;
+          return {
+            ...old,
+            wallet: {
+              ...old.wallet,
+              perpetualCents: Math.max(0, currentPerp - perpDeduct),
+              futuresCents: Math.max(0, (Number(old.wallet.futuresCents || 0)) - remainingDeduct)
+            }
+          };
+        });
         onBalanceChange?.();
         void load();
       } catch (err: any) {
@@ -478,9 +494,32 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
 
             <ErrorBox />
 
-            <button type="button" className="fp-btn primary big" onClick={requestWithdrawal} style={{ width: '100%', height: '54px', borderRadius: '16px', background: 'linear-gradient(180deg,#1c8cff 0%,#0064f4 100%)', color: '#fff', border: 0, fontSize: '16px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer', boxShadow: '0 10px 22px rgba(10,108,255,0.3)', boxSizing: 'border-box' }}>
+            <button
+              type="button"
+              className="fp-btn primary big"
+              disabled={busy || spotBal <= 0}
+              onClick={requestWithdrawal}
+              style={{
+                width: '100%',
+                height: '54px',
+                borderRadius: '16px',
+                background: (spotBal <= 0) ? '#94a3b8' : 'linear-gradient(180deg,#1c8cff 0%,#0064f4 100%)',
+                color: '#fff',
+                border: 0,
+                fontSize: '16px',
+                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                cursor: (busy || spotBal <= 0) ? 'not-allowed' : 'pointer',
+                opacity: (busy || spotBal <= 0) ? 0.65 : 1,
+                boxShadow: (spotBal <= 0) ? 'none' : '0 10px 22px rgba(10,108,255,0.3)',
+                boxSizing: 'border-box'
+              }}
+            >
               <Fwd size={18} />
-              {t('طلب السحب', 'Request Withdrawal')}
+              {busy ? t('جار المعالجة…', 'Processing…') : spotBal <= 0 ? t('الرصيد المتاح 0 (لا يمكن السحب)', 'Available Balance is 0') : t('طلب السحب', 'Request Withdrawal')}
             </button>
 
             <button type="button" className="fp-btn outline big" onClick={() => nav.navigate('/support')} style={{ width: '100%', height: '54px', borderRadius: '16px', background: '#fff', color: '#173a77', border: '1px solid #9fbff0', fontSize: '15px', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer', boxSizing: 'border-box' }}>

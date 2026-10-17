@@ -261,6 +261,15 @@ export async function operateDemoWallet(
       return state;
     }
 
+    if (kind === 'transfer') {
+      if (amountCents <= 0) {
+        throw new ClientError('يرجى إدخال مبلغ تحويل صالح أكبر من الصفر. / Please enter a valid transfer amount.', 400);
+      }
+      if (isReal && Number(acc.balance_cents) <= 0) {
+        throw new ClientError('الرصيد المتاح غير كافٍ للتحويل (الرصيد الحالي 0). / Insufficient balance for transfer.', 400);
+      }
+    }
+
     let nextFutures = state.wallet.futuresCents;
     let nextPerp = state.wallet.perpetualCents;
     let feeCents = 0;

@@ -277,11 +277,11 @@ export function AccountTransfer({ account, onSaved }: { account: TradingAccount 
       <button
         type="button"
         className="btn-primary"
-        disabled={busy || !amount || Number(amount) <= 0 || loading}
+        disabled={busy || !amount || Number(amount) <= 0 || loading || availableBal <= 0}
         onClick={submit}
-        style={{ width: '100%', height: '52px', borderRadius: '16px', background: 'linear-gradient(180deg,#1c8cff 0%,#0064f4 100%)', color: '#fff', border: 0, fontSize: '16px', fontWeight: 700, cursor: 'pointer', boxShadow: '0 10px 22px rgba(10,108,255,0.25)', boxSizing: 'border-box' }}
+        style={{ width: '100%', height: '52px', borderRadius: '16px', background: (availableBal <= 0) ? '#94a3b8' : 'linear-gradient(180deg,#1c8cff 0%,#0064f4 100%)', color: '#fff', border: 0, fontSize: '16px', fontWeight: 700, cursor: (busy || availableBal <= 0) ? 'not-allowed' : 'pointer', opacity: (busy || availableBal <= 0) ? 0.65 : 1, boxShadow: (availableBal <= 0) ? 'none' : '0 10px 22px rgba(10,108,255,0.25)', boxSizing: 'border-box' }}
       >
-        {busy ? t('جار التحويل…', 'Transferring…') : t('متابعة التحويل', 'Continue Transfer')}
+        {busy ? t('جار التحويل…', 'Transferring…') : availableBal <= 0 ? t('الرصيد غير كافٍ للتحويل', 'Insufficient Balance') : t('متابعة التحويل', 'Continue Transfer')}
       </button>
 
       <p style={{ textAlign: 'center', fontSize: '12px', color: 'var(--orin-muted)', margin: 0 }}>

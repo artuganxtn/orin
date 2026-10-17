@@ -94,7 +94,7 @@ export async function requestWithdrawal(
     if (walletData && walletData.perpetualCents !== undefined && walletData.perpetualCents !== null) {
       const perpetualCents = BigInt(Math.max(0, Number(walletData.perpetualCents || 0)));
       const withdrawablePerp = perpetualCents - pendingCents;
-      if (withdrawablePerp < BigInt(amountCents) && perpetualCents > 0n) {
+      if (withdrawablePerp < BigInt(amountCents)) {
         throw new WithdrawalError(
           'أموال العقود الآجلة مقفلة ولا يمكن سحبها مباشرة. يرجى تحويل الرصيد المطلوب إلى العقود الفورية أولاً للسحب. / Futures balance is locked. Transfer funds to Spot (العقود الفورية) before withdrawing.',
           409,
@@ -104,7 +104,7 @@ export async function requestWithdrawal(
     }
 
     const availableCash = BigInt(account.balance_cents) - BigInt(account.reserved_cents);
-    if (availableCash < BigInt(amountCents)) {
+    if (availableCash < BigInt(amountCents) || availableCash <= 0n) {
       throw new WithdrawalError('المبلغ المطلوب يتجاوز الرصيد النقدي المتاح في الحساب. / Requested debit exceeds withdrawable cash', 409);
     }
 
@@ -133,13 +133,39 @@ export async function requestWithdrawal(
       [journalId, user.id, accountId, amountCents]
     );
 
-    // Deduct amountCents from perpetualCents in contract_wallets doc if present
+    // Deduct amountCents from perpetualCents and futuresCents in contract_wallets doc if present
+    const newTotalCents = Math.max(0, Number(account.balance_cents) - amountCents);
     if (docRes.rows[0]?.data) {
       const wState = docRes.rows[0].data;
       if (wState.wallet) {
-        wState.wallet.perpetualCents = Math.max(0, (Number(wState.wallet.perpetualCents) || 0) - amountCents);
+        const curPerp = Math.max(0, Number(wState.wallet.perpetualCents || 0));
+        const perpDeduct = Math.min(curPerp, amountCents);
+        const remDeduct = amountCents - perpDeduct;
+        wState.wallet.perpetualCents = Math.max(0, curPerp - perpDeduct);
+        wState.wallet.futuresCents = Math.max(0, Number(wState.wallet.futuresCents || 0) - remDeduct);
+
+        // Ensure wallet total strictly never exceeds new remaining account cash
+        if ((wState.wallet.perpetualCents + wState.wallet.futuresCents) > newTotalCents) {
+          wState.wallet.perpetualCents = Math.min(wState.wallet.perpetualCents, newTotalCents);
+          wState.wallet.futuresCents = Math.max(0, newTotalCents - wState.wallet.perpetualCents);
+        }
+
         wState.wallet.version = (wState.wallet.version || 1) + 1;
         wState.wallet.updatedAt = Date.now();
+
+        if (Array.isArray(wState.operations)) {
+          wState.operations.push({
+            id: 'wd-op-' + wdId,
+            kind: 'withdrawal',
+            amountCents,
+            feeCents,
+            netAmountCents,
+            afterFuturesCents: wState.wallet.futuresCents,
+            afterPerpetualCents: wState.wallet.perpetualCents,
+            createdAt: Date.now()
+          });
+        }
+
         await client.query(
           `UPDATE docs SET data = $1, updated_at = NOW() WHERE collection = 'contract_wallets' AND id = $2`,
           [JSON.stringify(wState), accountId]

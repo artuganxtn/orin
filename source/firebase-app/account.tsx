@@ -389,7 +389,18 @@ export function AuthForm({path,done}:{path:string;done:()=>void}){
     )}
    </>}
 
-   {mode==='login'&&securityBackendConfigured()&&supportsPasskeys()&&<button type="button" className="secondary" disabled={busy} onClick={async()=>{if(lock.current)return;lock.current=true;setBusy(true);setError('');try{await loginWithPasskey();done()}catch(e){setError(e instanceof AccountSecurityError?e.message:t('تعذر الدخول بمفتاح المرور.','Passkey sign-in was not completed.'))}finally{lock.current=false;setBusy(false)}}}><KeyRound size={18}/>{t('الدخول بمفتاح مرور','Sign in with passkey')}</button>}
+   {mode==='login'&&securityBackendConfigured()&&supportsPasskeys()&&(
+    <button
+     type="button"
+     className="passkey-btn"
+     disabled={busy}
+     onClick={async()=>{if(lock.current)return;lock.current=true;setBusy(true);setError('');try{await loginWithPasskey();done()}catch(e){setError(e instanceof AccountSecurityError?e.message:t('تعذر الدخول بمفتاح المرور.','Passkey sign-in was not completed.'))}finally{lock.current=false;setBusy(false)}}}
+     style={{display:'inline-flex',alignItems:'center',justifyContent:'center',gap:'8px',height:'42px',minHeight:'42px',maxHeight:'42px',padding:'0 16px',borderRadius:'12px',border:'1px solid #d5e2f5',background:'#f8fbff',color:'#0788ff',fontSize:'13.5px',fontWeight:600,cursor:'pointer',width:'100%',boxSizing:'border-box'}}
+    >
+     <KeyRound size={16} style={{flexShrink:0}}/>
+     <span>{t('الدخول بمفتاح مرور','Sign in with passkey')}</span>
+    </button>
+   )}
    {mode==='login'&&<a href="/forgot-password" onClick={e=>{e.preventDefault();to('/forgot-password')}}>{t('نسيت كلمة المرور؟','Forgot password?')}</a>}
    <a className="auth-switch" href={mode==='login'?'/register':'/login'} onClick={e=>{e.preventDefault();to(mode==='login'?'/register':'/login')}}>{mode==='login'?t('ليس لديك حساب؟ إنشاء حساب','New to ORIN? Create account'):t('لديك حساب؟ تسجيل الدخول','Already have an account? Sign in')}</a>
    <AppDownloadCard compact/>
