@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import QRCode from 'qrcode';
 import { Copy, LockKeyhole, RefreshCw, Clock3, Info, ArrowLeft, ArrowRight, ChevronDown, ChevronLeft, ChevronRight, ScanLine, Wallet, MessageCircleMore, ArrowDownLeft, ArrowUpRight, Check, CircleCheck, CircleAlert } from 'lucide-react';
 import { createDeposit, listDeposits, paymentReadiness, refreshDeposit } from '@/lib/payment-client';
+import { apiFetch } from '@/lib/client-api';
 import { PAYMENT_COINS, type PaymentCoin, type PaymentReadiness, type DepositView, type DepositStatus } from '@/lib/payments';
 import type { TradingAccount } from '@/lib/trading-accounts';
 import { demoWalletRequest } from '@/lib/demo-wallet-client';
@@ -209,7 +210,7 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
     const futuresBal = ((walletView?.wallet?.futuresCents ?? account?.balanceCents ?? 0) / 100);
     const maxWithdraw = spotBal > 0 ? spotBal.toFixed(2) : '0';
 
-    const requestWithdrawal = () => {
+    const requestWithdrawal = async () => {
       setError(''); setWNotice(null);
       const val = Number(wAmount);
       if (!/^\d{1,7}(\.\d{1,2})?$/.test(wAmount) || val <= 0) {
@@ -232,16 +233,40 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
       const fee = Math.round(val * 0.05 * 100) / 100;
       const netAmount = Math.max(0, Math.round((val - fee) * 100) / 100);
 
-      setWNotice({
-        id: 'WD-' + Date.now().toString(36).toUpperCase(),
-        amount: val,
-        fee: fee,
-        netAmount: netAmount,
-        address: wAddress,
-        coin: wNet,
-        network: net.network,
-        createdAt: Date.now()
-      });
+      try {
+        setBusy(true);
+        const res = await apiFetch('/api/withdrawals', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            accountId: account?.id,
+            amountCents: Math.round(val * 100),
+            address: wAddress.trim(),
+            coin: wNet,
+            currency: 'USD'
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || 'تعذر إرسال طلب السحب');
+        }
+        setWNotice({
+          id: data.id || ('WD-' + Date.now().toString(36).toUpperCase()),
+          amount: val,
+          fee: fee,
+          netAmount: netAmount,
+          address: wAddress,
+          coin: wNet,
+          network: net.network,
+          createdAt: Date.now()
+        });
+        onBalanceChange?.();
+        void load();
+      } catch (err: any) {
+        setError(err.message || 'تعذر إرسال طلب السحب.');
+      } finally {
+        setBusy(false);
+      }
     };
 
     // Screenshot 4 — Receipt Modal

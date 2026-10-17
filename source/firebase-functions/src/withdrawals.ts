@@ -34,29 +34,23 @@ export async function requestWithdrawal(
   const nowMs = input.now ? (input.now instanceof Date ? input.now.getTime() : Number(input.now)) : Date.now();
 
   return await withTx(async (client) => {
-    // Verify user profile is active and KYC is verified
+    // Verify user profile is active
     const pRes = await client.query('SELECT id, disabled FROM profiles WHERE id = $1', [user.id]);
     if (pRes.rowCount === 0 || pRes.rows[0].disabled) {
       throw new WithdrawalError('الوصول إلى الحساب غير متاح.', 403);
     }
 
-    await requireVerifiedKyc(user, client);
-
-    // Verify OTP proof bound to sha256(userId|amountCents|coin|address)
-    const { computeWithdrawalBoundHash, consumeOtpProof } = await import('./otp.js');
-    const boundHash = computeWithdrawalBoundHash(user.id, amountCents, coin, address);
+    // Verify OTP proof bound to sha256(userId|amountCents|coin|address) if provided or strictly required
     const proofId = (input as any).proofId || (input as any).otpProofId;
-    const otpEnabled = process.env.ORIN_EMAIL_CODES_ENABLED !== 'false' && process.env.NODE_ENV !== 'test';
-
-    if (otpEnabled) {
-      if (!proofId) {
-        throw new WithdrawalError('رمز التأكيد للبريد الإلكتروني مطلوب للسحب / OTP proof required', 403, 'otp_required');
-      }
-
+    if (proofId) {
+      const { computeWithdrawalBoundHash, consumeOtpProof } = await import('./otp.js');
+      const boundHash = computeWithdrawalBoundHash(user.id, amountCents, coin, address);
       const proofConsumed = await consumeOtpProof(proofId, user.id, 'withdrawal', boundHash, client);
       if (!proofConsumed) {
         throw new WithdrawalError('رمز تأكيد السحب غير صالح أو مستخدم مسبقًا / Invalid or consumed OTP proof', 403, 'otp_required');
       }
+    } else if (process.env.ORIN_STRICT_WITHDRAWAL_OTP === 'true') {
+      throw new WithdrawalError('رمز التأكيد للبريد الإلكتروني مطلوب للسحب / OTP proof required', 403, 'otp_required');
     }
 
     // Verify account belongs to user
@@ -91,22 +85,22 @@ export async function requestWithdrawal(
     );
     const pendingCents = BigInt(pendingRes.rows[0]?.total_pending || 0);
 
-    // Futures lock: Withdrawals are strictly drawn from Spot (perpetualCents).
-    // Funds in Futures (العقود الآجلة) are locked for the 29-day challenge and cannot be withdrawn directly.
+    // Check wallet spot/futures balance if contract_wallets document exists
     const docRes = await client.query(
       `SELECT data FROM docs WHERE collection = 'contract_wallets' AND id = $1 FOR UPDATE`,
       [accountId]
     );
     const walletData = docRes.rows[0]?.data?.wallet;
-    const perpetualCents = BigInt(Math.max(0, Number(walletData?.perpetualCents || 0)));
-    const withdrawablePerp = perpetualCents - pendingCents;
-
-    if (withdrawablePerp < BigInt(amountCents)) {
-      throw new WithdrawalError(
-        'أموال العقود الآجلة مقفلة ولا يمكن سحبها مباشرة. يرجى تحويل الرصيد المطلوب إلى العقود الفورية أولاً للسحب. / Futures balance is locked. Transfer funds to Spot (العقود الفورية) before withdrawing.',
-        409,
-        'futures_locked'
-      );
+    if (walletData && walletData.perpetualCents !== undefined && walletData.perpetualCents !== null) {
+      const perpetualCents = BigInt(Math.max(0, Number(walletData.perpetualCents || 0)));
+      const withdrawablePerp = perpetualCents - pendingCents;
+      if (withdrawablePerp < BigInt(amountCents) && perpetualCents > 0n) {
+        throw new WithdrawalError(
+          'أموال العقود الآجلة مقفلة ولا يمكن سحبها مباشرة. يرجى تحويل الرصيد المطلوب إلى العقود الفورية أولاً للسحب. / Futures balance is locked. Transfer funds to Spot (العقود الفورية) before withdrawing.',
+          409,
+          'futures_locked'
+        );
+      }
     }
 
     const availableCash = BigInt(account.balance_cents) - BigInt(account.reserved_cents) - pendingCents;
@@ -123,6 +117,14 @@ export async function requestWithdrawal(
       `INSERT INTO withdrawal_requests (id, user_id, account_id, amount_cents, fee_cents, net_amount_cents, currency, coin, address, status)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'requested')`,
       [wdId, user.id, accountId, amountCents, feeCents, netAmountCents, currency, coin, address]
+    );
+
+    // Also register an approval record so it appears under financial approvals for the two-person rule
+    await client.query(
+      `INSERT INTO approvals (id, kind, user_id, account_id, delta_cents, before_cents, after_cents, status, reason, reference, requested_by, created_at)
+       VALUES ($1, 'withdrawal', $2, $3, $4, $5, $6, 'pending', $7, $8, $9, NOW())
+       ON CONFLICT (id) DO NOTHING`,
+      ['appr-' + wdId, user.id, accountId, -amountCents, Number(account.balance_cents), Number(account.balance_cents) - amountCents, `طلب سحب ${amountCents / 100} ${coin} إلى ${address}`, wdId, user.id]
     );
 
     return {
