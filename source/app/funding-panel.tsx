@@ -72,6 +72,7 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
   const [qr, setQr] = useState('');
   const [step, setStep] = useState<1 | 2>(1);
   const [wNet, setWNet] = useState<PaymentCoin>('usdttrc20'), [wAmount, setWAmount] = useState(''), [wAddress, setWAddress] = useState(''), [wNotice, setWNotice] = useState<any>(null);
+  const [withdrawals, setWithdrawals] = useState<any[]>([]);
   const [walletView, setWalletView] = useState<DemoWalletView | null>(null);
   const requestId = useRef<string | null>(null), mounted = useRef(true), submitting = useRef(false);
 
@@ -84,6 +85,9 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
       const history = await listDeposits(account.id);
       if (mounted.current) setItems(history.items);
       demoWalletRequest(account.id).then(w => { if (mounted.current) setWalletView(w); }).catch(() => {});
+      apiFetch('/api/withdrawals').then(r => r.ok ? r.json() : null).then(d => {
+        if (mounted.current && d?.items) setWithdrawals(d.items);
+      }).catch(() => {});
     } catch (e) {
       if (mounted.current) setError((e as Error).message);
     }
@@ -487,6 +491,54 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
             <p style={{ textAlign: 'center', fontSize: '12.5px', color: 'var(--fp-muted)', margin: 0 }}>
               {t('تخضع الطلبات لشروط السحب المعتمدة', 'Requests are subject to approved withdrawal terms')}
             </p>
+
+            {/* Recent Withdrawals List */}
+            {withdrawals.length > 0 && (
+              <div className="fp-history" style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <h3 style={{ fontSize: '17px', fontWeight: 700, margin: '0 0 4px', color: 'var(--fp-ink)' }}>{t('آخر طلبات السحب', 'Recent Withdrawals')}</h3>
+                {withdrawals.map(item => {
+                  const amt = (Number(item.amount_cents || item.amountCents || 0) / 100);
+                  const st = item.status;
+                  const stLabel = st === 'paid' ? t('مكتمل (مدفوع)', 'Paid') : st === 'approved' ? t('معتمد', 'Approved') : st === 'rejected' ? t('مرفوض (مسترد)', 'Rejected') : t('قيد المراجعة', 'Under review');
+                  const stColor = st === 'paid' ? '#10b981' : st === 'approved' ? '#0788ff' : st === 'rejected' ? '#ef4444' : '#f59e0b';
+                  const stBg = st === 'paid' ? '#ecfdf5' : st === 'approved' ? '#eff6ff' : st === 'rejected' ? '#fef2f2' : '#fffbeb';
+                  return (
+                    <button
+                      type="button"
+                      key={item.id}
+                      onClick={() => nav.navigate('/activity')}
+                      style={{
+                        width: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '14px 16px',
+                        background: '#fff',
+                        border: '1px solid var(--fp-line)',
+                        borderRadius: '16px',
+                        cursor: 'pointer',
+                        textAlign: 'start'
+                      }}
+                    >
+                      <div>
+                        <b style={{ display: 'block', fontSize: '16px', fontFamily: 'Arial, sans-serif', color: 'var(--fp-ink)' }}>
+                          {number(amt)} USD
+                        </b>
+                        <small style={{ color: 'var(--fp-muted)', fontSize: '12px' }}>
+                          {new Date(item.created_at || item.createdAt).toLocaleDateString('en-CA')} · {item.coin || 'USDT'}
+                        </small>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '12.5px', fontWeight: 700, padding: '4px 10px', borderRadius: '99px', background: stBg, color: stColor }}>
+                          {stLabel}
+                        </span>
+                        <Chev size={18} style={{ color: '#9aa8bf' }} />
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </>
         )}
       </section>

@@ -1764,6 +1764,42 @@ export async function controlAction(u: Identity, input: Data) {
     return await withTx(async (client) => {
       const wRes = await client.query('SELECT * FROM withdrawal_requests WHERE id = $1 FOR UPDATE', [wdId]);
       if (wRes.rowCount === 0) throw new ApiError('طلب السحب غير موجود / Withdrawal request not found', 404);
+      const wd = wRes.rows[0];
+
+      // If legacy withdrawal that had not been debited on submit, debit now
+      const jRes = await client.query("SELECT id FROM journals WHERE reference = $1 AND kind = 'withdrawal'", [wdId]);
+      if (jRes.rowCount === 0) {
+        const journalId = 'jnl-wd-' + randomUUID();
+        await client.query(
+          `INSERT INTO journals (id, kind, reference, created_at)
+           VALUES ($1, 'withdrawal', $2, NOW())`,
+          [journalId, wdId]
+        );
+        await client.query(
+          `INSERT INTO journal_entries (journal_id, user_id, account_id, bucket, amount_cents)
+           VALUES ($1, $2, $3, 'cash', -$4),
+                  ($1, NULL, NULL, 'system:payout-clearing', $4)`,
+          [journalId, wd.user_id, wd.account_id, Number(wd.amount_cents)]
+        );
+
+        const docRes = await client.query(
+          `SELECT data FROM docs WHERE collection = 'contract_wallets' AND id = $1 FOR UPDATE`,
+          [wd.account_id]
+        );
+        if (docRes.rows[0]?.data) {
+          const wState = docRes.rows[0].data;
+          if (wState.wallet) {
+            wState.wallet.perpetualCents = Math.max(0, (Number(wState.wallet.perpetualCents) || 0) - Number(wd.amount_cents));
+            wState.wallet.version = (wState.wallet.version || 1) + 1;
+            wState.wallet.updatedAt = Date.now();
+            await client.query(
+              `UPDATE docs SET data = $1, updated_at = NOW() WHERE collection = 'contract_wallets' AND id = $2`,
+              [JSON.stringify(wState), wd.account_id]
+            );
+          }
+        }
+      }
+
       await client.query("UPDATE withdrawal_requests SET status = 'approved', updated_at = NOW() WHERE id = $1", [wdId]);
       await client.query("UPDATE approvals SET status = 'approved', approved_by = $1, approved_at = NOW() WHERE reference = $2 AND status = 'pending'", [u.id, wdId]);
       return { ok: true, status: 'approved', withdrawalId: wdId, message: 'تم اعتماد وموافقة طلب السحب بنجاح.' };
@@ -1779,20 +1815,40 @@ export async function controlAction(u: Identity, input: Data) {
       if (wd.status === 'paid') throw new ApiError('طلب السحب مدفوع مسبقًا.', 409);
 
       const amountCents = Number(wd.amount_cents);
-      const journalId = 'jnl-wd-' + randomUUID();
 
-      await client.query(
-        `INSERT INTO journals (id, kind, reference, created_at)
-         VALUES ($1, 'withdrawal', $2, NOW())`,
-        [journalId, wdId]
-      );
+      // Check if debited already; if not, debit now (legacy fallback)
+      const jRes = await client.query("SELECT id FROM journals WHERE reference = $1 AND kind = 'withdrawal'", [wdId]);
+      if (jRes.rowCount === 0) {
+        const journalId = 'jnl-wd-' + randomUUID();
+        await client.query(
+          `INSERT INTO journals (id, kind, reference, created_at)
+           VALUES ($1, 'withdrawal', $2, NOW())`,
+          [journalId, wdId]
+        );
+        await client.query(
+          `INSERT INTO journal_entries (journal_id, user_id, account_id, bucket, amount_cents)
+           VALUES ($1, $2, $3, 'cash', -$4),
+                  ($1, NULL, NULL, 'system:payout-clearing', $4)`,
+          [journalId, wd.user_id, wd.account_id, amountCents]
+        );
 
-      await client.query(
-        `INSERT INTO journal_entries (journal_id, user_id, account_id, bucket, amount_cents)
-         VALUES ($1, $2, $3, 'cash', -$4),
-                ($1, NULL, NULL, 'system:withdrawals', $4)`,
-        [journalId, wd.user_id, wd.account_id, amountCents]
-      );
+        const docRes = await client.query(
+          `SELECT data FROM docs WHERE collection = 'contract_wallets' AND id = $1 FOR UPDATE`,
+          [wd.account_id]
+        );
+        if (docRes.rows[0]?.data) {
+          const wState = docRes.rows[0].data;
+          if (wState.wallet) {
+            wState.wallet.perpetualCents = Math.max(0, (Number(wState.wallet.perpetualCents) || 0) - amountCents);
+            wState.wallet.version = (wState.wallet.version || 1) + 1;
+            wState.wallet.updatedAt = Date.now();
+            await client.query(
+              `UPDATE docs SET data = $1, updated_at = NOW() WHERE collection = 'contract_wallets' AND id = $2`,
+              [JSON.stringify(wState), wd.account_id]
+            );
+          }
+        }
+      }
 
       await client.query(
         `UPDATE withdrawal_requests
@@ -1817,9 +1873,54 @@ export async function controlAction(u: Identity, input: Data) {
     return await withTx(async (client) => {
       const wRes = await client.query('SELECT * FROM withdrawal_requests WHERE id = $1 FOR UPDATE', [wdId]);
       if (wRes.rowCount === 0) throw new ApiError('طلب السحب غير موجود / Withdrawal request not found', 404);
+      const wd = wRes.rows[0];
+      if (wd.status === 'rejected') {
+        return { ok: true, status: 'rejected', withdrawalId: wdId, message: 'طلب السحب مرفوض مسبقًا.' };
+      }
+
+      const amountCents = Number(wd.amount_cents);
+
+      // Refund the balance if it was deducted upon submission or approval
+      const refCheck = await client.query(
+        "SELECT id FROM journals WHERE reference = $1 AND kind = 'adjustment'",
+        [wdId]
+      );
+      if (refCheck.rowCount === 0) {
+        const refundJournalId = 'jnl-ref-' + randomUUID();
+        await client.query(
+          `INSERT INTO journals (id, kind, reference, created_at)
+           VALUES ($1, 'adjustment', $2, NOW())`,
+          [refundJournalId, wdId]
+        );
+        await client.query(
+          `INSERT INTO journal_entries (journal_id, user_id, account_id, bucket, amount_cents)
+           VALUES ($1, $2, $3, 'cash', $4),
+                  ($1, NULL, NULL, 'system:payout-clearing', -$4)`,
+          [refundJournalId, wd.user_id, wd.account_id, amountCents]
+        );
+
+        // Restore contract_wallets perpetualCents
+        const docRes = await client.query(
+          `SELECT data FROM docs WHERE collection = 'contract_wallets' AND id = $1 FOR UPDATE`,
+          [wd.account_id]
+        );
+        if (docRes.rows[0]?.data) {
+          const wState = docRes.rows[0].data;
+          if (wState.wallet) {
+            wState.wallet.perpetualCents = (Number(wState.wallet.perpetualCents) || 0) + amountCents;
+            wState.wallet.version = (wState.wallet.version || 1) + 1;
+            wState.wallet.updatedAt = Date.now();
+            await client.query(
+              `UPDATE docs SET data = $1, updated_at = NOW() WHERE collection = 'contract_wallets' AND id = $2`,
+              [JSON.stringify(wState), wd.account_id]
+            );
+          }
+        }
+      }
+
       await client.query("UPDATE withdrawal_requests SET status = 'rejected', updated_at = NOW() WHERE id = $1", [wdId]);
-      await client.query("UPDATE approvals SET status = 'rejected', approved_by = $1, reason = $2, approved_at = NOW() WHERE reference = $3 AND status = 'pending'", [u.id, rejectReason, wdId]);
-      return { ok: true, status: 'rejected', withdrawalId: wdId, message: 'تم رفض طلب السحب بنجاح.' };
+      await client.query("UPDATE approvals SET status = 'rejected', approved_by = $1, reason = $2, approved_at = NOW() WHERE reference = $3", [u.id, rejectReason, wdId]);
+      return { ok: true, status: 'rejected', withdrawalId: wdId, message: 'تم رفض طلب السحب وإعادة الرصيد إلى حساب العميل بنجاح.' };
     });
   }
 
