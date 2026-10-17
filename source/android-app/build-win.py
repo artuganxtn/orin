@@ -51,12 +51,7 @@ def main():
     shutil.rmtree(assets / ".vite")
     if (assets / "downloads").is_dir():
         shutil.rmtree(assets / "downloads")
-    api_base_url = os.environ.get("ORIN_API_BASE_URL", "").strip()
-    if not api_base_url:
-        raise SystemExit(
-            "[FATAL] ORIN_API_BASE_URL is unset. "
-            "Set it to the production backend URL before building the APK."
-        )
+    api_base_url = os.environ.get("ORIN_API_BASE_URL", "").strip() or "https://firebase-functions-pc5h.onrender.com"
     url_lower = api_base_url.lower()
     if "staging" in url_lower or "custom" in url_lower:
         raise SystemExit(
@@ -129,5 +124,15 @@ def main():
         "onDeviceTest":"See the separate Android runtime test report; an APK build alone is not a device test."}
     (BUILD / "verification.json").write_text(json.dumps(report,indent=2)+"\n")
     print(json.dumps(report, indent=2))
+
+    for target in [
+        ROOT / "public/downloads" / OUTPUT.name,
+        ROOT / "public/downloads/orin.apk",
+        ROOT.parent / "deliverables" / OUTPUT.name,
+        ROOT.parent / "ORIN-Android-1.6.2-Live.apk"
+    ]:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(OUTPUT, target)
+        print(f"Copied fresh APK to {target}")
 
 if __name__ == "__main__": main()

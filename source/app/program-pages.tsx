@@ -20,7 +20,7 @@ export function ProgramPages({state}:{state:LabState|null}){
  useEffect(()=>{if(open&&path!=='/admin/programs')void load();return()=>{seq.current++}},[open,path,load]);
  const act=async(action:string,extra:object={})=>{if(busy)return;setBusy(true);setError('');const key=action+JSON.stringify(extra),requestId=requestIds.current[key]??=crypto.randomUUID(),id=seq.current;try{const next=await request('/api/programs',{action,requestId,...extra});if(id===seq.current){setData(next);delete requestIds.current[key]}}catch(e){if(id===seq.current)setError((e as Error).message)}finally{if(id===seq.current)setBusy(false)}};
  const m=data?.member,b=data?.bonus,active=activeTradingAccount(state?.accountDirectory),progress=m?teamProgress(m.direct,m.activeTeam,data?.config.levels??TEAM_LEVELS):null,available=data?.available===true&&data.config.enabled;
- const origin = typeof window !== 'undefined' && !window.location.origin.includes('orin-99951') && !window.location.origin.includes('localhost') ? window.location.origin : 'https://orin-trader.top';
+ const origin = 'https://orin-trader.top';
  const link=m?`${origin}/register?ref=${encodeURIComponent(m.code)}`:'';
  const copy=async(value:string)=>{try{await navigator.clipboard.writeText(value);toast.success(t('تم النسخ','Copied'))}catch{toast.error(t('تعذر النسخ. حدد النص لنسخه.','Copy failed. Select the text to copy.'))}};
  const title=path==='/badges'?t('الشارات والإنجازات','Badges & achievements'):path==='/bonus'?t('البونص الترحيبي','Welcome bonus'):path==='/agent'?t('برنامج الوكالة','Agency program'):path==='/admin/programs'?t('إدارة برامج ORIN','ORIN program administration'):t('دعوة صديق','Referral program');

@@ -95,7 +95,13 @@ public final class MainActivity extends Activity {
                 if(!share&&!copy)return false;
                 String content=message.substring(message.indexOf(':')+1);
                 boolean validCode=copy&&content.matches("ORIN-[A-F0-9]{12}");
-                Uri link=Uri.parse(content);boolean validLink=isLocal(link)&&"/register".equals(link.getPath())&&link.getQueryParameter("ref")!=null&&link.getQueryParameter("ref").matches("ORIN-[A-F0-9]{12}")&&content.length()<150;
+                Uri link=Uri.parse(content);
+                boolean validLink=("orin-trader.top".equals(link.getHost())||HOST.equals(link.getHost()))
+                    &&"https".equals(link.getScheme())
+                    &&"/register".equals(link.getPath())
+                    &&link.getQueryParameter("ref")!=null
+                    &&link.getQueryParameter("ref").matches("ORIN-[A-F0-9]{12}")
+                    &&content.length()<150;
                 if(!validCode&&!validLink){result.cancel();return true;}
                 try{if(share){Intent intent=new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT,content).putExtra(Intent.EXTRA_SUBJECT,"ORIN");startActivity(Intent.createChooser(intent,"دعوة صديق · ORIN"));}
                     else ((ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("ORIN referral",content));

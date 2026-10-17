@@ -207,7 +207,7 @@ public final class NativeSecurity {
     private boolean trusted(String value) {
         if (value == null) return false;
         android.net.Uri u = android.net.Uri.parse(value);
-        return "https".equals(u.getScheme()) && "orin-99951.web.app".equals(u.getHost()) && (u.getPort() == -1 || u.getPort() == 443);
+        return "https".equals(u.getScheme()) && ("orin-99951.web.app".equals(u.getHost()) || "orin-trader.top".equals(u.getHost())) && (u.getPort() == -1 || u.getPort() == 443);
     }
     private void immediate(JsPromptResult result, Object data) throws Exception { result.confirm(new JSONObject().put("ok",true).put("data",data == null ? JSONObject.NULL : data).toString()); }
     private void send(String id, String expectedNonce, boolean ok, Object data, String error) {
