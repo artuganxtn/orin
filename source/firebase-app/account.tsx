@@ -43,7 +43,7 @@ export const fail=(e:unknown)=>{
 export type Profile={uid:string;email:string;displayName:string;role:'user'|'admin';disabled:boolean;createdAt?:{toDate:()=>Date};updatedAt?:unknown};
 export const ensureProfile=(user:User)=>ensureAccountProfile(db,user);
 
-const invitation=()=>{try{return sessionStorage.getItem('orin-referral-code')??''}catch{return ''}};
+const invitation=()=>{try{return sessionStorage.getItem('orin-referral-code')||localStorage.getItem('orin-referral-code')||''}catch{return ''}};
 
 export function AuthForm({path,done}:{path:string;done:()=>void}){
  const {t}=useUi();

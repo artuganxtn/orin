@@ -450,7 +450,7 @@ export async function controlRead(u: Identity, module: string, q: Data = {}) {
       ORDER BY (CASE WHEN COALESCE(a.bonus_cents, 0) > 0 THEN 0 ELSE 1 END), a.created_at DESC`;
     } else if (module === 'referrals') {
       sql = `SELECT
-        COALESCE(rw.id, 'ref-' || ra.user_id) AS "id",
+        COALESCE(rw.approval_id, 'ref-' || ra.user_id) AS "id",
         COALESCE(p_ref.display_name, p_ref.email, ra.referrer_user_id) AS "referrerId",
         COALESCE(p_user.display_name, p_user.email, ra.user_id) AS "referredId",
         COALESCE(rw.amount_cents, 1000) AS "amountCents",
@@ -987,10 +987,11 @@ export async function controlAction(u: Identity, input: Data) {
 
   // 11c. Referral Review
   if (action === 'referral.review') {
-    const refTarget = target || payload.referralId || payload.id;
-    if (!refTarget) {
+    const rawTarget = target || payload.referralId || payload.id;
+    if (!rawTarget) {
       throw new ApiError('Referral target or ID required', 400);
     }
+    const refTarget = String(rawTarget).startsWith('ref-') ? String(rawTarget).replace('ref-', '') : String(rawTarget);
     const status = String(payload.status || 'qualified');
 
     return await withTx(async (client) => {
@@ -1777,9 +1778,9 @@ export async function controlAction(u: Identity, input: Data) {
         );
         await client.query(
           `INSERT INTO journal_entries (journal_id, user_id, account_id, bucket, amount_cents)
-           VALUES ($1, $2, $3, 'cash', -$4),
-                  ($1, NULL, NULL, 'system:payout-clearing', $4)`,
-          [journalId, wd.user_id, wd.account_id, Number(wd.amount_cents)]
+           VALUES ($1, $2, $3, 'cash', $4),
+                  ($1, NULL, NULL, 'system:payout-clearing', $5)`,
+          [journalId, wd.user_id, wd.account_id, -Number(wd.amount_cents), Number(wd.amount_cents)]
         );
 
         const docRes = await client.query(
@@ -1827,9 +1828,9 @@ export async function controlAction(u: Identity, input: Data) {
         );
         await client.query(
           `INSERT INTO journal_entries (journal_id, user_id, account_id, bucket, amount_cents)
-           VALUES ($1, $2, $3, 'cash', -$4),
-                  ($1, NULL, NULL, 'system:payout-clearing', $4)`,
-          [journalId, wd.user_id, wd.account_id, amountCents]
+           VALUES ($1, $2, $3, 'cash', $4),
+                  ($1, NULL, NULL, 'system:payout-clearing', $5)`,
+          [journalId, wd.user_id, wd.account_id, -amountCents, amountCents]
         );
 
         const docRes = await client.query(
@@ -1895,8 +1896,8 @@ export async function controlAction(u: Identity, input: Data) {
         await client.query(
           `INSERT INTO journal_entries (journal_id, user_id, account_id, bucket, amount_cents)
            VALUES ($1, $2, $3, 'cash', $4),
-                  ($1, NULL, NULL, 'system:payout-clearing', -$4)`,
-          [refundJournalId, wd.user_id, wd.account_id, amountCents]
+                  ($1, NULL, NULL, 'system:payout-clearing', $5)`,
+          [refundJournalId, wd.user_id, wd.account_id, amountCents, -amountCents]
         );
 
         // Restore contract_wallets perpetualCents

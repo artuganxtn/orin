@@ -17,10 +17,11 @@ export function referralTransport(db: any, backend?: (path: string, init: Reques
 }
 
 export async function attributeReferral(db: any, uid: string, code: string) {
-  if (!/^ORIN-[A-F0-9]{12}$/.test(code)) return;
+  const norm = String(code || '').trim().toUpperCase();
+  if (!/^ORIN-[A-F0-9]{12}$/.test(norm)) return;
   await apiFetch('/api/referrals/attribute', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code })
+    body: JSON.stringify({ code: norm })
   });
 }

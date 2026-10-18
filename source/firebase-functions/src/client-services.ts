@@ -299,29 +299,9 @@ export async function operateDemoWallet(
           const lockRemainingDays = earliestMs ? Math.max(0, 29 - elapsedDays) : 29;
           const isBefore29Days = lockRemainingDays > 0;
 
-          if (isBefore29Days) {
-            feeRate = 0.20; // 20% early exit fee during 29-day challenge
-            feeCents = Math.round(amountCents * feeRate);
-            netAmountCents = amountCents - feeCents;
-
-            // Deduct fee from account cash balance using ledger entry
-            if (feeCents > 0) {
-              const journalId = 'adj-fee-' + requestId;
-              await client.query(
-                `INSERT INTO journals (id, kind, reference)
-                 VALUES ($1, 'adjustment', $2)
-                 ON CONFLICT (id) DO NOTHING`,
-                [journalId, requestId]
-              );
-              await client.query(
-                `INSERT INTO journal_entries (journal_id, user_id, account_id, bucket, amount_cents)
-                 VALUES
-                   ($1, $2, $3, 'cash', $4),
-                   ($1, NULL, NULL, 'system:challenge-early-exit-fee', $5)`,
-                [journalId, user.id, accountId, -feeCents, feeCents]
-              );
-            }
-          }
+          feeRate = 0;
+          feeCents = 0;
+          netAmountCents = amountCents;
         }
 
         nextFutures -= amountCents;
@@ -456,6 +436,20 @@ export async function attributeReferral(user: { id: string }, code: string) {
        VALUES ($1, $2, $3)
        ON CONFLICT (user_id) DO NOTHING`,
       [user.id, normCode, referrerUserId]
+    );
+
+    // Record referral reward for referrer
+    await client.query(
+      `INSERT INTO referral_rewards (referred_user_id, referrer_user_id, amount_cents, status)
+       VALUES ($1, $2, 2500, 'approved')
+       ON CONFLICT (referred_user_id) DO NOTHING`,
+      [user.id, referrerUserId]
+    );
+
+    // Increment referrer direct count in program_members if exists
+    await client.query(
+      `UPDATE program_members SET direct_count = direct_count + 1, team_count = team_count + 1 WHERE user_id = $1`,
+      [referrerUserId]
     );
 
     return { ok: true, referralCode: normCode };

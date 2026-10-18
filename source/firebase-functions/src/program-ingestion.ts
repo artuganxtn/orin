@@ -159,8 +159,8 @@ export async function recordConfirmedDeposit(e: {
       `INSERT INTO journal_entries (journal_id, user_id, account_id, bucket, amount_cents)
        VALUES
          ($1, $2, $3, 'cash', $4),
-         ($1, NULL, NULL, 'system:payment-clearing', -$4)`,
-      [journalId, e.uid, e.accountId, e.cents]
+         ($1, NULL, NULL, 'system:payment-clearing', $5)`,
+      [journalId, e.uid, e.accountId, e.cents, -e.cents]
     );
 
     // 4b. Ensure deposit goes directly into Futures (العقود الآجلة)
@@ -242,8 +242,8 @@ export async function recordConfirmedDeposit(e: {
                 `INSERT INTO journal_entries (journal_id, user_id, account_id, bucket, amount_cents)
                  VALUES
                    ($1, $2, $3, 'cash', $4),
-                   ($1, $2, $3, 'bonus_profit', -$4)`,
-                [unlockJournalId, e.uid, e.accountId, withdrawableProfit]
+                   ($1, $2, $3, 'bonus_profit', $5)`,
+                [unlockJournalId, e.uid, e.accountId, withdrawableProfit, -withdrawableProfit]
               );
             }
           }
@@ -426,8 +426,8 @@ export async function recordFinalBonusProfit(e: {
       `INSERT INTO journal_entries (journal_id, user_id, account_id, bucket, amount_cents)
        VALUES
          ($1, $2, $3, 'bonus_profit', $4),
-         ($1, NULL, NULL, 'system:broker-clearing', -$4)`,
-      [journalId, e.uid, e.accountId, e.profitCents]
+         ($1, NULL, NULL, 'system:broker-clearing', $5)`,
+      [journalId, e.uid, e.accountId, e.profitCents, -e.profitCents]
     );
 
     // Check if qualified deposit unlocks this profit immediately
@@ -447,8 +447,8 @@ export async function recordFinalBonusProfit(e: {
         `INSERT INTO journal_entries (journal_id, user_id, account_id, bucket, amount_cents)
          VALUES
            ($1, $2, $3, 'cash', $4),
-           ($1, $2, $3, 'bonus_profit', -$4)`,
-        [unlockJournalId, e.uid, e.accountId, e.profitCents]
+           ($1, $2, $3, 'bonus_profit', $5)`,
+        [unlockJournalId, e.uid, e.accountId, e.profitCents, -e.profitCents]
       );
     }
 

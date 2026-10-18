@@ -215,47 +215,11 @@ export function AccountTransfer({ account, onSaved }: { account: TradingAccount 
         </div>
       </div>
 
-      {/* Fee & Challenge Alert for Real Accounts */}
-      {account?.type === 'real' && from === 'futures' && (
-        walletView?.challenge?.isBefore29Days !== false ? (
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '12px 14px', borderRadius: '14px', background: '#fff7ed', border: '1px solid #fed7aa', color: '#9a3412', fontSize: '13px', lineHeight: 1.5, width: '100%', boxSizing: 'border-box' }}>
-            <Info size={18} style={{ color: '#ea580c', flexShrink: 0, marginTop: '2px' }} />
-            <div style={{ minWidth: 0 }}>
-              <b style={{ display: 'block', fontSize: '13.5px', marginBottom: '2px' }}>
-                {t('رسوم الخروج المبكر من التحدي (20%)', 'Challenge Early Exit Fee (20%)')}
-              </b>
-              <span>
-                {walletView?.challenge?.lockRemainingDays
-                  ? t(`أنت في فترة تحدي الـ 29 يومًا (متبقي ${walletView.challenge.lockRemainingDays} يومًا). التحويل من العقود الآجلة إلى العقود الفورية يخضع لرسوم خروج مبكر 20%. تنخفض الرسوم إلى 0% فور انتهاء الـ 29 يومًا.`, `You are in the 29-day challenge (${walletView.challenge.lockRemainingDays} days left). Transferring from Futures to Spot incurs a 20% early exit fee. The fee drops to 0% after 29 days.`)
-                  : t('التحويل من العقود الآجلة إلى العقود الفورية خلال فترة التحدي يخضع لرسوم خروج مبكر 20%. تنخفض الرسوم إلى 0% بعد انتهاء الـ 29 يومًا.', 'Transferring from Futures to Spot during the challenge incurs a 20% early exit fee. Drops to 0% after 29 days.')}
-              </span>
-            </div>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px', borderRadius: '14px', background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#166534', fontSize: '13px', width: '100%', boxSizing: 'border-box' }}>
-            <CheckCircle2 size={18} style={{ color: '#16a34a', flexShrink: 0 }} />
-            <span><b>{t('اكتمل التحدي بنجاح!', 'Challenge Completed!')}</b> · {t('رسوم التحويل من العقود الآجلة 0%', 'Futures transfer fee is 0%')}</span>
-          </div>
-        )
-      )}
-
-      {/* Transfer Amount Breakdown Card if fee applies */}
-      {account?.type === 'real' && from === 'futures' && (walletView?.challenge?.isBefore29Days !== false) && Number(amount) > 0 && (
-        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px', width: '100%', boxSizing: 'border-box' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--orin-muted)' }}>
-            <span>{t('المبلغ المطلوب تحويله', 'Requested Amount')}:</span>
-            <span dir="ltr" style={{ fontWeight: 600 }}>{Number(amount).toFixed(2)} USDT</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', color: '#dc2626' }}>
-            <span>{t('رسوم الخروج المبكر (20%)', 'Early Exit Fee (20%)')}:</span>
-            <span dir="ltr" style={{ fontWeight: 600 }}>-{(Number(amount) * 0.20).toFixed(2)} USDT</span>
-          </div>
-          <div style={{ borderTop: '1px dashed #cbd5e1', paddingTop: '6px', display: 'flex', justifyContent: 'space-between', color: 'var(--orin-ink)', fontWeight: 700 }}>
-            <span>{t('المبلغ المستلم في العقود الفورية', 'Net Received in Spot')}:</span>
-            <span dir="ltr" style={{ color: '#0788ff' }}>{(Number(amount) * 0.80).toFixed(2)} USDT</span>
-          </div>
-        </div>
-      )}
+      {/* Fee Notice: Free 0% Instant Transfers */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px', borderRadius: '14px', background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#166534', fontSize: '13px', width: '100%', boxSizing: 'border-box' }}>
+        <CheckCircle2 size={18} style={{ color: '#16a34a', flexShrink: 0 }} />
+        <span><b>{t('تحويل فوري بدون رسوم (0%)', 'Instant Free Transfer (0%)')}</b> · {t('التحويل بين العقود الآجلة والفورية متاح ومجاني 100%.', 'Transfers between Futures and Spot are 100% free with no deduction.')}</span>
+      </div>
 
       {/* Info Alert */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px', borderRadius: '14px', background: '#edf5ff', border: '1px solid #d6e7fc', color: '#3f5a82', fontSize: '13px', lineHeight: 1.6, width: '100%', boxSizing: 'border-box' }}>

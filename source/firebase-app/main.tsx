@@ -73,7 +73,7 @@ configureAccountSecurity({base:securityApiUrl,uid:()=>auth.currentUser?.uid??nul
 type BootData={user:User|null;settings?:SettingsState;lab?:LabState;configuration?:any};
 async function getInitial<T>(path:string):Promise<T>{const r=await apiFetch(path);if(!r.ok)throw Object.assign(new Error('Initial data unavailable'),{status:r.status});return r.json() as Promise<T>}
 // Store only the public invitation code; never a financial entitlement.
-try{const referral=new URLSearchParams(location.search).get('ref');if(referral&&/^ORIN-[A-F0-9]{12}$/.test(referral))sessionStorage.setItem('orin-referral-code',referral)}catch{}
+try{const refParam=new URLSearchParams(location.search).get('ref');if(refParam){const norm=refParam.trim().toUpperCase();if(/^ORIN-[A-F0-9]{12}$/.test(norm)){sessionStorage.setItem('orin-referral-code',norm);try{localStorage.setItem('orin-referral-code',norm)}catch{}}}}catch{}
 function App(){
  const {t,prefs}=useUi();const [seenIntro,setSeenIntro]=useState(onboardingSeen);
  const [path,setPath]=useState(location.pathname),[profile,setProfile]=useState<Profile|null>(null),[boot,setBoot]=useState<StartupState<BootData>>({phase:'starting'}),[attempt,setAttempt]=useState(0),[configuration,setConfiguration]=useState<any>(null);
@@ -223,7 +223,7 @@ function App(){
    }
   }
  },[ready,user?.email,profile?.role,path]);
- useEffect(()=>{if(!user||!profile||profile.disabled)return;let code='';try{code=sessionStorage.getItem('orin-referral-code')??'';const recipient=sessionStorage.getItem('orin-referral-email');if(recipient&&recipient!==user.email?.toLowerCase())code=''}catch{}if(code)void attributeReferral(null,user.uid,code).then(()=>{sessionStorage.removeItem('orin-referral-code');sessionStorage.removeItem('orin-referral-email')}).catch(()=>console.warn('ORIN referral attribution is pending'))},[user?.uid,profile?.disabled]);
+ useEffect(()=>{if(!user||!profile||profile.disabled)return;let code='';try{code=sessionStorage.getItem('orin-referral-code')||localStorage.getItem('orin-referral-code')||'';const recipient=sessionStorage.getItem('orin-referral-email');if(recipient&&recipient!==user.email?.toLowerCase())code=''}catch{}if(code){const norm=code.trim().toUpperCase();void attributeReferral(null,user.uid,norm).then(()=>{try{sessionStorage.removeItem('orin-referral-code');sessionStorage.removeItem('orin-referral-email');localStorage.removeItem('orin-referral-code')}catch{}}).catch(()=>console.warn('ORIN referral attribution is pending'))}},[user?.uid,profile?.disabled]);
  useEffect(()=>{if(!ready||!user||!securityBackendConfigured()||!getSecuritySessionId())return;let stopped=false;const check=()=>{if(document.hidden||!navigator.onLine)return;void securityRequest('state').catch(e=>{if(stopped)return;if(e instanceof AccountSecurityError&&e.status===401)void refreshSecuritySession().catch(()=>{});})};const timer=setInterval(check,45000);addEventListener('online',check);document.addEventListener('visibilitychange',check);return()=>{stopped=true;clearInterval(timer);removeEventListener('online',check);document.removeEventListener('visibilitychange',check)}},[ready,user?.uid]);
  const retry=()=>{setBoot({phase:'starting'});setAttempt(v=>v+1)};
  // Security gate completely removed for direct dashboard entry

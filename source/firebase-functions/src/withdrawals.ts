@@ -128,9 +128,9 @@ export async function requestWithdrawal(
     );
     await client.query(
       `INSERT INTO journal_entries (journal_id, user_id, account_id, bucket, amount_cents) VALUES
-       ($1, $2, $3, 'cash', -$4),
-       ($1, NULL, NULL, 'system:payout-clearing', $4)`,
-      [journalId, user.id, accountId, amountCents]
+       ($1, $2, $3, 'cash', $4),
+       ($1, NULL, NULL, 'system:payout-clearing', $5)`,
+      [journalId, user.id, accountId, -amountCents, amountCents]
     );
 
     // Deduct amountCents from perpetualCents and futuresCents in contract_wallets doc if present
@@ -313,9 +313,9 @@ export async function markWithdrawalPaid(
       );
       await client.query(
         `INSERT INTO journal_entries (journal_id, user_id, account_id, bucket, amount_cents) VALUES
-         ($1, $2, $3, 'cash', -$4),
-         ($1, NULL, NULL, 'system:payout-clearing', $4)`,
-        [journalId, wd.user_id, wd.account_id, amountCents]
+         ($1, $2, $3, 'cash', $4),
+         ($1, NULL, NULL, 'system:payout-clearing', $5)`,
+        [journalId, wd.user_id, wd.account_id, -amountCents, amountCents]
       );
 
       const docRes = await client.query(
@@ -387,8 +387,8 @@ export async function rejectWithdrawal(
       await client.query(
         `INSERT INTO journal_entries (journal_id, user_id, account_id, bucket, amount_cents)
          VALUES ($1, $2, $3, 'cash', $4),
-                ($1, NULL, NULL, 'system:payout-clearing', -$4)`,
-        [refundJournalId, wd.user_id, wd.account_id, amountCents]
+                ($1, NULL, NULL, 'system:payout-clearing', $5)`,
+        [refundJournalId, wd.user_id, wd.account_id, amountCents, -amountCents]
       );
 
       // Restore contract_wallets perpetualCents

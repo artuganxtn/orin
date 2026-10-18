@@ -304,8 +304,8 @@ export async function programAction(u: Identity, input: Data): Promise<ProgramSu
         `INSERT INTO journal_entries (journal_id, user_id, account_id, bucket, amount_cents)
          VALUES
            ($1, $2, $3, 'bonus', $4),
-           ($1, NULL, NULL, 'system:program-grant', -$4)`,
-        [journalId, u.id, accId, c.bonusAmountCents]
+           ($1, NULL, NULL, 'system:program-grant', $5)`,
+        [journalId, u.id, accId, c.bonusAmountCents, -c.bonusAmountCents]
       );
     }
 
@@ -468,8 +468,8 @@ export async function adminPrograms(u: Identity, input?: Data): Promise<any> {
             `INSERT INTO journal_entries (journal_id, user_id, account_id, bucket, amount_cents)
              VALUES
                ($1, $2, $3, 'cash', $4),
-               ($1, NULL, NULL, 'system:program-expense', -$4)`,
-            [journalId, r.referrer_user_id, accId, amountCents]
+               ($1, NULL, NULL, 'system:program-expense', $5)`,
+            [journalId, r.referrer_user_id, accId, amountCents, -amountCents]
           );
 
           await client.query(
@@ -520,8 +520,8 @@ export async function adminPrograms(u: Identity, input?: Data): Promise<any> {
           `INSERT INTO journal_entries (journal_id, user_id, account_id, bucket, amount_cents)
            VALUES
              ($1, $2, $3, 'cash', $4),
-             ($1, NULL, NULL, 'system:program-expense', -$4)`,
-          [journalId, target, accId, cents]
+             ($1, NULL, NULL, 'system:program-expense', $5)`,
+          [journalId, target, accId, cents, -cents]
         );
 
         await client.query(

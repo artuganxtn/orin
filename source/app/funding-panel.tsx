@@ -482,15 +482,8 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
                 </span>
               </div>
 
-              <Note kind="info">{t('رسوم السحب ثابتة 5% دائمًا. أموال العقود الآجلة مقفلة للتحدي ويمكن سحبها بعد تحويلها للعقود الفورية.', 'Withdrawal fee is always 5%. Futures contracts are locked for the challenge and withdrawable after transfer to Spot.')}</Note>
+              <Note kind="info">{t('رسوم السحب ثابتة 5% دائمًا. يتم خصم 5% رسوم شبكة وسحب تلقائيًا من المبلغ المطلوب.', 'Withdrawal fee is always 5%. A 5% withdrawal fee is automatically deducted from requested amount.')}</Note>
             </div>
-
-            {lockRemainingDays > 0 && (
-              <p className="fp-note warn" style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px', borderRadius: '14px', background: '#fff6e6', border: '1px solid #f5dfb3', color: '#8a5b13', fontSize: '13px', width: '100%', boxSizing: 'border-box' }}>
-                <LockKeyhole size={18} style={{ color: '#e09a1c', flexShrink: 0 }} />
-                <span><b>{t('تحدي الـ 29 يومًا نشط', '29-day challenge active')}</b> · {t(`متبقي ${lockRemainingDays} يومًا. أموال العقود الآجلة مقفلة، وللسحب يجب تحويلها للعقود الفورية (رسوم خروج مبكر 20%). رسوم السحب 5% دائماً.`, `${lockRemainingDays} days left. Futures funds are locked; transfer to Spot to withdraw (20% early exit fee). 5% withdrawal fee always.`)}</span>
-              </p>
-            )}
 
             <ErrorBox />
 
