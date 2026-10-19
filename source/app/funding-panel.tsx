@@ -1,7 +1,7 @@
 'use client';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import QRCode from 'qrcode';
-import { Copy, LockKeyhole, RefreshCw, Clock3, Info, ArrowLeft, ArrowRight, ChevronDown, ChevronLeft, ChevronRight, ScanLine, Wallet, MessageCircleMore, ArrowDownLeft, ArrowUpRight, Check, CircleCheck, CircleAlert } from 'lucide-react';
+import { Copy, LockKeyhole, RefreshCw, Clock3, Info, ArrowLeft, ArrowRight, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, ScanLine, Wallet, MessageCircleMore, ArrowDownLeft, ArrowUpRight, Check, CircleCheck, CircleAlert, CheckCircle2 } from 'lucide-react';
 import { createDeposit, listDeposits, paymentReadiness, refreshDeposit } from '@/lib/payment-client';
 import { apiFetch } from '@/lib/client-api';
 import { PAYMENT_COINS, type PaymentCoin, type PaymentReadiness, type DepositView, type DepositStatus } from '@/lib/payments';
@@ -72,6 +72,7 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
   const [qr, setQr] = useState('');
   const [step, setStep] = useState<1 | 2>(1);
   const [wNet, setWNet] = useState<PaymentCoin>('usdttrc20'), [wAmount, setWAmount] = useState(''), [wAddress, setWAddress] = useState(''), [wNotice, setWNotice] = useState<any>(null);
+  const [showMoreDetails, setShowMoreDetails] = useState(false);
   const [withdrawals, setWithdrawals] = useState<any[]>([]);
   const [walletView, setWalletView] = useState<DemoWalletView | null>(null);
   const requestId = useRef<string | null>(null), mounted = useRef(true), submitting = useRef(false);
@@ -210,9 +211,8 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
   /* ───────────── WITHDRAWAL VIEW (Screenshot 3 & 4) ───────────── */
   if (kind === 'withdraw') {
     const net = PAYMENT_COINS.find(c => c.id === wNet)!;
-    const spotBal = ((walletView?.wallet?.perpetualCents ?? 0) / 100);
-    const futuresBal = ((walletView?.wallet?.futuresCents ?? account?.balanceCents ?? 0) / 100);
-    const maxWithdraw = spotBal > 0 ? spotBal.toFixed(2) : '0';
+    const totalAvailable = ((account?.balanceCents ?? 0) / 100);
+    const maxWithdraw = totalAvailable > 0 ? totalAvailable.toFixed(2) : '0';
 
     const requestWithdrawal = async () => {
       setError(''); setWNotice(null);
@@ -225,10 +225,10 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
         setError(t('أدخل عنوان محفظة صالحًا.', 'Enter a valid wallet address.'));
         return;
       }
-      if (val > spotBal) {
+      if (val > totalAvailable) {
         setError(t(
-          `رصيد العقود الفورية المتاح للسحب هو ${spotBal.toFixed(2)} USDT. أموال العقود الآجلة (${futuresBal.toFixed(2)} USDT) مقفلة للتحدي، يرجى تحويلها إلى العقود الفورية أولاً للسحب.`,
-          `Available Spot balance for withdrawal is ${spotBal.toFixed(2)} USDT. Futures balance (${futuresBal.toFixed(2)} USDT) is locked. Transfer to Spot first to withdraw.`
+          `رصيد الحساب المتاح للسحب هو ${totalAvailable.toFixed(2)} USDT. المبلغ المطلوب يتجاوز الرصيد.`,
+          `Available balance for withdrawal is ${totalAvailable.toFixed(2)} USDT. Requested amount exceeds balance.`
         ));
         return;
       }
@@ -254,15 +254,22 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
         if (!res.ok) {
           throw new Error(data.error || 'تعذر إرسال طلب السحب');
         }
+        const nowObj = new Date();
+        const dateCode = nowObj.getFullYear() + String(nowObj.getMonth() + 1).padStart(2, '0') + String(nowObj.getDate()).padStart(2, '0');
+        const formattedId = data.id && !data.id.startsWith('wd-')
+          ? data.id
+          : `WD-${dateCode}-${Math.floor(1000 + Math.random() * 9000)}`;
+
         setWNotice({
-          id: data.id || ('WD-' + Date.now().toString(36).toUpperCase()),
+          id: formattedId,
           amount: val,
           fee: fee,
           netAmount: netAmount,
-          address: wAddress,
+          address: wAddress.trim(),
           coin: wNet,
           network: net.network,
-          createdAt: Date.now()
+          createdAt: Date.now(),
+          status: 'requested'
         });
         setWAmount('');
         setWalletView(old => {
@@ -289,111 +296,235 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
       }
     };
 
-    // Screenshot 4 — Receipt Modal
+    // Screenshot 1 & 2 — Clean 1-Page Receipt View matching attached screenshots
     if (wNotice) {
+      const formattedDate = new Date(wNotice.createdAt).toLocaleString(prefs.chartLocale === 'ar' ? 'ar-u-nu-latn' : 'en-GB', {
+        timeZone: prefs.timezone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      }).replace(',', ' ·');
+
+      const isPaid = wNotice.status === 'paid' || wNotice.status === 'approved';
+      const isRejected = wNotice.status === 'rejected';
+
+      const shortAddr = wNotice.address.length > 18
+        ? (wNotice.address.slice(0, 6) + '...' + wNotice.address.slice(-4))
+        : wNotice.address;
+
       return (
-        <section className="fp fp-receipt-wrap">
-          <header className="fp-head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <h1 style={{ fontSize: '24px', fontWeight: 800, margin: 0 }}>{t('تفاصيل المعاملة', 'Transaction details')}</h1>
-            <button type="button" className="fp-back-btn" onClick={() => setWNotice(null)} style={{ width: '38px', height: '38px', borderRadius: '50%', background: 'var(--fp-soft)', border: '1px solid var(--fp-line)', display: 'grid', placeItems: 'center', cursor: 'pointer' }}>
-              <Fwd size={20} />
-            </button>
-          </header>
-
-          <article className="fp-receipt-card" style={{ background: '#fff', border: '1px solid var(--fp-line)', borderRadius: '22px', overflow: 'hidden', boxShadow: '0 12px 32px rgba(11,42,107,0.08)' }}>
-            <div style={{ padding: '24px 20px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-              <span style={{ width: '52px', height: '52px', borderRadius: '50%', background: '#e8f2ff', color: '#0788ff', display: 'grid', placeItems: 'center' }}>
-                <ArrowUpRight size={28} />
-              </span>
-              <small style={{ fontSize: '15px', color: '#2c3e62', fontWeight: 600 }}>{t('سحب USDT', 'USDT Withdrawal')}</small>
-              <strong style={{ fontSize: '38px', fontWeight: 800, color: 'var(--fp-ink)', fontFamily: 'Arial, sans-serif' }}>
-                {number(wNotice.amount)} <em style={{ fontSize: '20px', fontStyle: 'normal' }}>USDT</em>
-              </strong>
-              <span className="fp-pill wait" style={{ background: '#fff1d6', color: '#9a6412', padding: '6px 16px', borderRadius: '99px', fontSize: '13px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                <Clock3 size={15} />
-                {t('قيد المراجعة', 'Under Review')}
-              </span>
-              <p style={{ margin: 0, fontSize: '13px', color: 'var(--fp-muted)' }}>{t('بانتظار تنفيذ التحويل', 'Awaiting transfer execution')}</p>
-            </div>
-
-            <div style={{ borderTop: '1.5px dashed #d8e1ee', margin: '0 20px', position: 'relative' }} />
-
-            <div style={{ padding: '20px' }}>
-              <h3 style={{ margin: '0 0 14px', fontSize: '16px', fontWeight: 700 }}>{t('تفاصيل التحويل', 'Transfer details')}</h3>
-              <dl style={{ margin: 0, display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '14px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <dt style={{ color: 'var(--fp-muted)' }}>{t('رقم الطلب', 'Order ID')}</dt>
-                  <dd style={{ margin: 0, fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }} dir="ltr">
-                    {wNotice.id}
-                    <button type="button" onClick={() => copy(wNotice.id, 'wdId')} style={{ border: 0, background: 'none', cursor: 'pointer', padding: 0, color: '#5d6f8e' }}>
-                      {copied === 'wdId' ? <Check size={15} /> : <Copy size={15} />}
-                    </button>
-                  </dd>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <dt style={{ color: 'var(--fp-muted)' }}>{t('الشبكة', 'Network')}</dt>
-                  <dd style={{ margin: 0, fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }} dir="ltr">
-                    <Mark kind={wNotice.coin} size={20} />
-                    {wNotice.network}
-                  </dd>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <dt style={{ color: 'var(--fp-muted)' }}>{t('التاريخ', 'Date')}</dt>
-                  <dd style={{ margin: 0, fontWeight: 600 }}>{date(wNotice.createdAt)}</dd>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <dt style={{ color: 'var(--fp-muted)' }}>{t('الوقت', 'Time')}</dt>
-                  <dd style={{ margin: 0, fontWeight: 600 }} dir="ltr">{time(wNotice.createdAt)}</dd>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <dt style={{ color: 'var(--fp-muted)' }}>{t('عنوان الاستلام', 'Recipient Address')}</dt>
-                  <dd style={{ margin: 0, fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }} dir="ltr">
-                    {wNotice.address.slice(0, 4) + '••••••••••••' + wNotice.address.slice(-3)}
-                    <button type="button" onClick={() => copy(wNotice.address, 'wdAddr')} style={{ border: 0, background: 'none', cursor: 'pointer', padding: 0, color: '#5d6f8e' }}>
-                      {copied === 'wdAddr' ? <Check size={15} /> : <Copy size={15} />}
-                    </button>
-                  </dd>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <dt style={{ color: 'var(--fp-muted)' }}>{t('معرّف التحويل', 'TxID')}</dt>
-                  <dd style={{ margin: 0, color: 'var(--fp-muted)' }}>{t('لم يصدر بعد', 'Not issued yet')}</dd>
-                </div>
-                <hr style={{ border: 0, borderTop: '1px solid #edf1f8', margin: '4px 0' }} />
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <dt style={{ color: 'var(--fp-muted)' }}>{t('مبلغ السحب', 'Withdrawal Amount')}</dt>
-                  <dd style={{ margin: 0, fontWeight: 600 }} dir="ltr">{number(wNotice.amount)} USDT</dd>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <dt style={{ color: 'var(--fp-muted)' }}>{t('الرسوم', 'Fees')}</dt>
-                  <dd style={{ margin: 0, fontWeight: 600 }} dir="ltr">{number(wNotice.fee)} USDT</dd>
-                </div>
-              </dl>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '14px', padding: '14px 16px', borderRadius: '14px', background: 'linear-gradient(120deg,#eaf3ff,#dcebff)' }}>
-                <span style={{ fontSize: '14px', fontWeight: 700, color: '#00388c' }}>{t('صافي الاستلام', 'Net Receive Amount')}</span>
-                <b style={{ fontSize: '20px', color: '#0788ff', fontFamily: 'Arial, sans-serif' }} dir="ltr">{number(wNotice.netAmount)} USDT</b>
+        <section className="fp fp-receipt-screen" style={{ width: '100%', maxWidth: '440px', margin: '0 auto', padding: '8px 16px 20px', boxSizing: 'border-box', minHeight: '94vh', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+          <div>
+            {/* Top Bar matching Image 1 & 2: ORIN Brand left, Chevron right */}
+            <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0 14px', width: '100%' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <img src="/brand/orin-mark.png" alt="ORIN" style={{ width: '32px', height: '32px', objectFit: 'contain' }} />
+                <strong style={{ fontSize: '20px', fontWeight: 900, color: '#06111f', letterSpacing: '0.5px' }}>ORIN</strong>
               </div>
+              <button
+                type="button"
+                onClick={() => setWNotice(null)}
+                style={{ border: 0, background: 'none', color: '#0788ff', cursor: 'pointer', padding: '6px', display: 'grid', placeItems: 'center' }}
+              >
+                <ChevronLeft size={24} style={{ transform: prefs.chartLocale === 'ar' ? 'scaleX(-1)' : 'none' }} />
+              </button>
+            </header>
+
+            {/* Central Circle with Wallet Icon */}
+            <div style={{ textAlign: 'center', margin: '4px 0 16px' }}>
+              <div style={{ width: '68px', height: '68px', borderRadius: '50%', background: '#eaf2ff', display: 'grid', placeItems: 'center', margin: '0 auto 10px' }}>
+                <Wallet size={32} color="#0788ff" />
+              </div>
+
+              <div style={{ fontSize: '15px', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>
+                {t('سحب USDT', 'USDT Withdrawal')}
+              </div>
+
+              <div style={{ fontSize: '36px', fontWeight: 900, color: '#06111f', margin: '4px 0 10px', fontFamily: 'Arial, sans-serif' }} dir="ltr">
+                {Number(wNotice.amount).toFixed(2)} <span style={{ fontSize: '22px', fontWeight: 800 }}>USDT</span>
+              </div>
+
+              {/* Status Pill matching Image 1 & 2 */}
+              {isPaid ? (
+                <div>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#dcfce7', color: '#15803d', padding: '5px 16px', borderRadius: '999px', fontSize: '13px', fontWeight: 700 }}>
+                    <CheckCircle2 size={16} />
+                    <span>{t('تم السحب', 'Withdrawn')}</span>
+                  </span>
+                  <p style={{ margin: '6px 0 0', fontSize: '12.5px', color: '#64748b' }}>
+                    {t('تم تحويل المبلغ إلى محفظتك', 'Amount transferred to your wallet')}
+                  </p>
+                </div>
+              ) : isRejected ? (
+                <div>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#fee2e2', color: '#b91c1c', padding: '5px 16px', borderRadius: '999px', fontSize: '13px', fontWeight: 700 }}>
+                    <CircleAlert size={16} />
+                    <span>{t('مرفوض', 'Rejected')}</span>
+                  </span>
+                  <p style={{ margin: '6px 0 0', fontSize: '12.5px', color: '#64748b' }}>
+                    {t('تم رفض طلب السحب وإعادة الرصيد', 'Withdrawal rejected and refunded')}
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#fef3c7', color: '#b45309', padding: '5px 16px', borderRadius: '999px', fontSize: '13px', fontWeight: 700 }}>
+                    <Clock3 size={15} />
+                    <span>{t('قيد المراجعة', 'Under Review')}</span>
+                  </span>
+                  <p style={{ margin: '6px 0 0', fontSize: '12.5px', color: '#64748b' }}>
+                    {t('بانتظار تنفيذ التحويل', 'Awaiting transfer execution')}
+                  </p>
+                </div>
+              )}
             </div>
-          </article>
 
-          <button type="button" onClick={() => nav.navigate('/support')} style={{ border: 0, background: 'none', color: '#173a77', fontSize: '14px', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer', margin: '8px 0' }}>
-            <MessageCircleMore size={18} style={{ color: '#0788ff' }} />
-            {t('تحتاج مساعدة؟', 'Need help?')}
-          </button>
+            {/* List Table matching Image 1 & 2 */}
+            <div style={{ background: '#ffffff', borderRadius: '18px', border: '1px solid #f1f5f9', overflow: 'hidden', margin: '14px 0 6px' }}>
+              {/* Row 1: Order ID */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '13px 14px', borderBottom: '1px solid #f1f5f9', fontSize: '14px' }}>
+                <span style={{ color: '#475569', fontWeight: 500 }}>{t('رقم الطلب', 'Order ID')}</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, color: '#0f172a' }} dir="ltr">
+                  <span>{wNotice.id}</span>
+                  <button type="button" onClick={() => copy(wNotice.id, 'wdId')} style={{ border: 0, background: 'none', cursor: 'pointer', padding: '2px', color: '#0788ff', display: 'grid', placeItems: 'center' }}>
+                    {copied === 'wdId' ? <Check size={16} /> : <Copy size={16} />}
+                  </button>
+                </span>
+              </div>
 
-          <button type="button" className="fp-btn primary big" onClick={() => setWNotice(null)}>
-            <Fwd size={18} className="fp-flip" />
-            {t('العودة إلى المعاملات', 'Return to Transactions')}
-          </button>
+              {/* Row 2: Order Date */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '13px 14px', borderBottom: '1px solid #f1f5f9', fontSize: '14px' }}>
+                <span style={{ color: '#475569', fontWeight: 500 }}>{t('تاريخ الطلب', 'Order Date')}</span>
+                <span style={{ fontWeight: 600, color: '#0f172a' }} dir="ltr">
+                  {formattedDate}
+                </span>
+              </div>
 
-          <p style={{ textAlign: 'center', fontSize: '12px', color: 'var(--fp-muted)', margin: 0 }}>
-            {t('نموذج توضيحي · ليست معاملة فعلية', 'Illustration model · Not an active transaction')}
-          </p>
+              {/* Row 3: Network */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '13px 14px', borderBottom: '1px solid #f1f5f9', fontSize: '14px' }}>
+                <span style={{ color: '#475569', fontWeight: 500 }}>{t('الشبكة', 'Network')}</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, color: '#0f172a' }} dir="ltr">
+                  <Mark kind={wNotice.coin} size={22} />
+                  <span>{wNotice.network || 'BEP20'}</span>
+                </span>
+              </div>
+
+              {/* Row 4: Wallet Address */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '13px 14px', borderBottom: '1px solid #f1f5f9', fontSize: '14px' }}>
+                <span style={{ color: '#475569', fontWeight: 500 }}>{t('عنوان المحفظة', 'Wallet Address')}</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, color: '#0f172a' }} dir="ltr">
+                  <span>{shortAddr}</span>
+                  <button type="button" onClick={() => copy(wNotice.address, 'wdAddr')} style={{ border: 0, background: 'none', cursor: 'pointer', padding: '2px', color: '#0788ff', display: 'grid', placeItems: 'center' }}>
+                    {copied === 'wdAddr' ? <Check size={16} /> : <Copy size={16} />}
+                  </button>
+                </span>
+              </div>
+
+              {/* Row 5: Fees */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '13px 14px', borderBottom: '1px solid #f1f5f9', fontSize: '14px' }}>
+                <span style={{ color: '#475569', fontWeight: 500 }}>{t('الرسوم (5%)', 'Fees (5%)')}</span>
+                <span style={{ fontWeight: 600, color: '#0f172a' }} dir="ltr">
+                  {Number(wNotice.fee).toFixed(2)} USDT
+                </span>
+              </div>
+
+              {/* Row 6: Net Received */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '13px 14px', fontSize: '14.5px' }}>
+                <span style={{ color: '#475569', fontWeight: 600 }}>{t('صافي الاستلام', 'Net Received')}</span>
+                <strong style={{ fontSize: '18px', fontWeight: 800, color: '#0788ff', fontFamily: 'Arial, sans-serif' }} dir="ltr">
+                  {Number(wNotice.netAmount).toFixed(2)} USDT
+                </strong>
+              </div>
+
+              {/* Collapsible Details */}
+              {showMoreDetails && (
+                <div style={{ padding: '12px 14px', background: '#f8fafc', borderTop: '1px dashed #e2e8f0', fontSize: '13px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#64748b' }}>{t('العنوان الكامل', 'Full Address')}:</span>
+                    <span style={{ wordBreak: 'break-all', fontSize: '12px' }} dir="ltr">{wNotice.address}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#64748b' }}>{t('حالة الطلب', 'Status')}:</span>
+                    <span style={{ fontWeight: 600 }}>{isPaid ? t('مكتمل', 'Completed') : isRejected ? t('مرفوض', 'Rejected') : t('قيد التدقيق', 'Processing')}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Toggle Show More Details */}
+            <div style={{ textAlign: 'center', margin: '4px 0 12px' }}>
+              <button
+                type="button"
+                onClick={() => setShowMoreDetails(v => !v)}
+                style={{ border: 0, background: 'none', color: '#0788ff', fontSize: '13px', fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+              >
+                <span>{showMoreDetails ? t('عرض تفاصيل أقل', 'Show less details') : t('عرض المزيد من التفاصيل', 'Show more details')}</span>
+                <ChevronDown size={15} style={{ transform: showMoreDetails ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+              </button>
+            </div>
+          </div>
+
+          {/* Bottom Actions matching Image 1 & 2 */}
+          <div style={{ marginTop: 'auto', paddingTop: '10px' }}>
+            <button
+              type="button"
+              className="fp-btn primary big"
+              onClick={() => {
+                setWNotice(null);
+                nav.navigate('/activity');
+              }}
+              style={{
+                width: '100%',
+                height: '52px',
+                borderRadius: '16px',
+                background: '#0788ff',
+                color: '#fff',
+                fontSize: '16px',
+                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '10px',
+                border: 0,
+                cursor: 'pointer',
+                boxShadow: '0 4px 14px rgba(7, 136, 255, 0.35)'
+              }}
+            >
+              <span>{t('العودة إلى المعاملات', 'Return to Transactions')}</span>
+              <Fwd size={18} className="fp-flip" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => nav.navigate('/support')}
+              style={{
+                border: 0,
+                background: 'none',
+                color: '#0788ff',
+                fontSize: '14px',
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px',
+                cursor: 'pointer',
+                margin: '12px auto 6px'
+              }}
+            >
+              <MessageCircleMore size={18} />
+              <span>{t('تحتاج مساعدة؟', 'Need help?')}</span>
+            </button>
+
+            <p style={{ textAlign: 'center', fontSize: '11.5px', color: '#94a3b8', margin: 0 }}>
+              {t('تخضع الطلبات لشروط السحب المعتمدة', 'Requests are subject to approved withdrawal terms')}
+            </p>
+          </div>
         </section>
       );
     }
 
-    // Screenshot 3 — Withdraw Form
+    // Screenshot 3 — Clean Withdraw Form
     return (
       <section className="fp" style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box', overflowX: 'hidden' }}>
         <Header title={t('سحب الأموال', 'Withdraw funds')} sub={t('حساب حقيقي · USD', 'Real account · USD')} />
@@ -413,28 +544,12 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
             <div className="fp-card" style={{ background: '#fff', border: '1px solid var(--fp-line)', borderRadius: '20px', padding: '18px', display: 'flex', flexDirection: 'column', gap: '12px', width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
               <h2 style={{ fontSize: '18px', fontWeight: 700, margin: 0, color: 'var(--fp-ink)' }}>{t('تفاصيل السحب', 'Withdrawal details')}</h2>
 
-              {/* Wallet Pockets Info Card */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px 14px', borderRadius: '14px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '13px' }}>
+              {/* Clean Balance Card */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '14px 16px', borderRadius: '16px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '13.5px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ color: 'var(--fp-muted)' }}>{t('المتاح للسحب (العقود الفورية)', 'Available for withdrawal (Spot)')}:</span>
-                  <strong style={{ color: '#0788ff', fontSize: '14.5px' }} dir="ltr">{spotBal.toFixed(2)} USDT</strong>
+                  <span style={{ color: 'var(--fp-muted)' }}>{t('الرصيد المتاح للسحب', 'Available for withdrawal')}:</span>
+                  <strong style={{ color: '#0788ff', fontSize: '16px', fontWeight: 800 }} dir="ltr">{totalAvailable.toFixed(2)} USDT</strong>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ color: 'var(--fp-muted)' }}>{t('العقود الآجلة (مقفل للتحدي)', 'Futures (Locked for challenge)')}:</span>
-                  <span style={{ color: '#64748b', fontWeight: 600 }} dir="ltr">{futuresBal.toFixed(2)} USDT</span>
-                </div>
-                {futuresBal > 0 && (
-                  <div style={{ borderTop: '1px dashed #cbd5e1', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
-                    <small style={{ color: 'var(--fp-muted)' }}>{t('أموال العقود الآجلة قابلة للتحويل إلى الفورية للسحب', 'Transfer Futures to Spot anytime to withdraw')}</small>
-                    <button
-                      type="button"
-                      onClick={() => nav.navigate('/transfer')}
-                      style={{ border: 0, background: '#0788ff', color: '#fff', borderRadius: '6px', padding: '4px 10px', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
-                    >
-                      {t('تحويل للعقود الفورية', 'Transfer to Spot')}
-                    </button>
-                  </div>
-                )}
               </div>
 
               <label className="fp-label" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--fp-muted)', marginTop: '4px' }}>{t('شبكة التحويل', 'Transfer Network')}</label>
@@ -490,13 +605,13 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
             <button
               type="button"
               className="fp-btn primary big"
-              disabled={busy || spotBal <= 0}
+              disabled={busy || totalAvailable <= 0}
               onClick={requestWithdrawal}
               style={{
                 width: '100%',
                 height: '54px',
                 borderRadius: '16px',
-                background: (spotBal <= 0) ? '#94a3b8' : 'linear-gradient(180deg,#1c8cff 0%,#0064f4 100%)',
+                background: (totalAvailable <= 0) ? '#94a3b8' : 'linear-gradient(180deg,#1c8cff 0%,#0064f4 100%)',
                 color: '#fff',
                 border: 0,
                 fontSize: '16px',

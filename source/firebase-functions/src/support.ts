@@ -83,12 +83,12 @@ async function executeUserTool(u: Identity, toolName: string, client: any, local
     const depRes = await client.query("SELECT MIN(created_at) AS earliest_deposit FROM deposits WHERE user_id = $1 AND status = 'finished'", [u.id]);
     const earliest = depRes.rows[0]?.earliest_deposit;
     const elapsedDays = earliest ? Math.floor((Date.now() - new Date(earliest).getTime()) / 86400000) : 0;
-    const lockRemainingDays = earliest ? Math.max(0, 29 - elapsedDays) : 29;
+    const lockRemainingDays = 0;
 
     const reqRes = await client.query('SELECT id, amount_cents, coin, status, created_at FROM withdrawal_requests WHERE user_id = $1 ORDER BY created_at DESC LIMIT 5', [u.id]);
     return {
-      lockRemainingDays,
-      withdrawalsOpen: lockRemainingDays === 0,
+      lockRemainingDays: 0,
+      withdrawalsOpen: true,
       recentWithdrawals: reqRes.rows.map((w: any) => ({
         id: w.id,
         amountUsd: (Number(w.amount_cents) / 100).toFixed(2),

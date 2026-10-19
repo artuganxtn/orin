@@ -15,7 +15,7 @@ import {apiFetch} from '@/lib/client-api';
 import {useCallback,useEffect,useMemo,useRef,useState} from "react";
 import {StartupBrand} from './startup-brand';
 import {haptic} from '@/lib/feedback';
-import {Headphones,Home,Settings,BriefcaseBusiness,Activity,ChartNoAxesCombined,UserRound,Layers3,ArrowDownUp,Bell,BookOpen,Check,CheckCheck,CheckCircle2,ChevronDown,ClipboardList,Clock3,Copy,Download,FileCheck2,FileText,FlaskConical,Globe2,Info,KeyRound,Landmark,LockKeyhole,LogIn,Plus,Radio,RefreshCw,Share2,ShieldCheck,Timer,Wallet,WifiOff} from "lucide-react";
+import {Headphones,Home,Settings,BriefcaseBusiness,Activity,ChartNoAxesCombined,UserRound,Layers3,ArrowDownUp,Bell,BookOpen,Check,CheckCheck,CheckCircle2,ChevronDown,ClipboardList,Clock3,Copy,Download,FileCheck2,FileText,FlaskConical,Globe2,Info,KeyRound,Landmark,LockKeyhole,LogIn,Plus,Radio,RefreshCw,Share2,ShieldCheck,Timer,Wallet,WifiOff,X} from "lucide-react";
 import {Tabs,TabsList,TabsTrigger,TabsContent} from "@/components/ui/tabs";
 import {Select,SelectContent,SelectItem,SelectTrigger,SelectValue} from "@/components/ui/select";
 import {FullPage as Dialog,FullPageContent as DialogContent,FullPageHeader as DialogHeader,FullPageTitle as DialogTitle,FullPageDescription as DialogDescription} from "./full-page";
@@ -185,7 +185,25 @@ function TradingWorkspace({initialState,onStateChange}:{initialState?:LabState;o
      {state?.isAdmin&&<TabsContent value="admin"><div className="admin-title"><button className="btn-outline" onClick={()=>setTab('account')}>{t("حسابي")}</button><h1>{t("إدارة العقود وتوليد الأكواد")}</h1>{firebaseMode()&&<a className="btn-outline" href="/admin/users">{t('إدارة المستخدمين','User management')}</a>}</div><div className="test-banner"><ShieldCheck/><span>{t('تُقفل الشروط عند النشر ويتم توليد كود مخصص لإرساله للمستخدمين عبر القنوات الخاصة.','Terms lock upon publication and generate a secure code for VIP private channel dispatch.')}</span></div><div className="admin-grid"><section className="panel panel-pad"><div className="panel-head"><h2>{t("إنشاء صفقة معتمدة")}</h2><span className="chip">{t("توليد كود")}</span></div><form onSubmit={publish}><div className="form-grid"><div className="field span-two"><label htmlFor="contract-title">{t("عنوان الصفقة")}</label><input id="contract-title" value={title} onChange={e=>setTitle(e.target.value)} maxLength={80} required/></div><div className="field"><label>{t("الأصل المالي")}</label><Choice value={adminAsset} onChange={setAdminAsset} items={Object.entries(ASSETS).map(([k,v])=>[k,`${v} · ${k}`])} label={t("الأصل المرجعي")}/></div><div className="field"><label>{t("اتجاه الصفقة")}</label><Choice value={direction} onChange={setDirection} items={[["BUY","BUY · شراء (صعود)"],["SELL","SELL · بيع (هبوط)"]]} label={t("الاتجاه")}/></div><div className="field"><label>{t("مدة الصفقة")}</label><Choice value={duration} onChange={setDuration} items={[["60","دقيقة واحدة"],["120","دقيقتان"],["180","3 دقائق"],["300","5 دقائق"],["600","10 دقائق"],["900","15 دقيقة"],["1800","30 دقيقة"]]} label={t("مدة العقد")}/></div><div className="field"><label htmlFor="settlement-percent">{t("نسبة أرباح الصفقة المقفلة %")}</label><input id="settlement-percent" value={pct} onChange={e=>setPct(e.target.value)} type="number" step="0.1" min="-100" max="1000" dir="ltr" required/><div className="option-chips" style={{marginTop:8}}>{['15','35','50','75','85','90'].map(p=><button key={p} type="button" className={pct===p?'selected':''} onClick={()=>setPct(p)}>+{p}%</button>)}</div><span className="field-hint">{t("موجبة للربح المحقق للعميل (+85% تعني ربح 850$ لكل 1000$).")}</span></div><div className="field span-two"><label>{t("الحسابات المؤهلة")}</label><Choice value={eligibility} onChange={setEligibility} items={Object.entries(labels)} label={t("فئة الحسابات المؤهلة")}/></div><div className="field"><label htmlFor="window-start">{t("فتح المشاركة")}</label><input id="window-start" type="datetime-local" value={openAt} onChange={e=>setOpenAt(e.target.value)}/><span className="field-hint">{t("فارغ = عند النشر · توقيت جهازك")}</span></div><div className="field"><label htmlFor="window-end">{t("آخر موعد للمشاركة")}</label><input id="window-end" type="datetime-local" value={closeAt} onChange={e=>setCloseAt(e.target.value)}/><span className="field-hint">{t("فارغ = بعد 24 ساعة من فتحها")}</span></div></div><div className="settlement-box"><p>{t("مثال على مبلغ افتراضي قدره 1,000 دولار")}</p><div className={`settlement-value ${Number(pct)<0?'loss':'gain'}`} dir="ltr">{Number.isFinite(Number(pct))?`${Number(pct)>=0?'+':''}${money(resultCents(100000,Math.round(Number(pct)*100)))}`:'—'} USD</div><p>{t("إجمالي المسترجع للمحفظة:")} <b className="num gain">{Number.isFinite(Number(pct))?money(100000+resultCents(100000,Math.round(Number(pct)*100))):'—'} USD</b></p></div><button className="btn-primary full" type="submit" disabled={busy}><LockKeyhole/> {t(busy?'جار الحفظ وتوليد الكود…':'نشر الصفقة وتوليد كود الدخول')}</button></form></section><aside><section className="panel panel-pad"><h2 style={{marginBottom:20}}>{t("من النشر إلى الإيصال")}</h2><div className="security-list"><div className="security-item"><LockKeyhole/><div>{t("شروط مقفلة")}<p>{t("الزوج والاتجاه والمدة والنسبة والأهلية تُحفظ قبل المشاركة.")}</p></div></div><div className="security-item"><FileCheck2/><div>{t("بصمة SHA-256")}<p>{t("مرجع للتحقق من تطابق الشروط والإيصال.")}</p></div></div><div className="security-item"><Bell/><div>{t("إشعارات داخل المنصة")}<p>{t("تظهر الدعوة للحسابات المؤهلة، والنتيجة لصاحب المشاركة.")}</p></div></div><div className="security-item"><ArrowDownUp/><div>{t("تسوية متوازنة")}<p>{t("حجز الرصيد ثم إعادة أصل المبلغ والنتيجة الافتراضية.")}</p></div></div></div></section>{published&&<section className="panel panel-pad admin-published-card" style={{marginTop:16}}><div className="panel-head"><div className="admin-pub-title"><CheckCircle2 size={22} className="gain"/><h2>{t("تم إنشاء الصفقة وتوليد الكود")}</h2></div><span className="chip chip-green">{t("جاهز للنشر")}</span></div><p className="published-title-line"><b>{published.title}</b> · <span className="num">{published.asset} · {published.direction}</span> · <b className="num gain">{percent(published.settlement_bps)}</b></p><div className="generated-code-display"><span className="code-label">{t("كود الصفقة المعتمد للعملاء:")}</span><div className="code-box-hero"><strong className="mono code-big">{published.code}</strong><button className="btn-copy-code" type="button" onClick={()=>void copy(published.code)}><Copy size={16}/> {t("نسخ الكود")}</button></div></div><div className="channel-share-box"><div className="channel-share-header"><Share2 size={16}/><b>{t("مشاركة الصفقة عبر القنوات الخاصة (Telegram / WhatsApp)")}</b></div><pre className="channel-msg-preview">{formatChannelMessage(published)}</pre><div className="channel-share-buttons"><button className="btn-primary" type="button" onClick={()=>void copy(formatChannelMessage(published))}><ClipboardList size={16}/> {t("نسخ الرسالة الجاهزة للقناة")}</button><button className="btn-outline btn-telegram" type="button" onClick={()=>window.open('https://t.me/share/url?url='+encodeURIComponent(published.code)+'&text='+encodeURIComponent(formatChannelMessage(published)),'_blank')}>{t("إرسال عبر Telegram")}</button></div></div></section>}</aside></div></TabsContent>}</Tabs>
    <footer className="footer"><span className="footer-brand"><b>ORIN</b>{t("أورين")}</span><div className="btn-row"><span>{t('حساب حقيقي · USD','Real account · USD')}</span></div></footer>
    </main>
-   <Dialog open={navigation.path.endsWith('/success')&&!!state?.positions.some(p=>p.contract.id===navigation.path.split('/')[2])} onOpenChange={v=>{if(!v)navigation.navigate('/positions')}}><DialogContent><DialogHeader><DialogTitle>{t('تم تأكيد المشاركة','Participation confirmed')}</DialogTitle><DialogDescription>{t('تم حجز مبلغ التداول وبدأ توقيت العقد.','The trading amount is reserved and the contract timer has started.')}</DialogDescription></DialogHeader><div className='orin-empty'><CheckCircle2/><h2>{t('تمت العملية بنجاح','Completed successfully')}</h2><button className='btn-primary' onClick={()=>navigation.navigate('/positions')}>{t('عرض المراكز','View positions')}</button></div></DialogContent></Dialog>
+   {(() => {
+     if (!navigation.path.endsWith('/success')) return null;
+     const sId = navigation.path.split('/')[2];
+     const pos = state?.positions.find(p => p.contract.id === sId);
+     const c = state?.contracts.find(item => item.id === sId) ?? pos?.contract ?? resolvedContract;
+     if (!c) return null;
+     return (
+       <TradeSuccessModal
+         open={true}
+         contract={c}
+         position={pos}
+         now={now}
+         onClose={() => {
+           navigation.navigate('/trade');
+           setTab('demo');
+         }}
+       />
+     );
+   })()}
   <Dialog open={detailsOpen} onOpenChange={v=>{if(!v){setDetailsOpen(false);navigation.back('/trade')}}}><DialogContent className="popup" dir={prefs.chartLocale==='ar'?'rtl':'ltr'}><DialogHeader><DialogTitle>{t('تفاصيل العقد','Contract details')}</DialogTitle><DialogDescription>{displayText(selected?.title??'')} · {t('عقد تداول مقفل الشروط','Locked-terms trading contract')}</DialogDescription></DialogHeader>{selected&&<><div className="details-grid"><div><small>{t('الأصل والاتجاه','Asset & direction')}</small><b className="num">{selected.asset} · {selected.direction}</b></div><div><small>{t('المدة بعد التأكيد','Duration after confirmation')}</small><b>{fmtDur(selected.duration_sec)}</b></div><div><small>{t('النسبة المقفلة مسبقًا','Pre-locked settlement')}</small><b className="num">{percent(selected.settlement_bps)}</b></div><div><small>{t('آخر وقت للمشاركة','Join before')}</small><b>{date(selected.closes_at)}</b></div></div><label className="account-form">{t('مبلغ التداول (USD)','Trading amount (USD)')}<input type="number" min="1" step="0.01" value={amount} onChange={e=>setAmount(e.target.value)}/></label><p className="settings-footnote">{t('التسوية ثابتة وفق الشروط المقفلة، ومستقلة عن الشارت. راجع النتيجة قبل التأكيد.','Settlement follows locked terms and is independent of the chart. Review the result before confirming.')}</p><button className="btn-primary full" disabled={busy||now<selected.opens_at||now>=selected.closes_at||!!active} onClick={()=>{setDetailsOpen(false);startJoin();}}>{t('مراجعة وتأكيد','Review & confirm')}</button></>}</DialogContent></Dialog>
    <Dialog open={!!funding} onOpenChange={v=>{if(!v)setFunding(null);}}><DialogContent className="popup"><DialogHeader><DialogTitle>{funding}</DialogTitle><DialogDescription>{t('حساب حقيقي · USD','Real account · USD')}</DialogDescription></DialogHeader>{funding&&<FundingPanel key={((activeTradingAccount(state?.accountDirectory)?.type==='real'?activeTradingAccount(state?.accountDirectory):state?.accountDirectory?.accounts.find(a=>a.type==='real'))?.id??'none')+':'+funding} account={(activeTradingAccount(state?.accountDirectory)?.type==='real'?activeTradingAccount(state?.accountDirectory):state?.accountDirectory?.accounts.find(a=>a.type==='real'))??activeTradingAccount(state?.accountDirectory)} kind={funding==='إيداع'?'deposit':'withdraw'} onBalanceChange={()=>void refresh()}/>}</DialogContent></Dialog>
    <Sheet open={notifyOpen} onOpenChange={setNotifyOpen}><SheetContent side="left" style={{width:'min(420px,100%)'}} dir="rtl"><SheetHeader style={{paddingTop:50}}><SheetTitle>{t("الإشعارات")}</SheetTitle><SheetDescription>{t('دعوات مؤهلة ونتائج تسوياتك المعتمدة.','Eligible invitations and approved settlement results.')}</SheetDescription></SheetHeader><div className="drawer-body">{state?.notifications.length?state.notifications.map(n=><div className="notice-item" key={n.id}><h3>{displayText(n.title??'')}</h3><p>{displayText(n.message??'')}</p><small>{date(n.created_at)}</small>{n.contract_id&&<button className="text-action" style={{display:'block',marginTop:10}} onClick={()=>{const c=state.contracts.find(c=>c.id===n.contract_id);if(c)chooseContract(c);setNotifyOpen(false);}}>{t("فتح العقد")}</button>}</div>):<Empty title={t("لا توجد إشعارات")} detail={t("ستظهر الدعوات الجديدة ونتائج التسوية هنا.")}/>}<p className="small muted">{t("إشعارات الهاتف خارج المنصة غير مربوطة في هذه النسخة.")}</p></div></SheetContent></Sheet>
@@ -199,4 +217,221 @@ function ReceiptView({receipt}:{receipt:Receipt}){
  const {t,prefs,number}=useOrin();const money=(c:number)=>number(c/100);const date=(n:number)=>new Date(n).toLocaleString(prefs.chartLocale+'-u-nu-latn',{timeZone:prefs.timezone});
  const r=JSON.parse(receipt.payload) as {receiptId:string;contractCode:string;asset:string;direction:string;amountCents:number;resultCents:number;returnedCents:number;durationSec:number;lockedSettlementBps:number;startedAt:number;endsAt:number;processedAt:number;contractHash:string;contractId:string;};
  return <><div className="receipt-title"><FileCheck2/><div><h3 className="mono">{r.receiptId}</h3><p className="small muted">{r.asset} · {r.direction}{t(" · تسوية معتمدة"," · Confirmed settlement")}</p></div></div><div className="details-grid"><div><small>{t("كود العقد")}</small><span className="mono small">{r.contractCode}</span></div><div><small>{t("المبلغ المخصص")}</small><span className="num">{money(r.amountCents)} USD</span></div><div><small>{t("النسبة المقفلة")}</small><span className="num">{percent(r.lockedSettlementBps)}</span></div><div><small>{t("نتيجة التسوية","Settlement outcome")}</small><span className={`num ${r.resultCents<0?'loss':'gain'}`}>{money(r.resultCents)} USD</span></div><div><small>{t("المبلغ المعاد للمحفظة")}</small><span className="num">{money(r.returnedCents)} USD</span></div><div><small>{t("المدة")}</small><span>{r.durationSec < 60 ? `${r.durationSec} ${t('ثانية','sec')}` : `${Math.round(r.durationSec / 60)} ${t('دقيقة','min')}`}</span></div><div><small>{t("بداية المشاركة")}</small><span>{date(r.startedAt)}</span></div><div><small>{t("انتهاء المدة / الاستحقاق")}</small><span>{date(r.endsAt)}</span></div><div><small>{t("وقت المعالجة الفعلية")}</small><span>{date(r.processedAt)}</span></div></div><p className="small muted">{t("معرّف العقد")}</p><div className="hash-box">{r.contractId}</div><p className="small muted paper-hash">{t("بصمة شروط العقد")}</p><div className="hash-box">{r.contractHash}</div><p className="small muted paper-hash">{t("بصمة الإيصال SHA-256")}</p><div className="hash-box">{receipt.hash}</div><div className="btn-row no-print"><button className="btn-primary" onClick={()=>download(`${r.receiptId}.json`,JSON.stringify({receipt:JSON.parse(receipt.payload),sha256:receipt.hash},null,2))}><Download/>{t("تنزيل الإيصال")}</button><button className="btn-outline" onClick={()=>window.print()}>{t("طباعة")}</button></div></>;
+}
+
+function TradeSuccessModal({
+  open,
+  contract,
+  position,
+  now,
+  onClose
+}: {
+  open: boolean;
+  contract: any;
+  position?: any;
+  now: number;
+  onClose: () => void;
+}) {
+  const { t, number } = useOrin();
+  if (!open || !contract) return null;
+
+  const rawAsset = String(contract.asset || 'GBPUSD').replace(/[^a-zA-Z0-9]/g, '');
+  const isBuy = contract.direction === 'BUY';
+  const amountStr = position?.amount_cents ? number(position.amount_cents / 100) : '1,000';
+
+  const durSec = Number(contract.duration_sec || 120);
+  const startedAt = position?.started_at
+    ? (typeof position.started_at === 'number' ? position.started_at : new Date(position.started_at).getTime())
+    : (now - 1000);
+  const endsAt = position?.ends_at
+    ? (typeof position.ends_at === 'number' ? position.ends_at : new Date(position.ends_at).getTime())
+    : (startedAt + durSec * 1000);
+
+  const remainingSec = Math.max(0, Math.floor((endsAt - now) / 1000));
+  const mm = String(Math.floor(remainingSec / 60)).padStart(2, '0');
+  const ss = String(remainingSec % 60).padStart(2, '0');
+  const progressRatio = Math.max(0, Math.min(1, (now - startedAt) / Math.max(1, endsAt - startedAt)));
+  const progressPercent = Math.round(progressRatio * 100);
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 9999,
+        background: 'rgba(6, 17, 31, 0.65)',
+        backdropFilter: 'blur(6px)',
+        WebkitBackdropFilter: 'blur(6px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '16px',
+        boxSizing: 'border-box'
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        dir="rtl"
+        style={{
+          width: '100%',
+          maxWidth: '380px',
+          background: '#ffffff',
+          borderRadius: '24px',
+          padding: '24px 20px',
+          boxShadow: '0 20px 40px rgba(0, 0, 0, 0.25)',
+          position: 'relative',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          boxSizing: 'border-box'
+        }}
+      >
+        {/* Close Button X */}
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label={t('إغلاق', 'Close')}
+          style={{
+            position: 'absolute',
+            top: '16px',
+            right: '16px',
+            border: 0,
+            background: 'none',
+            color: '#64748b',
+            cursor: 'pointer',
+            padding: '4px',
+            display: 'grid',
+            placeItems: 'center'
+          }}
+        >
+          <X size={20} />
+        </button>
+
+        {/* Center Blue Circle Checkmark */}
+        <div
+          style={{
+            width: '58px',
+            height: '58px',
+            borderRadius: '50%',
+            border: '2.5px solid #0788ff',
+            background: '#eef6ff',
+            display: 'grid',
+            placeItems: 'center',
+            margin: '4px 0 12px'
+          }}
+        >
+          <Check size={30} color="#0788ff" strokeWidth={3} />
+        </div>
+
+        {/* Title & Subtitle */}
+        <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: '#06111f', textAlign: 'center' }}>
+          {t('تم تأكيد المشاركة', 'Participation Confirmed')}
+        </h2>
+        <p style={{ margin: '4px 0 16px', fontSize: '13.5px', color: '#64748b', textAlign: 'center' }}>
+          {t('بدأ توقيت الصفقة', 'Trade timer started')}
+        </p>
+
+        {/* Strip matching Image 3: [● نشطة] [GBPUSD] [شراء] */}
+        <div
+          style={{
+            width: '100%',
+            background: '#f8fafc',
+            border: '1px solid #e2e8f0',
+            borderRadius: '14px',
+            padding: '10px 14px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            boxSizing: 'border-box',
+            marginBottom: '14px'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />
+            <span style={{ fontSize: '13.5px', fontWeight: 700, color: '#166534' }}>
+              {t('نشطة', 'Active')}
+            </span>
+          </div>
+
+          <div style={{ fontSize: '16px', fontWeight: 800, color: '#0f172a', letterSpacing: '0.5px' }} dir="ltr">
+            {rawAsset}
+          </div>
+
+          <span
+            style={{
+              padding: '4px 12px',
+              borderRadius: '8px',
+              fontSize: '12.5px',
+              fontWeight: 700,
+              background: isBuy ? '#dcfce7' : '#fee2e2',
+              color: isBuy ? '#15803d' : '#dc2626'
+            }}
+          >
+            {isBuy ? t('شراء', 'BUY') : t('بيع', 'SELL')}
+          </span>
+        </div>
+
+        {/* Info Rows */}
+        <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '14px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '14px' }}>
+            <span style={{ color: '#64748b' }}>{t('المبلغ', 'Amount')}</span>
+            <b style={{ color: '#0f172a', fontWeight: 700 }} dir="ltr">
+              {amountStr} USD
+            </b>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '14px' }}>
+            <span style={{ color: '#64748b' }}>{t('الوقت المتبقي', 'Time Remaining')}</span>
+            <b style={{ color: '#0f172a', fontWeight: 700, fontFamily: 'monospace', fontSize: '15px' }} dir="ltr">
+              {mm}:{ss}
+            </b>
+          </div>
+        </div>
+
+        {/* Progress Bar */}
+        <div
+          style={{
+            width: '100%',
+            height: '6px',
+            background: '#e2e8f0',
+            borderRadius: '999px',
+            overflow: 'hidden',
+            marginBottom: '20px'
+          }}
+        >
+          <div
+            style={{
+              height: '100%',
+              width: `${progressPercent}%`,
+              background: '#0788ff',
+              borderRadius: '999px',
+              transition: 'width 0.4s ease'
+            }}
+          />
+        </div>
+
+        {/* Action Button */}
+        <button
+          type="button"
+          onClick={onClose}
+          style={{
+            width: '100%',
+            height: '50px',
+            borderRadius: '14px',
+            border: 0,
+            background: '#0788ff',
+            color: '#ffffff',
+            fontSize: '15px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            boxShadow: '0 4px 12px rgba(7, 136, 255, 0.3)'
+          }}
+        >
+          {t('متابعة الصفقة', 'Track Trade')}
+        </button>
+      </div>
+    </div>
+  );
 }

@@ -187,3 +187,31 @@ export async function campaign(u: Identity, input: Data, now = Date.now()) {
     throw new NotificationError('عملية غير مدعومة.', 400);
   });
 }
+
+export async function createNotice(client: any, opts: {
+  userId: string;
+  title: string;
+  message: string;
+  category?: string;
+  deepLink?: string;
+  now?: number;
+}) {
+  const noticeId = 'notif-' + randomUUID();
+  const ts = opts.now || Date.now();
+  const noticeData = {
+    id: noticeId,
+    user_id: opts.userId,
+    title: opts.title,
+    message: opts.message,
+    category: opts.category || 'finance',
+    created_at: ts,
+    deep_link: opts.deepLink || '/notifications'
+  };
+  await client.query(
+    `INSERT INTO docs (collection, id, owner_id, data, updated_at)
+     VALUES ('orinNotices', $1, $2, $3::jsonb, NOW())
+     ON CONFLICT (collection, id) DO UPDATE SET data = $3::jsonb, updated_at = NOW()`,
+    [noticeId, opts.userId === '*' ? null : opts.userId, JSON.stringify(noticeData)]
+  );
+  return noticeData;
+}

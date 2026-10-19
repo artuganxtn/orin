@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { withTx } from './db.ts';
 import { requireVerifiedKyc } from './kyc.ts';
+import { createNotice } from './notifications.ts';
 
 export class WithdrawalError extends Error {
   constructor(message: string, public status = 400, public code = 'withdrawal_error') {
@@ -90,22 +91,10 @@ export async function requestWithdrawal(
       `SELECT data FROM docs WHERE collection = 'contract_wallets' AND id = $1 FOR UPDATE`,
       [accountId]
     );
-    const walletData = docRes.rows[0]?.data?.wallet;
-    if (walletData && walletData.perpetualCents !== undefined && walletData.perpetualCents !== null) {
-      const perpetualCents = BigInt(Math.max(0, Number(walletData.perpetualCents || 0)));
-      const withdrawablePerp = perpetualCents - pendingCents;
-      if (withdrawablePerp < BigInt(amountCents)) {
-        throw new WithdrawalError(
-          'أموال العقود الآجلة مقفلة ولا يمكن سحبها مباشرة. يرجى تحويل الرصيد المطلوب إلى العقود الفورية أولاً للسحب. / Futures balance is locked. Transfer funds to Spot (العقود الفورية) before withdrawing.',
-          409,
-          'futures_locked'
-        );
-      }
-    }
 
     const availableCash = BigInt(account.balance_cents) - BigInt(account.reserved_cents);
     if (availableCash < BigInt(amountCents) || availableCash <= 0n) {
-      throw new WithdrawalError('المبلغ المطلوب يتجاوز الرصيد النقدي المتاح في الحساب. / Requested debit exceeds withdrawable cash', 409);
+      throw new WithdrawalError('المبلغ المطلوب يتجاوز الرصيد المتاح للسحب في الحساب.', 409);
     }
 
     // Always 5% withdrawal fee
@@ -180,6 +169,26 @@ export async function requestWithdrawal(
        ON CONFLICT (id) DO NOTHING`,
       ['appr-' + wdId, user.id, accountId, -amountCents, Number(account.balance_cents), Number(account.balance_cents) - amountCents, `طلب سحب ${amountCents / 100} ${coin} إلى ${address}`, wdId, user.id]
     );
+
+    // In-app Notification for the User
+    await createNotice(client, {
+      userId: user.id,
+      title: 'طلب سحب قيد المراجعة',
+      message: `تم استلام طلب سحب بقيمة ${(amountCents / 100).toFixed(2)} USDT بنجاح. تم خصم الرصيد تلقائياً والطلب قيد المراجعة والتنفيذ.`,
+      category: 'finance',
+      deepLink: '/withdraw'
+    });
+
+    // In-app Notification for the Admin
+    const profRes = await client.query('SELECT email FROM profiles WHERE id = $1', [user.id]);
+    const userEmail = profRes.rows[0]?.email || user.id;
+    await createNotice(client, {
+      userId: '*',
+      title: 'طلب سحب جديد بانتظار الموافقة',
+      message: `المستخدم ${userEmail} قدم طلب سحب بقيمة ${(amountCents / 100).toFixed(2)} USDT (${coin}).`,
+      category: 'finance',
+      deepLink: '/admin/withdrawals'
+    });
 
     return {
       ok: true,
@@ -343,6 +352,14 @@ export async function markWithdrawalPaid(
       [txHash, wdId]
     );
 
+    await createNotice(client, {
+      userId: wd.user_id,
+      title: 'تم تنفيذ السحب بنجاح',
+      message: `تمت الموافقة وتحويل مبلغ ${(Number(wd.net_amount_cents) / 100).toFixed(2)} USDT إلى محفظتك بنجاح. معرّف التحويل: ${txHash || 'مكتمل'}.`,
+      category: 'finance',
+      deepLink: '/activity'
+    });
+
     return {
       ok: true,
       withdrawalId: wdId,
@@ -423,6 +440,14 @@ export async function rejectWithdrawal(
        WHERE reference = $3`,
       [admin.id, reason, wdId]
     );
+
+    await createNotice(client, {
+      userId: wd.user_id,
+      title: 'تم رفض طلب السحب',
+      message: `تم رفض طلب السحب (${reason}) وتمت إعادة المبلغ (${(Number(wd.amount_cents) / 100).toFixed(2)} USDT) بالكامل إلى محفظتك.`,
+      category: 'finance',
+      deepLink: '/withdraw'
+    });
 
     return {
       ok: true,

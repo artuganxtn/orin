@@ -155,15 +155,15 @@ export async function join(u: Identity, input: any, now = Date.now()) {
     if (accRes.rows.length === 0) throw new ApiError('حساب تداول غير موجود.', 404);
     const acc = accRes.rows[0];
 
-    // 4. Unique position check (idempotent retry)
-    const posId = hash(`position:${u.id}:${c.id}`);
-    const existingPos = await client.query(`SELECT * FROM positions WHERE id = $1`, [posId]);
+    // 4. Strict One-Time Code Usage Check per User
+    const existingPos = await client.query(
+      `SELECT id, status FROM positions WHERE user_id = $1 AND contract_id = $2`,
+      [u.id, c.id]
+    );
     if (existingPos.rows.length > 0) {
-      if (Number(existingPos.rows[0].amount_cents) !== amount) {
-        throw new ApiError('سبق الاشتراك بمبلغ مختلف.', 409);
-      }
-      return { id: posId, reused: true };
+      throw new ApiError('تم استخدام كود هذه الصفقة مسبقًا. لا يمكن استخدام الكود أكثر من مرة واحدة لكل مستخدم.', 409);
     }
+    const posId = hash(`position:${u.id}:${c.id}`);
 
     const useBonus = input.useBonus === true;
     if (useBonus) {
@@ -659,11 +659,23 @@ export async function action(u: Identity, input: any, now = Date.now()) {
 
 export async function verify(u: Identity, code: string) {
   return await withTx(async (client) => {
-    const res = await client.query('SELECT * FROM contracts WHERE code = $1 OR hash = $1', [code]);
+    const rawCode = String(code || '').trim().toUpperCase();
+    const res = await client.query('SELECT * FROM contracts WHERE code = $1 OR hash = $1', [rawCode]);
     if (res.rowCount === 0) {
-      throw new ApiError('العقد غير صالح أو لم يتم العثور عليه.', 404);
+      throw new ApiError('كود الصفقة غير صالح أو لم يتم العثور عليه.', 404);
     }
-    return { ok: true, contract: res.rows[0] };
+    const contract = res.rows[0];
+
+    // Strictly verify if user has already participated in this contract
+    const prevPositions = await client.query(
+      'SELECT id, status, amount_cents FROM positions WHERE user_id = $1 AND contract_id = $2',
+      [u.id, contract.id]
+    );
+    if (prevPositions.rows.length > 0) {
+      throw new ApiError('تم استخدام كود هذه الصفقة مسبقًا من قِبل هذا الحساب. لا يمكن استخدام الكود أكثر من مرة واحدة.', 409);
+    }
+
+    return { ok: true, contract };
   });
 }
 
