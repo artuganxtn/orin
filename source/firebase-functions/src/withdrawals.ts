@@ -1,7 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { withTx } from './db.ts';
 import { requireVerifiedKyc } from './kyc.ts';
-import { createNotice } from './notifications.ts';
+import {
+  createNotice,
+  notifyWithdrawalSubmitted,
+  notifyWithdrawalApproved,
+  notifyWithdrawalPaid,
+  notifyWithdrawalRejected
+} from './notifications.ts';
 
 export class WithdrawalError extends Error {
   constructor(message: string, public status = 400, public code = 'withdrawal_error') {
@@ -97,6 +103,20 @@ export async function requestWithdrawal(
       throw new WithdrawalError('المبلغ المطلوب يتجاوز الرصيد المتاح للسحب في الحساب.', 409);
     }
 
+    // Strict wallet separation:
+    // perpetualCents = Permanent Futures (trading only, CANNOT be withdrawn!)
+    // futuresCents = Withdrawable Futures (withdrawable)
+    let wState = docRes.rows[0]?.data;
+    if (wState?.wallet) {
+      const curFutures = Math.max(0, Number(wState.wallet.futuresCents || 0));
+      if (curFutures < amountCents) {
+        throw new WithdrawalError(
+          'المبلغ المطلوب يتجاوز الرصيد المتاح في العقود الآجلة (محفظة السحب). رصيد العقود الدائمة مخصص للتداول فقط ولا يمكن سحبه مباشرة. يرجى تحويل المبلغ المراد سحبه من العقود الدائمة إلى العقود الآجلة أولاً.',
+          409
+        );
+      }
+    }
+
     // Always 5% withdrawal fee
     const feeCents = Math.round(amountCents * 0.05);
     const netAmountCents = amountCents - feeCents;
@@ -122,44 +142,30 @@ export async function requestWithdrawal(
       [journalId, user.id, accountId, -amountCents, amountCents]
     );
 
-    // Deduct amountCents from perpetualCents and futuresCents in contract_wallets doc if present
-    const newTotalCents = Math.max(0, Number(account.balance_cents) - amountCents);
-    if (docRes.rows[0]?.data) {
-      const wState = docRes.rows[0].data;
-      if (wState.wallet) {
-        const curPerp = Math.max(0, Number(wState.wallet.perpetualCents || 0));
-        const perpDeduct = Math.min(curPerp, amountCents);
-        const remDeduct = amountCents - perpDeduct;
-        wState.wallet.perpetualCents = Math.max(0, curPerp - perpDeduct);
-        wState.wallet.futuresCents = Math.max(0, Number(wState.wallet.futuresCents || 0) - remDeduct);
+    // Deduct amountCents strictly from futuresCents in contract_wallets doc if present.
+    // perpetualCents (Permanent Futures / Trading) is completely protected and CAN NEVER BE WITHDRAWN!
+    if (wState?.wallet) {
+      wState.wallet.futuresCents = Math.max(0, Number(wState.wallet.futuresCents || 0) - amountCents);
+      wState.wallet.version = (wState.wallet.version || 1) + 1;
+      wState.wallet.updatedAt = Date.now();
 
-        // Ensure wallet total strictly never exceeds new remaining account cash
-        if ((wState.wallet.perpetualCents + wState.wallet.futuresCents) > newTotalCents) {
-          wState.wallet.perpetualCents = Math.min(wState.wallet.perpetualCents, newTotalCents);
-          wState.wallet.futuresCents = Math.max(0, newTotalCents - wState.wallet.perpetualCents);
-        }
-
-        wState.wallet.version = (wState.wallet.version || 1) + 1;
-        wState.wallet.updatedAt = Date.now();
-
-        if (Array.isArray(wState.operations)) {
-          wState.operations.push({
-            id: 'wd-op-' + wdId,
-            kind: 'withdrawal',
-            amountCents,
-            feeCents,
-            netAmountCents,
-            afterFuturesCents: wState.wallet.futuresCents,
-            afterPerpetualCents: wState.wallet.perpetualCents,
-            createdAt: Date.now()
-          });
-        }
-
-        await client.query(
-          `UPDATE docs SET data = $1, updated_at = NOW() WHERE collection = 'contract_wallets' AND id = $2`,
-          [JSON.stringify(wState), accountId]
-        );
+      if (Array.isArray(wState.operations)) {
+        wState.operations.push({
+          id: 'wd-op-' + wdId,
+          kind: 'withdrawal',
+          amountCents,
+          feeCents,
+          netAmountCents,
+          afterFuturesCents: wState.wallet.futuresCents,
+          afterPerpetualCents: wState.wallet.perpetualCents,
+          createdAt: Date.now()
+        });
       }
+
+      await client.query(
+        `UPDATE docs SET data = $1, updated_at = NOW() WHERE collection = 'contract_wallets' AND id = $2`,
+        [JSON.stringify(wState), accountId]
+      );
     }
 
     // Also register an approval record so it appears under financial approvals
@@ -170,26 +176,21 @@ export async function requestWithdrawal(
       ['appr-' + wdId, user.id, accountId, -amountCents, Number(account.balance_cents), Number(account.balance_cents) - amountCents, `طلب سحب ${amountCents / 100} ${coin} إلى ${address}`, wdId, user.id]
     );
 
-    // In-app Notification for the User
-    await createNotice(client, {
-      userId: user.id,
-      title: 'طلب سحب قيد المراجعة',
-      message: `تم استلام طلب سحب بقيمة ${(amountCents / 100).toFixed(2)} USDT بنجاح. تم خصم الرصيد تلقائياً والطلب قيد المراجعة والتنفيذ.`,
-      category: 'financial',
-      deepLink: '/withdraw'
-    });
-
-    // In-app Notification for the Admin (Admin role ONLY)
+    // Enhanced In-app Notifications for the User & Admin
     const profRes = await client.query('SELECT email FROM profiles WHERE id = $1', [user.id]);
     const userEmail = profRes.rows[0]?.email || user.id;
-    await createNotice(client, {
-      userId: 'admin',
-      targetRole: 'admin',
-      title: 'طلب سحب جديد بانتظار الموافقة',
-      message: `المستخدم ${userEmail} قدم طلب سحب بقيمة ${(amountCents / 100).toFixed(2)} USDT (${coin}).`,
-      category: 'financial',
-      deepLink: '/admin/withdrawals'
+
+    await notifyWithdrawalSubmitted(client, {
+      userId: user.id,
+      wdId,
+      amountCents,
+      feeCents,
+      netAmountCents,
+      coin,
+      address,
+      userEmail
     });
+
 
     return {
       ok: true,
@@ -279,16 +280,17 @@ export async function approveWithdrawal(
       [apprId, appr.reference]
     );
 
-    // Notify the user of withdrawal approval
+    // Notify the user of withdrawal approval with rich details
     const wdRes = await client.query('SELECT * FROM withdrawal_requests WHERE id = $1', [appr.reference]);
     if (wdRes.rowCount > 0) {
       const wd = wdRes.rows[0];
-      await createNotice(client, {
+      await notifyWithdrawalApproved(client, {
         userId: wd.user_id,
-        title: 'تمت الموافقة على طلب السحب',
-        message: `تمت الموافقة على طلب السحب بقيمة ${(Number(wd.amount_cents) / 100).toFixed(2)} USDT (${wd.coin}). سيتم إرسال الحوالة إلى عنوان محفظتك قريباً.`,
-        category: 'financial',
-        deepLink: '/activity'
+        wdId: wd.id,
+        amountCents: Number(wd.amount_cents),
+        netAmountCents: Number(wd.net_amount_cents),
+        coin: wd.coin,
+        address: wd.address
       });
     }
 
@@ -366,12 +368,14 @@ export async function markWithdrawalPaid(
       [txHash, wdId]
     );
 
-    await createNotice(client, {
+    await notifyWithdrawalPaid(client, {
       userId: wd.user_id,
-      title: 'تم تنفيذ السحب بنجاح',
-      message: `تمت الموافقة وتحويل مبلغ ${(Number(wd.net_amount_cents) / 100).toFixed(2)} USDT إلى محفظتك بنجاح. معرّف التحويل: ${txHash || 'مكتمل'}.`,
-      category: 'financial',
-      deepLink: '/activity'
+      wdId: wd.id,
+      amountCents: Number(wd.amount_cents),
+      netAmountCents: Number(wd.net_amount_cents),
+      coin: wd.coin,
+      address: wd.address,
+      txHash
     });
 
     return {
@@ -422,7 +426,7 @@ export async function rejectWithdrawal(
         [refundJournalId, wd.user_id, wd.account_id, amountCents, -amountCents]
       );
 
-      // Restore contract_wallets perpetualCents
+      // Restore contract_wallets futuresCents (withdrawable futures)
       const docRes = await client.query(
         `SELECT data FROM docs WHERE collection = 'contract_wallets' AND id = $1 FOR UPDATE`,
         [wd.account_id]
@@ -430,7 +434,7 @@ export async function rejectWithdrawal(
       if (docRes.rows[0]?.data) {
         const wState = docRes.rows[0].data;
         if (wState.wallet) {
-          wState.wallet.perpetualCents = (Number(wState.wallet.perpetualCents) || 0) + amountCents;
+          wState.wallet.futuresCents = (Number(wState.wallet.futuresCents) || 0) + amountCents;
           wState.wallet.version = (wState.wallet.version || 1) + 1;
           wState.wallet.updatedAt = Date.now();
           await client.query(
@@ -455,12 +459,12 @@ export async function rejectWithdrawal(
       [admin.id, reason, wdId]
     );
 
-    await createNotice(client, {
+    await notifyWithdrawalRejected(client, {
       userId: wd.user_id,
-      title: 'تم رفض طلب السحب',
-      message: `تم رفض طلب السحب (${reason}) وتمت إعادة المبلغ (${(Number(wd.amount_cents) / 100).toFixed(2)} USDT) بالكامل إلى محفظتك.`,
-      category: 'financial',
-      deepLink: '/withdraw'
+      wdId: wd.id,
+      amountCents: Number(wd.amount_cents),
+      coin: wd.coin,
+      reason
     });
 
     return {

@@ -235,6 +235,7 @@ export async function createNotice(client: any, opts: {
   message: string;
   category?: string;
   deepLink?: string;
+  metadata?: Record<string, any>;
   now?: number;
 }) {
   const noticeId = 'notif-' + randomUUID();
@@ -248,7 +249,8 @@ export async function createNotice(client: any, opts: {
     message: opts.message,
     category: cat,
     created_at: ts,
-    deep_link: opts.deepLink || '/notifications'
+    deep_link: opts.deepLink || '/notifications',
+    ...(opts.metadata ? { metadata: opts.metadata } : {})
   };
   if (targetRole) {
     noticeData.target_role = targetRole;
@@ -262,4 +264,254 @@ export async function createNotice(client: any, opts: {
   );
   return noticeData;
 }
+
+export async function notifyWithdrawalSubmitted(client: any, p: {
+  userId: string;
+  wdId: string;
+  amountCents: number;
+  feeCents: number;
+  netAmountCents: number;
+  coin: string;
+  address: string;
+  userEmail?: string;
+}) {
+  const amountUsd = (p.amountCents / 100).toFixed(2);
+  const feeUsd = (p.feeCents / 100).toFixed(2);
+  const netUsd = (p.netAmountCents / 100).toFixed(2);
+  const shortAddr = p.address.length > 18 ? `${p.address.slice(0, 8)}...${p.address.slice(-6)}` : p.address;
+
+  // 1. User notice (financial category, detailed breakdown)
+  await createNotice(client, {
+    userId: p.userId,
+    title: 'طلب سحب قيد المراجعة والتدقيق ⏳',
+    message: `تم استلام طلب السحب رقم (${p.wdId}) بقيمة ${amountUsd} USDT بنجاح.\n` +
+             `• المبلغ المطلوب: ${amountUsd} USDT\n` +
+             `• رسوم المعالجة (5%): ${feeUsd} USDT\n` +
+             `• الصافي المستحق: ${netUsd} USDT (${p.coin})\n` +
+             `• عنوان المحفظة: ${shortAddr}\n` +
+             `الطلب قيد المراجعة والتحقق المالي من قِبل إدارة ORIN.`,
+    category: 'financial',
+    deepLink: '/withdraw',
+    metadata: {
+      type: 'withdrawal_submitted',
+      withdrawalId: p.wdId,
+      amountCents: p.amountCents,
+      feeCents: p.feeCents,
+      netAmountCents: p.netAmountCents,
+      coin: p.coin,
+      address: p.address,
+      status: 'requested'
+    }
+  });
+
+  // 2. Admin notice
+  const email = p.userEmail || p.userId;
+  await createNotice(client, {
+    userId: 'admin',
+    targetRole: 'admin',
+    title: 'طلب سحب جديد بانتظار الاعتماد 🔔',
+    message: `المستخدم ${email} قدم طلب سحب بقيمة ${amountUsd} USDT (${p.coin}) إلى العنوان ${shortAddr}. المعرّف: ${p.wdId}.`,
+    category: 'financial',
+    deepLink: '/admin/withdrawals',
+    metadata: {
+      type: 'admin_withdrawal_requested',
+      withdrawalId: p.wdId,
+      amountCents: p.amountCents,
+      coin: p.coin,
+      address: p.address
+    }
+  });
+}
+
+export async function notifyWithdrawalApproved(client: any, p: {
+  userId: string;
+  wdId: string;
+  amountCents: number;
+  netAmountCents: number;
+  coin: string;
+  address?: string;
+}) {
+  const amountUsd = (p.amountCents / 100).toFixed(2);
+  const netUsd = (p.netAmountCents / 100).toFixed(2);
+  await createNotice(client, {
+    userId: p.userId,
+    title: 'تم اعتماد وموافقة طلب السحب ✅',
+    message: `تمت مراجعة طلب السحب (${p.wdId}) والموافقة عليه بنجاح بقيمة ${amountUsd} USDT (${p.coin}).\n` +
+             `صافي المبلغ (${netUsd} USDT) قيد الإرسال الفوري إلى محفظتك وسيزود بالـ TxID فور الاكتمال على البلوكتشين.`,
+    category: 'financial',
+    deepLink: '/activity',
+    metadata: {
+      type: 'withdrawal_approved',
+      withdrawalId: p.wdId,
+      amountCents: p.amountCents,
+      netAmountCents: p.netAmountCents,
+      coin: p.coin,
+      status: 'approved'
+    }
+  });
+}
+
+export async function notifyWithdrawalPaid(client: any, p: {
+  userId: string;
+  wdId: string;
+  amountCents: number;
+  netAmountCents: number;
+  coin: string;
+  address?: string;
+  txHash: string;
+}) {
+  const netUsd = (p.netAmountCents / 100).toFixed(2);
+  await createNotice(client, {
+    userId: p.userId,
+    title: 'تم تنفيذ وتحويل السحب بنجاح 🚀',
+    message: `تم تحويل مبلغ ${netUsd} USDT (${p.coin}) بنجاح إلى محفظتك.\n` +
+             `معرّف العملية على البلوكتشين (TxID):\n${p.txHash}\n` +
+             `تم تسوية المعاملة واكتمالها بنجاح في كشف الحساب.`,
+    category: 'financial',
+    deepLink: '/activity',
+    metadata: {
+      type: 'withdrawal_paid',
+      withdrawalId: p.wdId,
+      amountCents: p.amountCents,
+      netAmountCents: p.netAmountCents,
+      coin: p.coin,
+      txHash: p.txHash,
+      status: 'paid'
+    }
+  });
+}
+
+export async function notifyWithdrawalRejected(client: any, p: {
+  userId: string;
+  wdId: string;
+  amountCents: number;
+  coin: string;
+  reason: string;
+}) {
+  const amountUsd = (p.amountCents / 100).toFixed(2);
+  await createNotice(client, {
+    userId: p.userId,
+    title: 'إشعار برفض طلب السحب وإعادة الرصيد ⚠️',
+    message: `تم رفض طلب السحب (${p.wdId}).\n` +
+             `السبب: ${p.reason || 'مرفوض من قبل التدقيق المالي'}.\n` +
+             `تمت إعادة كامل المبلغ (${amountUsd} USDT) فوراً إلى رصيدك المتاح في العقود الآجلة (محفظة السحب).`,
+    category: 'financial',
+    deepLink: '/withdraw',
+    metadata: {
+      type: 'withdrawal_rejected',
+      withdrawalId: p.wdId,
+      amountCents: p.amountCents,
+      reason: p.reason,
+      status: 'rejected'
+    }
+  });
+}
+
+export async function notifyDepositCredited(client: any, p: {
+  userId: string;
+  amountCents: number;
+  coin?: string;
+  depositId?: string;
+}) {
+  const amountUsd = (p.amountCents / 100).toFixed(2);
+  await createNotice(client, {
+    userId: p.userId,
+    title: 'تم تأكيد الإيداع وإضافة الرصيد بنجاح 💰',
+    message: `تم تأكيد إيداع مبلغ ${amountUsd} USDT بنجاح وإضافته إلى محفظة العقود الآجلة الخاصة بك.\n` +
+             `الرصيد جاهز الآن للتحويل إلى العقود الدائمة لبدء التداول الفوري.`,
+    category: 'financial',
+    deepLink: '/activity',
+    metadata: {
+      type: 'deposit_credited',
+      amountCents: p.amountCents,
+      depositId: p.depositId
+    }
+  });
+}
+
+export async function notifyTradeOpened(client: any, p: {
+  userId: string;
+  positionId: string;
+  asset: string;
+  direction: string;
+  amountCents: number;
+  durationSec: number;
+}) {
+  const amountUsd = (p.amountCents / 100).toFixed(2);
+  const dirAr = p.direction === 'BUY' ? 'شراء' : 'بيع';
+  await createNotice(client, {
+    userId: p.userId,
+    title: `فتح صفقة تداول جديدة (${p.asset}) 📈`,
+    message: `تم تخصيص ${amountUsd} USDT من رصيد العقود الدائمة (التداول) لصفقة ${dirAr} على أصل ${p.asset}.\nمدة العقد: ${p.durationSec} ثانية.`,
+    category: 'opportunity',
+    deepLink: '/activity',
+    metadata: {
+      type: 'trade_opened',
+      positionId: p.positionId,
+      asset: p.asset,
+      direction: p.direction,
+      amountCents: p.amountCents,
+      durationSec: p.durationSec
+    }
+  });
+}
+
+export async function notifyTradeSettled(client: any, p: {
+  userId: string;
+  positionId: string;
+  asset: string;
+  direction: string;
+  amountCents: number;
+  resultCents: number;
+}) {
+  const amountUsd = (p.amountCents / 100).toFixed(2);
+  const resultUsd = (Math.abs(p.resultCents) / 100).toFixed(2);
+  const isGain = p.resultCents >= 0;
+  const returnedUsd = ((p.amountCents + p.resultCents) / 100).toFixed(2);
+
+  await createNotice(client, {
+    userId: p.userId,
+    title: isGain ? `ربح مؤكد من صفقة ${p.asset} 🎉` : `تسوية صفقة ${p.asset}`,
+    message: isGain
+      ? `تمت تسوية الصفقة بنجاح وتحقيق أرباح بقيمة +${resultUsd} USDT!\nتم إرجاع رأس المال والأرباح بإجمالي ${returnedUsd} USDT مباشرة إلى رصيد العقود الدائمة (التداول).`
+      : `تمت تسوية الصفقة بنتيجة (${p.resultCents < 0 ? '-' : ''}${resultUsd} USDT). تم تحديث رصيد العقود الدائمة تلقائياً.`,
+    category: 'financial',
+    deepLink: '/activity',
+    metadata: {
+      type: 'trade_settled',
+      positionId: p.positionId,
+      asset: p.asset,
+      resultCents: p.resultCents,
+      isGain
+    }
+  });
+}
+
+export async function notifyTransferCompleted(client: any, p: {
+  userId: string;
+  amountCents: number;
+  from: string;
+  to: string;
+}) {
+  const amountUsd = (p.amountCents / 100).toFixed(2);
+  const isToWithdrawal = p.to === 'futures';
+  const fromName = p.from === 'futures' ? 'العقود الآجلة (محفظة السحب)' : 'العقود الدائمة (محفظة التداول)';
+  const toName = p.to === 'futures' ? 'العقود الآجلة (محفظة السحب)' : 'العقود الدائمة (محفظة التداول)';
+
+  await createNotice(client, {
+    userId: p.userId,
+    title: isToWithdrawal ? 'تحويل ناجح إلى محفظة السحب 💳' : 'تحويل ناجح إلى محفظة التداول 📊',
+    message: `تم تحويل ${amountUsd} USDT بنجاح من ${fromName} إلى ${toName}.\n` +
+             (isToWithdrawal ? 'الرصيد متاح الآن في قسم السحب.' : 'الرصيد متاح وجاهز لفتح الصفقات الآن.'),
+    category: 'financial',
+    deepLink: isToWithdrawal ? '/withdraw' : '/transfer',
+    metadata: {
+      type: 'contract_transfer',
+      amountCents: p.amountCents,
+      from: p.from,
+      to: p.to
+    }
+  });
+}
+
 

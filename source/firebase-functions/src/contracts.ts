@@ -2,6 +2,7 @@ import { withTx, pool } from './db.ts';
 import { createHash } from 'node:crypto';
 import { getTradingAccounts } from './client-services.ts';
 import { requireVerifiedKyc } from './kyc.ts';
+import { notifyTradeOpened, notifyTradeSettled } from './notifications.ts';
 
 export interface Identity {
   id: string;
@@ -189,6 +190,45 @@ export async function join(u: Identity, input: any, now = Date.now()) {
       if (BigInt(acc.balance_cents) < BigInt(amount)) {
         throw new ApiError('الرصيد المتاح غير كافٍ لهذا العقد.', 409);
       }
+      // Check Permanent Futures (Trading wallet) in contract_wallets
+      if (acc.type === 'real') {
+        const docRes = await client.query(
+          `SELECT data FROM docs WHERE collection = 'contract_wallets' AND id = $1 FOR UPDATE`,
+          [acc.id]
+        );
+        let wState = docRes.rows[0]?.data;
+        if (!wState || !wState.wallet) {
+          wState = {
+            wallet: {
+              ownerId: u.id,
+              accountId: acc.id,
+              currency: 'USD',
+              futuresCents: Math.max(0, Number(acc.balance_cents) - amount),
+              perpetualCents: 0,
+              version: 1,
+              updatedAt: Date.now()
+            },
+            operations: []
+          };
+        } else {
+          const curPerp = Math.max(0, Number(wState.wallet.perpetualCents || 0));
+          if (curPerp < amount) {
+            throw new ApiError(
+              'الرصيد المتاح في العقود الدائمة (محفظة التداول) غير كافٍ لهذا العقد. يرجى تحويل الرصيد المطلوب من العقود الآجلة إلى العقود الدائمة أولاً.',
+              409
+            );
+          }
+          wState.wallet.perpetualCents = curPerp - amount;
+          wState.wallet.version = (wState.wallet.version || 1) + 1;
+          wState.wallet.updatedAt = Date.now();
+        }
+        await client.query(
+          `INSERT INTO docs (collection, id, data, updated_at)
+           VALUES ('contract_wallets', $1, $2, NOW())
+           ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+          [acc.id, JSON.stringify(wState)]
+        );
+      }
     }
 
     const durationSec = c.duration_sec;
@@ -242,6 +282,16 @@ export async function join(u: Identity, input: any, now = Date.now()) {
        ON CONFLICT (action, reference) DO NOTHING`,
       [u.id, posId, auditPayload, hash(auditPayload)]
     );
+
+    // Enhanced notification on opening a trade
+    await notifyTradeOpened(client, {
+      userId: u.id,
+      positionId: posId,
+      asset: c.asset,
+      direction: c.direction,
+      amountCents: amount,
+      durationSec: c.duration_sec
+    });
 
     return { id: posId, reused: false };
   });
@@ -348,13 +398,35 @@ export async function settle(u: Identity, now = Date.now()) {
         );
       }
 
-      // Audit (idempotent unique on action + reference)
-      await client.query(
-        `INSERT INTO audit (actor_id, action, reference, payload, payload_hash)
-         VALUES ('settlement-engine', 'CONTRACT_SETTLED', $1, $2::jsonb, $3)
-         ON CONFLICT (action, reference) DO NOTHING`,
-        [p.id, payloadStr, receiptHash]
-      );
+      // Return principal + profit directly to Permanent Futures (perpetualCents)
+      if (!p.is_bonus) {
+        const docRes = await client.query(
+          `SELECT data FROM docs WHERE collection = 'contract_wallets' AND id = $1 FOR UPDATE`,
+          [p.account_id]
+        );
+        if (docRes.rows[0]?.data) {
+          const wState = docRes.rows[0].data;
+          if (wState.wallet) {
+            wState.wallet.perpetualCents = Math.max(0, (Number(wState.wallet.perpetualCents) || 0) + (amountCents + expected));
+            wState.wallet.version = (wState.wallet.version || 1) + 1;
+            wState.wallet.updatedAt = Date.now();
+            await client.query(
+              `UPDATE docs SET data = $1, updated_at = NOW() WHERE collection = 'contract_wallets' AND id = $2`,
+              [JSON.stringify(wState), p.account_id]
+            );
+          }
+        }
+      }
+
+      // Enhanced notification on trade settlement
+      await notifyTradeSettled(client, {
+        userId: u.id,
+        positionId: p.id,
+        asset: p.asset,
+        direction: p.direction,
+        amountCents,
+        resultCents: expected
+      });
 
       settledResults.push({ positionId: p.id, resultCents: expected });
     }

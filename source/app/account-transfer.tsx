@@ -19,7 +19,7 @@ export function AccountTransfer({ account, onSaved }: { account: TradingAccount 
   const [loading, setLoading] = useState(false);
 
   const to = from === 'futures' ? 'perpetual' : 'futures';
-  const label = (type: string) => type === 'futures' ? t('العقود الآجلة', 'Futures Contracts') : t('العقود الدائمة', 'Perpetual Contracts');
+  const label = (type: string) => type === 'futures' ? t('العقود الآجلة (محفظة السحب والإيداع)', 'Futures (Withdrawal & Deposit)') : t('العقود الدائمة (محفظة التداول - غير قابلة للسحب)', 'Permanent Contracts (Trading - Non-Withdrawable)');
 
   // Load live wallet pockets and history on mount and when account changes
   useEffect(() => {
@@ -218,15 +218,15 @@ export function AccountTransfer({ account, onSaved }: { account: TradingAccount 
       {/* Fee Notice: Free 0% Instant Transfers */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px', borderRadius: '14px', background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#166534', fontSize: '13px', width: '100%', boxSizing: 'border-box' }}>
         <CheckCircle2 size={18} style={{ color: '#16a34a', flexShrink: 0 }} />
-        <span><b>{t('تحويل فوري بدون رسوم (0%)', 'Instant Free Transfer (0%)')}</b> · {t('التحويل بين العقود الآجلة والفورية متاح ومجاني 100%.', 'Transfers between Futures and Spot are 100% free with no deduction.')}</span>
+        <span><b>{t('تحويل فوري ومجاني (0% رسوم)', 'Instant Free Transfer (0% Fee)')}</b> · {t('فصل تام: العقود الدائمة مخصصة حصراً للتداول وحمايتها تامة ولا يمكن سحبها، بينما العقود الآجلة مخصصة لعمليات السحب والإيداع.', 'Full separation: Permanent contracts are reserved for trading and cannot be withdrawn directly. Futures contracts are dedicated for deposits and withdrawals.')}</span>
       </div>
 
       {/* Info Alert */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px', borderRadius: '14px', background: '#edf5ff', border: '1px solid #d6e7fc', color: '#3f5a82', fontSize: '13px', lineHeight: 1.6, width: '100%', boxSizing: 'border-box' }}>
         <Info size={18} style={{ color: '#0788ff', flexShrink: 0 }} />
         <div style={{ minWidth: 0 }}>
-          <b style={{ display: 'block', fontSize: '13.5px', marginBottom: '2px' }}>{t('معلومات التحويل', 'Transfer Info')}</b>
-          <span>{t('حدد نوع العقود المحوّل منه وإليه، ثم أدخل المبلغ.', 'Select transfer source & destination, then enter amount.')}</span>
+          <b style={{ display: 'block', fontSize: '13.5px', marginBottom: '2px' }}>{t('آلية التحويل والسحب', 'Transfer & Withdrawal Flow')}</b>
+          <span>{t('لتحويل أرباح أو رأس مال التداول إلى رصيد قابل للسحب، قم بنقله من العقود الدائمة إلى العقود الآجلة لتتمكن من سحبه فوراً.', 'To withdraw your trading profits or funds, transfer from Permanent Contracts to Futures to withdraw instantly.')}</span>
         </div>
       </div>
 

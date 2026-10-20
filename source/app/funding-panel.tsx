@@ -211,7 +211,10 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
   /* ───────────── WITHDRAWAL VIEW (Screenshot 3 & 4) ───────────── */
   if (kind === 'withdraw') {
     const net = PAYMENT_COINS.find(c => c.id === wNet)!;
-    const totalAvailable = ((account?.balanceCents ?? 0) / 100);
+    const futuresBal = (walletView?.wallet?.futuresCents ?? account?.balanceCents ?? 0) / 100;
+    const perpBal = (walletView?.wallet?.perpetualCents ?? 0) / 100;
+    // Withdrawable amount is strictly futuresBal (العقود الآجلة)
+    const totalAvailable = futuresBal;
     const maxWithdraw = totalAvailable > 0 ? totalAvailable.toFixed(2) : '0';
 
     const requestWithdrawal = async () => {
@@ -227,8 +230,8 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
       }
       if (val > totalAvailable) {
         setError(t(
-          `رصيد الحساب المتاح للسحب هو ${totalAvailable.toFixed(2)} USDT. المبلغ المطلوب يتجاوز الرصيد.`,
-          `Available balance for withdrawal is ${totalAvailable.toFixed(2)} USDT. Requested amount exceeds balance.`
+          `الرصيد المتاح للسحب في العقود الآجلة هو ${totalAvailable.toFixed(2)} USDT. رصيد العقود الدائمة (${perpBal.toFixed(2)} USDT) مخصص للتداول فقط ولا يمكن سحبه مباشرة.`,
+          `Available for withdrawal in Futures is ${totalAvailable.toFixed(2)} USDT. Permanent Contracts balance (${perpBal.toFixed(2)} USDT) is for trading only and cannot be withdrawn directly.`
         ));
         return;
       }
@@ -275,15 +278,11 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
         setWalletView(old => {
           if (!old?.wallet) return old;
           const deductCents = Math.round(val * 100);
-          const currentPerp = Number(old.wallet.perpetualCents || 0);
-          const perpDeduct = Math.min(currentPerp, deductCents);
-          const remainingDeduct = deductCents - perpDeduct;
           return {
             ...old,
             wallet: {
               ...old.wallet,
-              perpetualCents: Math.max(0, currentPerp - perpDeduct),
-              futuresCents: Math.max(0, (Number(old.wallet.futuresCents || 0)) - remainingDeduct)
+              futuresCents: Math.max(0, (Number(old.wallet.futuresCents || 0)) - deductCents)
             }
           };
         });
@@ -544,13 +543,37 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
             <div className="fp-card" style={{ background: '#fff', border: '1px solid var(--fp-line)', borderRadius: '20px', padding: '18px', display: 'flex', flexDirection: 'column', gap: '12px', width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
               <h2 style={{ fontSize: '18px', fontWeight: 700, margin: 0, color: 'var(--fp-ink)' }}>{t('تفاصيل السحب', 'Withdrawal details')}</h2>
 
-              {/* Clean Balance Card */}
+              {/* Dual Balance Display: Withdrawable vs Permanent Trading */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '14px 16px', borderRadius: '16px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '13.5px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ color: 'var(--fp-muted)' }}>{t('الرصيد المتاح للسحب', 'Available for withdrawal')}:</span>
+                  <span style={{ color: 'var(--fp-muted)', fontWeight: 600 }}>{t('الرصيد المتاح للسحب (العقود الآجلة)', 'Available for withdrawal (Futures)')}:</span>
                   <strong style={{ color: '#0788ff', fontSize: '16px', fontWeight: 800 }} dir="ltr">{totalAvailable.toFixed(2)} USDT</strong>
                 </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #e2e8f0', paddingTop: '8px' }}>
+                  <span style={{ color: '#64748b', fontSize: '12.5px' }}>{t('رصيد العقود الدائمة (للتداول فقط - غير قابل للسحب)', 'Permanent Contracts (Trading only - non-withdrawable)')}:</span>
+                  <span style={{ color: '#64748b', fontSize: '13.5px', fontWeight: 700 }} dir="ltr">{perpBal.toFixed(2)} USDT</span>
+                </div>
               </div>
+
+              {/* Helpful Transfer Prompt if balance is in permanent trading wallet */}
+              {totalAvailable <= 0 && perpBal > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px 14px', borderRadius: '14px', background: '#f0fdf4', border: '1px solid #bbf7d0', fontSize: '13px', color: '#166534' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Info size={18} style={{ color: '#16a34a', flexShrink: 0 }} />
+                    <span style={{ fontWeight: 600 }}>{t('رصيدك متاح بالكامل في محفظة التداول (العقود الدائمة)', 'Your balance is in Trading (Permanent Contracts)')}</span>
+                  </div>
+                  <p style={{ margin: 0, fontSize: '12.5px', lineHeight: 1.5 }}>
+                    {t('العقود الدائمة مخصصة للتداول وحمايتها تامة. للسحب، يرجى نقل المبلغ الذي ترغب في سحبه إلى العقود الآجلة (محفظة السحب) أولاً بدون رسوم.', 'Permanent contracts are reserved for trading. To withdraw, transfer your desired amount to Futures (Withdrawal Wallet) first for free.')}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => nav.navigate('/transfer')}
+                    style={{ alignSelf: 'flex-start', background: '#16a34a', color: '#fff', border: 0, padding: '6px 14px', borderRadius: '8px', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer', marginTop: '2px' }}
+                  >
+                    {t('التحويل إلى محفظة السحب الآن ⇄', 'Transfer to Withdrawal Wallet Now ⇄')}
+                  </button>
+                </div>
+              )}
 
               <label className="fp-label" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--fp-muted)', marginTop: '4px' }}>{t('شبكة التحويل', 'Transfer Network')}</label>
               <div className="fp-select" style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '10px', height: '52px', border: '1px solid #dbe4f2', borderRadius: '14px', padding: '0 14px', background: 'var(--fp-soft)', width: '100%', boxSizing: 'border-box' }}>
@@ -627,7 +650,7 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
               }}
             >
               <Fwd size={18} />
-              {busy ? t('جار المعالجة…', 'Processing…') : totalAvailable <= 0 ? t('الرصيد المتاح 0 (لا يمكن السحب)', 'Available Balance is 0') : t('طلب السحب', 'Request Withdrawal')}
+              {busy ? t('جار المعالجة…', 'Processing…') : totalAvailable <= 0 ? (perpBal > 0 ? t('الرصيد في التداول (حوّل للسحب أولاً)', 'Balance in Trading (Transfer to Withdraw)') : t('الرصيد المتاح 0 (لا يمكن السحب)', 'Available Balance is 0')) : t('طلب السحب', 'Request Withdrawal')}
             </button>
 
             <button type="button" className="fp-btn outline big" onClick={() => nav.navigate('/support')} style={{ width: '100%', height: '54px', borderRadius: '16px', background: '#fff', color: '#173a77', border: '1px solid #9fbff0', fontSize: '15px', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer', boxSizing: 'border-box' }}>

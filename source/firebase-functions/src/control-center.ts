@@ -3,6 +3,11 @@ import { withTx } from './db.ts';
 import { ApiError, type Identity, type Data } from './store.ts';
 import { computeCustomerKey, verifyKycCustomer, idLast4, getKycFilesKey, decryptAesGcm } from './kyc.ts';
 import { proposeWithdrawalApproval, approveWithdrawal, markWithdrawalPaid } from './withdrawals.ts';
+import {
+  notifyWithdrawalApproved,
+  notifyWithdrawalPaid,
+  notifyWithdrawalRejected
+} from './notifications.ts';
 import { MARKET_SYMBOLS } from '../../lib/market-symbols.js';
 import { adminAuth } from './firebase-admin-init.ts';
 
@@ -1790,7 +1795,7 @@ export async function controlAction(u: Identity, input: Data) {
         if (docRes.rows[0]?.data) {
           const wState = docRes.rows[0].data;
           if (wState.wallet) {
-            wState.wallet.perpetualCents = Math.max(0, (Number(wState.wallet.perpetualCents) || 0) - Number(wd.amount_cents));
+            wState.wallet.futuresCents = Math.max(0, (Number(wState.wallet.futuresCents) || 0) - Number(wd.amount_cents));
             wState.wallet.version = (wState.wallet.version || 1) + 1;
             wState.wallet.updatedAt = Date.now();
             await client.query(
@@ -1803,6 +1808,17 @@ export async function controlAction(u: Identity, input: Data) {
 
       await client.query("UPDATE withdrawal_requests SET status = 'approved', updated_at = NOW() WHERE id = $1", [wdId]);
       await client.query("UPDATE approvals SET status = 'approved', approved_by = $1, approved_at = NOW() WHERE reference = $2 AND status = 'pending'", [u.id, wdId]);
+
+      // Enhanced notification for user on approval
+      await notifyWithdrawalApproved(client, {
+        userId: wd.user_id,
+        wdId,
+        amountCents: Number(wd.amount_cents),
+        netAmountCents: Number(wd.net_amount_cents),
+        coin: wd.coin,
+        address: wd.address
+      });
+
       return { ok: true, status: 'approved', withdrawalId: wdId, message: 'تم اعتماد وموافقة طلب السحب بنجاح.' };
     });
   }
@@ -1840,7 +1856,7 @@ export async function controlAction(u: Identity, input: Data) {
         if (docRes.rows[0]?.data) {
           const wState = docRes.rows[0].data;
           if (wState.wallet) {
-            wState.wallet.perpetualCents = Math.max(0, (Number(wState.wallet.perpetualCents) || 0) - amountCents);
+            wState.wallet.futuresCents = Math.max(0, (Number(wState.wallet.futuresCents) || 0) - amountCents);
             wState.wallet.version = (wState.wallet.version || 1) + 1;
             wState.wallet.updatedAt = Date.now();
             await client.query(
@@ -1864,6 +1880,17 @@ export async function controlAction(u: Identity, input: Data) {
          WHERE reference = $2`,
         [u.id, wdId]
       );
+
+      // Enhanced notification for user on payout
+      await notifyWithdrawalPaid(client, {
+        userId: wd.user_id,
+        wdId,
+        amountCents: Number(wd.amount_cents),
+        netAmountCents: Number(wd.net_amount_cents),
+        coin: wd.coin,
+        address: wd.address,
+        txHash
+      });
 
       return { ok: true, status: 'paid', withdrawalId: wdId, txHash, message: `تم تأكيد دفع السحب وإدخال TxID (${txHash}) بنجاح.` };
     });
@@ -1900,7 +1927,7 @@ export async function controlAction(u: Identity, input: Data) {
           [refundJournalId, wd.user_id, wd.account_id, amountCents, -amountCents]
         );
 
-        // Restore contract_wallets perpetualCents
+        // Restore contract_wallets futuresCents (withdrawable futures)
         const docRes = await client.query(
           `SELECT data FROM docs WHERE collection = 'contract_wallets' AND id = $1 FOR UPDATE`,
           [wd.account_id]
@@ -1908,7 +1935,7 @@ export async function controlAction(u: Identity, input: Data) {
         if (docRes.rows[0]?.data) {
           const wState = docRes.rows[0].data;
           if (wState.wallet) {
-            wState.wallet.perpetualCents = (Number(wState.wallet.perpetualCents) || 0) + amountCents;
+            wState.wallet.futuresCents = (Number(wState.wallet.futuresCents) || 0) + amountCents;
             wState.wallet.version = (wState.wallet.version || 1) + 1;
             wState.wallet.updatedAt = Date.now();
             await client.query(
@@ -1921,6 +1948,16 @@ export async function controlAction(u: Identity, input: Data) {
 
       await client.query("UPDATE withdrawal_requests SET status = 'rejected', updated_at = NOW() WHERE id = $1", [wdId]);
       await client.query("UPDATE approvals SET status = 'rejected', approved_by = $1, reason = $2, approved_at = NOW() WHERE reference = $3", [u.id, rejectReason, wdId]);
+
+      // Enhanced notification for user on rejection
+      await notifyWithdrawalRejected(client, {
+        userId: wd.user_id,
+        wdId,
+        amountCents: Number(wd.amount_cents),
+        coin: wd.coin,
+        reason: rejectReason
+      });
+
       return { ok: true, status: 'rejected', withdrawalId: wdId, message: 'تم رفض طلب السحب وإعادة الرصيد إلى حساب العميل بنجاح.' };
     });
   }

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { withTx } from './db.ts';
+import { notifyTransferCompleted } from './notifications.ts';
 
 export class ClientError extends Error {
   constructor(message: string, public status = 400) {
@@ -308,7 +309,7 @@ export async function operateDemoWallet(
         nextPerp += netAmountCents;
       } else {
         if (nextPerp < amountCents) {
-          throw new ClientError('الرصيد المتاح في العقود الفورية غير كافٍ للتحويل. / Insufficient available balance in perpetual.', 400);
+          throw new ClientError('الرصيد المتاح في العقود الدائمة غير كافٍ للتحويل. / Insufficient available balance in perpetual.', 400);
         }
         nextPerp -= amountCents;
         nextFutures += amountCents;
@@ -342,6 +343,16 @@ export async function operateDemoWallet(
        ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
       [collName, accountId, JSON.stringify(state)]
     );
+
+    // Send enhanced notification for wallet transfer
+    if (kind === 'transfer') {
+      await notifyTransferCompleted(client, {
+        userId: user.id,
+        amountCents,
+        from: input.from || 'futures',
+        to: input.from === 'futures' ? 'perpetual' : 'futures'
+      });
+    }
 
     return state;
   });

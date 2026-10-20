@@ -4,6 +4,7 @@
  */
 import { withTx } from './db.ts';
 import { createHash } from 'node:crypto';
+import { notifyDepositCredited } from './notifications.ts';
 
 export class ApiError extends Error {
   constructor(message: string, public status = 400) {
@@ -194,6 +195,14 @@ export async function recordConfirmedDeposit(e: {
        ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
       [e.accountId, JSON.stringify(walletState)]
     );
+
+    // Enhanced notification on confirmed deposit
+    await notifyDepositCredited(client, {
+      userId: e.uid,
+      amountCents: e.cents,
+      coin: 'USDT',
+      depositId: e.depositId ?? e.eventId
+    });
 
     // 5. Qualified deposit & bonus profit unlock
     if (e.eligible) {
