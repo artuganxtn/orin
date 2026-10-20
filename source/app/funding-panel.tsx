@@ -620,14 +620,14 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: '8px',
-                cursor: (busy || spotBal <= 0) ? 'not-allowed' : 'pointer',
-                opacity: (busy || spotBal <= 0) ? 0.65 : 1,
-                boxShadow: (spotBal <= 0) ? 'none' : '0 10px 22px rgba(10,108,255,0.3)',
+                cursor: (busy || totalAvailable <= 0) ? 'not-allowed' : 'pointer',
+                opacity: (busy || totalAvailable <= 0) ? 0.65 : 1,
+                boxShadow: (totalAvailable <= 0) ? 'none' : '0 10px 22px rgba(10,108,255,0.3)',
                 boxSizing: 'border-box'
               }}
             >
               <Fwd size={18} />
-              {busy ? t('جار المعالجة…', 'Processing…') : spotBal <= 0 ? t('الرصيد المتاح 0 (لا يمكن السحب)', 'Available Balance is 0') : t('طلب السحب', 'Request Withdrawal')}
+              {busy ? t('جار المعالجة…', 'Processing…') : totalAvailable <= 0 ? t('الرصيد المتاح 0 (لا يمكن السحب)', 'Available Balance is 0') : t('طلب السحب', 'Request Withdrawal')}
             </button>
 
             <button type="button" className="fp-btn outline big" onClick={() => nav.navigate('/support')} style={{ width: '100%', height: '54px', borderRadius: '16px', background: '#fff', color: '#173a77', border: '1px solid #9fbff0', fontSize: '15px', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer', boxSizing: 'border-box' }}>

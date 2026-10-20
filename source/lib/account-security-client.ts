@@ -86,7 +86,7 @@ async function acceptBundle(bundle:any){
 }
 export async function refreshSecuritySession(){
  if(refreshing)return refreshing;
- refreshing=(async()=>{if(!session)throw new AccountSecurityError('sign-in-required','Sign in required',401);const result=await securityRequest('refresh',{sessionId:session.sessionId,refreshToken:session.refreshToken},{anonymous:true});await acceptBundle(result)})().finally(()=>{refreshing=null});return refreshing;
+ refreshing=(async()=>{if(!session)throw new AccountSecurityError('sign-in-required','Sign in required',401);const result=await securityRequest<any>('refresh',{sessionId:session.sessionId,refreshToken:session.refreshToken},{anonymous:true});if(result?.available===false||result?.enabled===false)return;await acceptBundle(result)})().finally(()=>{refreshing=null});return refreshing;
 }
 export async function ensureSecuritySession():Promise<SecurityChallenge|null>{
  if(!securityBackendConfigured())return null;
@@ -95,6 +95,7 @@ export async function ensureSecuritySession():Promise<SecurityChallenge|null>{
  if(session){try{if(Date.now()-sessionReadyAt>60000)await refreshSecuritySession();return null}catch(error){if(error instanceof AccountSecurityError&&error.status>=500)throw error;await clearSecuritySession()}}
  const trustedDevice=await readTrustedDevice();
  const result=await securityRequest<any>('login',{device:await securityDevice(),...(trustedDevice?{trustedDevice:{id:trustedDevice.id,deviceToken:trustedDevice.deviceToken}}:{})},{anonymous:true,freshIdentity:true,...(pendingPrimaryToken?{identityToken:pendingPrimaryToken}:{})});pendingPrimaryToken=null;
+ if(result?.available===false||result?.enabled===false)return null;
  if(result.requiresSecondFactor===true&&typeof result.challengeId==='string')return result as SecurityChallenge;
  await acceptBundle(result);await proveTrustedDevice();return null;
 }

@@ -22,7 +22,8 @@ export async function securityHandle(req:any,res:any){
   if(origin&&!isAllowed)throw new security.SecurityError('مصدر الطلب غير مسموح.',403);
   if(origin){res.set('Access-Control-Allow-Origin',origin);res.set('Vary','Origin');res.set('Access-Control-Allow-Headers','Authorization, Content-Type, X-Orin-Session');res.set('Access-Control-Allow-Methods','GET, POST, OPTIONS');}
   if(req.method==='OPTIONS'){res.status(204).send('');return}
-  await security.ensureSecurityActivation(true);
+  if(!security.securityEnabled()){res.status(200).json({available:false,enabled:false,code:'security-disabled',message:'خادم أمان ORIN غير مفعّل بعد.'});return}
+   await security.ensureSecurityActivation(true);
   if(!['GET','POST'].includes(req.method))throw new security.SecurityError('طريقة غير مدعومة.',405);
   if(req.method==='POST'&&(!req.is('application/json')||!req.body||Array.isArray(req.body)||typeof req.body!=='object'||Buffer.byteLength(JSON.stringify(req.body))>50_000))throw new security.SecurityError('طلب غير صالح.');
   const meta=resolveObservedIP(req),ip=meta.ip,body=req.body??{};
