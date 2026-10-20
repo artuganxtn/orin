@@ -9,6 +9,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 import { authMiddleware } from './auth-middleware.ts';
 import { paymentsHandle } from './payments-http.ts';
+import { securityHandle } from './account-security-http.ts';
 import { programSummary, programAction, adminPrograms, accountActivity, getReferralsSummary } from './programs.ts';
 import { action, state, verify } from './contracts.ts';
 import { getSettings, saveSettings, configuration, saveConfiguration } from './settings.ts';
@@ -190,10 +191,14 @@ import { identityHandle } from './email-registration-http.ts';
 // 2. NOWPayments webhook & public payment endpoints
 app.all('/api/payments/nowpayments/ipn', paymentsHandle);
 app.get('/api/payments/readiness', paymentsHandle);
+app.use(['/api/payments', '/orinPayments'], paymentsHandle);
 
 // Public identity & registration endpoints
 app.use('/orinIdentity', identityHandle);
 app.use('/api/identity', identityHandle);
+
+// Security endpoints (login, passkeys, sessions, refresh, state)
+app.use(['/api/security', '/orinSecurity/api/security', '/orinSecurity'], securityHandle);
 
 // Password Reset Routes (Public)
 app.post('/api/auth/reset/start', async (req: Request, res: Response) => {
@@ -699,7 +704,8 @@ app.get(['/orin.mobileconfig', '/app.mobileconfig', '/downloads/orin.mobileconfi
 const api = express.Router();
 api.use(authMiddleware);
 
-// Payments (user authenticated)
+// Security & Payments (user authenticated)
+api.use('/security', securityHandle);
 api.use('/payments', paymentsHandle);
 
 // Withdrawals

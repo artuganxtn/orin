@@ -45,14 +45,24 @@ async function request(pair:string,provider:'coinbase'|'bitstamp'|'internal',con
 export function loadQuote(pair:string):Promise<MarketQuote>{
  if(!hasNativeFeed(pair))return Promise.reject(new Error('Unsupported quote pair'));
  const old=cache.get(pair);if(old&&old.expires>Date.now())return old.promise;
- // Independent public snapshots race with internal server proxy ensuring resilience against ISP DNS blocks.
- const controllers=[new AbortController(),new AbortController(),new AbortController()];
- const promise=Promise.any([
-  request(pair,'internal',controllers[0]),
-  request(pair,'coinbase',controllers[1]),
-  request(pair,'bitstamp',controllers[2])
- ])
-  .catch(error=>{if(cache.get(pair)?.promise===promise)cache.delete(pair);throw error})
-  .finally(()=>controllers.forEach(c=>c.abort()));
+ const promise=(async()=>{
+  const c0=new AbortController();
+  try{
+   return await request(pair,'internal',c0);
+  }catch{
+   const controllers=[new AbortController(),new AbortController()];
+   try{
+    return await Promise.any([
+     request(pair,'coinbase',controllers[0]),
+     request(pair,'bitstamp',controllers[1])
+    ]);
+   }finally{
+    controllers.forEach(c=>c.abort());
+   }
+  }finally{
+   c0.abort();
+  }
+ })()
+  .catch(error=>{if(cache.get(pair)?.promise===promise)cache.delete(pair);throw error});
  cache.set(pair,{expires:Date.now()+5000,promise});return promise;
 }

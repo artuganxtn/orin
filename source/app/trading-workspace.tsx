@@ -164,9 +164,16 @@ function TradingWorkspace({initialState,onStateChange}:{initialState?:LabState;o
    {error&&!authNeeded&&<div className="error-banner"><WifiOff size={17}/><span>{error}</span><button className="text-action" onClick={()=>void refresh()}>{t("تحديث")}</button></div>}
    {syncError&&<div className="error-banner"><Info size={17}/><span>{t("آخر مزامنة لم تنجح. قد تتأخر حالة التسوية:")}{syncError}</span></div>}
    <Tabs value={tab} onValueChange={setTab} dir={prefs.chartLocale==='ar'?'rtl':'ltr'} className="workspace-tabs">
-     <TabsList className="workspace-nav reference-nav" aria-label={t("أقسام ORIN")}><TabsTrigger value="home"><Home/><span>{t('الرئيسية','Home')}</span></TabsTrigger><TabsTrigger value="real"><ChartNoAxesCombined/><span>{t('الأسواق','Markets')}</span></TabsTrigger><TabsTrigger value="demo" className="center-orin" aria-label={t("فتح التداول والدعوات")}><span className="center-orin-mark"><img src="/brand/orin-mark.png" alt=""/></span></TabsTrigger><TabsTrigger value="wallet"><BriefcaseBusiness/><span>{t('المراكز','Positions')}</span></TabsTrigger><TabsTrigger value="account"><Settings/><span>{t('الإعدادات','Settings')}</span></TabsTrigger>{state?.isAdmin&&<TabsTrigger value="admin"><ShieldCheck/><span>{t('الإدارة','Admin')}</span></TabsTrigger>}</TabsList>
+     <TabsList className="workspace-nav reference-nav" aria-label={t("أقسام ORIN")}>
+        <TabsTrigger value="home" onClick={() => { navigation.navigate('/'); setTab('home'); }}><Home/><span>{t('الرئيسية','Home')}</span></TabsTrigger>
+        <TabsTrigger value="real" onClick={() => { navigation.navigate('/markets'); setTab('real'); }}><ChartNoAxesCombined/><span>{t('الأسواق','Markets')}</span></TabsTrigger>
+        <TabsTrigger value="demo" className="center-orin" aria-label={t("فتح التداول والدعوات")} onClick={() => { navigation.navigate('/trade'); setTab('demo'); }}><span className="center-orin-mark"><img src="/brand/orin-mark.png" alt=""/></span></TabsTrigger>
+        <TabsTrigger value="wallet" onClick={() => { navigation.navigate('/positions'); setTab('wallet'); }}><BriefcaseBusiness/><span>{t('المراكز','Positions')}</span></TabsTrigger>
+        <TabsTrigger value="account" onClick={() => { navigation.navigate('/settings'); setTab('account'); }}><Settings/><span>{t('الإعدادات','Settings')}</span></TabsTrigger>
+        {state?.isAdmin && <TabsTrigger value="admin" onClick={() => { navigation.navigate('/admin'); setTab('admin'); }}><ShieldCheck/><span>{t('الإدارة','Admin')}</span></TabsTrigger>}
+      </TabsList>
       <TabsContent value="home"><ReferenceHome state={state} prefs={prefs} selectedPair={homePair} onPairChange={setHomePair} onAccountsChange={accountsChanged} onTransfer={()=>navigation.navigate('/transfer')} onHideBalance={()=>updatePreferences({hideBalance:!prefs.hideBalance})} onNavigate={v=>{if(v==='demo')setOrderMode('invited');setTab(v);}} onInvite={()=>navigation.navigate('/referral')} onFunding={kind=>navigation.navigate(kind==='deposit'?'/deposit':'/withdraw')} onTerms={()=>setTermsOpen(true)} code={code} setCode={setCode} amount={amount} setAmount={setAmount} onExecuteCode={(c,a)=>void executeCode(c,a)} onLookupCode={c=>{if(c)setCode(c);void lookup(c);}} busy={busy} activePosition={active} now={now} progress={progress}/></TabsContent>
-      <TabsContent value="demo">{routePair&&(!MARKET_SYMBOLS.some(s=>s.pair===routePair)||!configuration.enabledSymbols.includes(routePair))?<div className="orin-empty"><h2>{t('هذا الأصل غير متاح','This asset is unavailable')}</h2><button className="btn-outline" onClick={()=>navigation.navigate('/markets')}>{t('العودة للأسواق','Back to markets')}</button></div>:<ReferenceTrade key={state?.accountDirectory?.activeId??'primary'} state={state} current={current} selected={selected} active={active} now={now} progress={progress} code={code} setCode={setCode} amount={amount} setAmount={setAmount} lookup={lookup} onExecuteCode={(c,a)=>void executeCode(c,a)} startJoin={startJoin} onBack={()=>navigation.back('/markets')} onNotifications={showNotifications} prefs={prefs} referencePair={detailPair} setReferencePair={pair=>{setMarketPair(pair);if(routePair)navigation.navigate('/markets/'+pair,true)}} mode={orderMode} setMode={setOrderMode} busy={busy} onAsset={a=>{setAsset(a);setSelectedId(null);}}/>}
+      <TabsContent value="demo">{routePair&&(!MARKET_SYMBOLS.some(s=>s.pair===routePair)||!configuration.enabledSymbols.includes(routePair))?<div className="orin-empty"><h2>{t('هذا الأصل غير متاح','This asset is unavailable')}</h2><button className="btn-outline" onClick={()=>navigation.navigate('/markets')}>{t('العودة للأسواق','Back to markets')}</button></div>:<ReferenceTrade key={state?.accountDirectory?.activeId??'primary'} state={state} current={current} selected={selected} active={active} now={now} progress={progress} code={code} setCode={setCode} amount={amount} setAmount={setAmount} lookup={lookup} onExecuteCode={(c,a)=>void executeCode(c,a)} startJoin={startJoin} onBack={() => { if (routePair) { navigation.navigate('/markets'); setTab('real'); } else { navigation.navigate('/'); setTab('home'); } }} onNotifications={showNotifications} prefs={prefs} referencePair={detailPair} setReferencePair={pair=>{setMarketPair(pair);if(routePair)navigation.navigate('/markets/'+pair,true)}} mode={orderMode} setMode={setOrderMode} busy={busy} onAsset={a=>{setAsset(a);setSelectedId(null);}}/>}
       {(() => {
         const userEnteredContracts = (state?.contracts ?? []).filter(c =>
           (state?.positions ?? []).some(p => p.contract?.id === c.id || p.contract?.code === c.code)
@@ -183,7 +190,7 @@ function TradingWorkspace({initialState,onStateChange}:{initialState?:LabState;o
      <TabsContent value="wallet"><PositionsPanel key={state?.accountDirectory?.activeId??'primary'} state={state} now={now} onReceipt={setReceipt} onDetails={p=>chooseContract(p.contract)} onMarkets={()=>navigation.navigate('/markets')} onActivity={()=>navigation.navigate('/activity')}/></TabsContent>
      <TabsContent value="account"><AccountSettings state={state} prefs={prefs} onChange={updatePreferences} onTerms={()=>{}} onAdmin={()=>setTab("admin")} onLedger={()=>void exportStatement()} onNotifications={showNotifications}/></TabsContent>
      {state?.isAdmin&&<TabsContent value="admin"><div className="admin-title"><button className="btn-outline" onClick={()=>setTab('account')}>{t("حسابي")}</button><h1>{t("إدارة العقود وتوليد الأكواد")}</h1>{firebaseMode()&&<a className="btn-outline" href="/admin/users">{t('إدارة المستخدمين','User management')}</a>}</div><div className="test-banner"><ShieldCheck/><span>{t('تُقفل الشروط عند النشر ويتم توليد كود مخصص لإرساله للمستخدمين عبر القنوات الخاصة.','Terms lock upon publication and generate a secure code for VIP private channel dispatch.')}</span></div><div className="admin-grid"><section className="panel panel-pad"><div className="panel-head"><h2>{t("إنشاء صفقة معتمدة")}</h2><span className="chip">{t("توليد كود")}</span></div><form onSubmit={publish}><div className="form-grid"><div className="field span-two"><label htmlFor="contract-title">{t("عنوان الصفقة")}</label><input id="contract-title" value={title} onChange={e=>setTitle(e.target.value)} maxLength={80} required/></div><div className="field"><label>{t("الأصل المالي")}</label><Choice value={adminAsset} onChange={setAdminAsset} items={Object.entries(ASSETS).map(([k,v])=>[k,`${v} · ${k}`])} label={t("الأصل المرجعي")}/></div><div className="field"><label>{t("اتجاه الصفقة")}</label><Choice value={direction} onChange={setDirection} items={[["BUY","BUY · شراء (صعود)"],["SELL","SELL · بيع (هبوط)"]]} label={t("الاتجاه")}/></div><div className="field"><label>{t("مدة الصفقة")}</label><Choice value={duration} onChange={setDuration} items={[["60","دقيقة واحدة"],["120","دقيقتان"],["180","3 دقائق"],["300","5 دقائق"],["600","10 دقائق"],["900","15 دقيقة"],["1800","30 دقيقة"]]} label={t("مدة العقد")}/></div><div className="field"><label htmlFor="settlement-percent">{t("نسبة أرباح الصفقة المقفلة %")}</label><input id="settlement-percent" value={pct} onChange={e=>setPct(e.target.value)} type="number" step="0.1" min="-100" max="1000" dir="ltr" required/><div className="option-chips" style={{marginTop:8}}>{['15','35','50','75','85','90'].map(p=><button key={p} type="button" className={pct===p?'selected':''} onClick={()=>setPct(p)}>+{p}%</button>)}</div><span className="field-hint">{t("موجبة للربح المحقق للعميل (+85% تعني ربح 850$ لكل 1000$).")}</span></div><div className="field span-two"><label>{t("الحسابات المؤهلة")}</label><Choice value={eligibility} onChange={setEligibility} items={Object.entries(labels)} label={t("فئة الحسابات المؤهلة")}/></div><div className="field"><label htmlFor="window-start">{t("فتح المشاركة")}</label><input id="window-start" type="datetime-local" value={openAt} onChange={e=>setOpenAt(e.target.value)}/><span className="field-hint">{t("فارغ = عند النشر · توقيت جهازك")}</span></div><div className="field"><label htmlFor="window-end">{t("آخر موعد للمشاركة")}</label><input id="window-end" type="datetime-local" value={closeAt} onChange={e=>setCloseAt(e.target.value)}/><span className="field-hint">{t("فارغ = بعد 24 ساعة من فتحها")}</span></div></div><div className="settlement-box"><p>{t("مثال على مبلغ افتراضي قدره 1,000 دولار")}</p><div className={`settlement-value ${Number(pct)<0?'loss':'gain'}`} dir="ltr">{Number.isFinite(Number(pct))?`${Number(pct)>=0?'+':''}${money(resultCents(100000,Math.round(Number(pct)*100)))}`:'—'} USD</div><p>{t("إجمالي المسترجع للمحفظة:")} <b className="num gain">{Number.isFinite(Number(pct))?money(100000+resultCents(100000,Math.round(Number(pct)*100))):'—'} USD</b></p></div><button className="btn-primary full" type="submit" disabled={busy}><LockKeyhole/> {t(busy?'جار الحفظ وتوليد الكود…':'نشر الصفقة وتوليد كود الدخول')}</button></form></section><aside><section className="panel panel-pad"><h2 style={{marginBottom:20}}>{t("من النشر إلى الإيصال")}</h2><div className="security-list"><div className="security-item"><LockKeyhole/><div>{t("شروط مقفلة")}<p>{t("الزوج والاتجاه والمدة والنسبة والأهلية تُحفظ قبل المشاركة.")}</p></div></div><div className="security-item"><FileCheck2/><div>{t("بصمة SHA-256")}<p>{t("مرجع للتحقق من تطابق الشروط والإيصال.")}</p></div></div><div className="security-item"><Bell/><div>{t("إشعارات داخل المنصة")}<p>{t("تظهر الدعوة للحسابات المؤهلة، والنتيجة لصاحب المشاركة.")}</p></div></div><div className="security-item"><ArrowDownUp/><div>{t("تسوية متوازنة")}<p>{t("حجز الرصيد ثم إعادة أصل المبلغ والنتيجة الافتراضية.")}</p></div></div></div></section>{published&&<section className="panel panel-pad admin-published-card" style={{marginTop:16}}><div className="panel-head"><div className="admin-pub-title"><CheckCircle2 size={22} className="gain"/><h2>{t("تم إنشاء الصفقة وتوليد الكود")}</h2></div><span className="chip chip-green">{t("جاهز للنشر")}</span></div><p className="published-title-line"><b>{published.title}</b> · <span className="num">{published.asset} · {published.direction}</span> · <b className="num gain">{percent(published.settlement_bps)}</b></p><div className="generated-code-display"><span className="code-label">{t("كود الصفقة المعتمد للعملاء:")}</span><div className="code-box-hero"><strong className="mono code-big">{published.code}</strong><button className="btn-copy-code" type="button" onClick={()=>void copy(published.code)}><Copy size={16}/> {t("نسخ الكود")}</button></div></div><div className="channel-share-box"><div className="channel-share-header"><Share2 size={16}/><b>{t("مشاركة الصفقة عبر القنوات الخاصة (Telegram / WhatsApp)")}</b></div><pre className="channel-msg-preview">{formatChannelMessage(published)}</pre><div className="channel-share-buttons"><button className="btn-primary" type="button" onClick={()=>void copy(formatChannelMessage(published))}><ClipboardList size={16}/> {t("نسخ الرسالة الجاهزة للقناة")}</button><button className="btn-outline btn-telegram" type="button" onClick={()=>window.open('https://t.me/share/url?url='+encodeURIComponent(published.code)+'&text='+encodeURIComponent(formatChannelMessage(published)),'_blank')}>{t("إرسال عبر Telegram")}</button></div></div></section>}</aside></div></TabsContent>}</Tabs>
-   <footer className="footer"><span className="footer-brand"><b>ORIN</b>{t("أورين")}</span><div className="btn-row"><span>{t('حساب حقيقي · USD','Real account · USD')}</span></div></footer>
+   <footer className="footer"><span className="footer-brand" onClick={() => { navigation.navigate('/'); setTab('home'); }} style={{ cursor: 'pointer' }}><b>ORIN</b>{t("أورين")}</span><div className="btn-row"><span>{t('حساب حقيقي · USD','Real account · USD')}</span></div></footer>
    </main>
    {(() => {
      if (!navigation.path.endsWith('/success')) return null;
@@ -200,6 +207,10 @@ function TradingWorkspace({initialState,onStateChange}:{initialState?:LabState;o
          onClose={() => {
            navigation.navigate('/trade');
            setTab('demo');
+         }}
+         onGoHome={() => {
+           navigation.navigate('/');
+           setTab('home');
          }}
        />
      );
@@ -225,12 +236,13 @@ function TradeSuccessModal({
   position,
   now,
   onClose
-}: {
+, onGoHome}: {
   open: boolean;
   contract: any;
   position?: any;
   now: number;
   onClose: () => void;
+  onGoHome?: () => void;
 }) {
   const { t, number } = useOrin();
   if (!open || !contract) return null;
@@ -413,24 +425,43 @@ function TradeSuccessModal({
         </div>
 
         {/* Action Button */}
-        <button
-          type="button"
-          onClick={onClose}
-          style={{
-            width: '100%',
-            height: '50px',
-            borderRadius: '14px',
-            border: 0,
-            background: '#0788ff',
-            color: '#ffffff',
-            fontSize: '15px',
-            fontWeight: 700,
-            cursor: 'pointer',
-            boxShadow: '0 4px 12px rgba(7, 136, 255, 0.3)'
-          }}
-        >
-          {t('متابعة الصفقة', 'Track Trade')}
-        </button>
+        <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              width: '100%',
+              height: '48px',
+              borderRadius: '14px',
+              border: 0,
+              background: '#0788ff',
+              color: '#ffffff',
+              fontSize: '15px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              boxShadow: '0 4px 12px rgba(7, 136, 255, 0.3)'
+            }}
+          >
+            {t('متابعة الصفقة', 'Track Trade')}
+          </button>
+          <button
+            type="button"
+            onClick={onGoHome ?? onClose}
+            style={{
+              width: '100%',
+              height: '42px',
+              borderRadius: '12px',
+              border: '1px solid #e2e8f0',
+              background: 'transparent',
+              color: '#64748b',
+              fontSize: '14px',
+              fontWeight: 600,
+              cursor: 'pointer'
+            }}
+          >
+            {t('العودة للرئيسية', 'Return to Homepage')}
+          </button>
+        </div>
       </div>
     </div>
   );

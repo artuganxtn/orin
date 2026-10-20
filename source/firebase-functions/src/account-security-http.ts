@@ -1,6 +1,12 @@
 import {resolveObservedIP} from './account-security-ip';
 import * as security from './account-security';
-const defaultOrigins=['https://orin-99951.web.app','https://orin-99951.firebaseapp.com'];
+const defaultOrigins=[
+ 'https://orin-99951.web.app',
+ 'https://orin-99951.firebaseapp.com',
+ 'https://orin-trader.top',
+ 'https://www.orin-trader.top',
+ 'https://firebase-functions-pc5h.onrender.com'
+];
 function getAllowedOrigins(){
  const list=[...defaultOrigins];
  if(process.env.ALLOWED_ORIGINS)list.push(...process.env.ALLOWED_ORIGINS.split(',').map(s=>s.trim()));
@@ -11,13 +17,18 @@ export function observedIP(req:any){return resolveObservedIP(req).ip}
 export async function securityHandle(req:any,res:any){
  res.set('Cache-Control','private, no-store');res.set('X-Content-Type-Options','nosniff');res.set('Referrer-Policy','no-referrer');
  try{
-  const origin=req.get('origin'),origins=getAllowedOrigins();if(origin&&!origins.includes(origin)&&!(process.env.FUNCTIONS_EMULATOR==='true'&&/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)))throw new security.SecurityError('مصدر الطلب غير مسموح.',403);
+  const origin=req.get('origin'),origins=getAllowedOrigins();
+  const isAllowed=!origin||origins.includes(origin)||/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)||/^https:\/\/(.*\.)?orin-trader\.top$/i.test(origin)||/^https:\/\/[a-z0-9-]+\.onrender\.com$/i.test(origin);
+  if(origin&&!isAllowed)throw new security.SecurityError('مصدر الطلب غير مسموح.',403);
   if(origin){res.set('Access-Control-Allow-Origin',origin);res.set('Vary','Origin');res.set('Access-Control-Allow-Headers','Authorization, Content-Type, X-Orin-Session');res.set('Access-Control-Allow-Methods','GET, POST, OPTIONS');}
   if(req.method==='OPTIONS'){res.status(204).send('');return}
   await security.ensureSecurityActivation(true);
   if(!['GET','POST'].includes(req.method))throw new security.SecurityError('طريقة غير مدعومة.',405);
   if(req.method==='POST'&&(!req.is('application/json')||!req.body||Array.isArray(req.body)||typeof req.body!=='object'||Buffer.byteLength(JSON.stringify(req.body))>50_000))throw new security.SecurityError('طلب غير صالح.');
-  const meta=resolveObservedIP(req),ip=meta.ip,body=req.body??{},path=req.path.replace(/^\/api\/security\/?/,'');await security.securityRequestBudget(ip);let result:any;
+  const meta=resolveObservedIP(req),ip=meta.ip,body=req.body??{};
+  const fullPath=(req.baseUrl?(req.baseUrl+req.path):req.path)||'';
+  const path=fullPath.replace(/^.*\/api\/security\/?/,'').replace(/^.*\/orinSecurity\/?/,'').replace(/^.*\/security\/?/,'').replace(/^\//,'');
+  await security.securityRequestBudget(ip);let result:any;
   if(req.method==='POST'&&path==='login'){const auth=req.get('authorization');if(!auth?.startsWith('Bearer '))throw new security.SecurityError('بيانات الدخول مطلوبة.',401);result=await security.login(auth.slice(7),body,meta)}
   else if(req.method==='POST'&&path==='login/complete')result=await security.completeLogin(body,meta);
   else if(req.method==='POST'&&path==='refresh')result=await security.refresh(body);
