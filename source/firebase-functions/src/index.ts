@@ -189,9 +189,9 @@ app.post('/api/scheduler/trigger-now', async (req: Request, res: Response) => {
 import { identityHandle } from './email-registration-http.ts';
 
 // 2. NOWPayments webhook & public payment endpoints
-app.all('/api/payments/nowpayments/ipn', paymentsHandle);
-app.get('/api/payments/readiness', paymentsHandle);
-app.use(['/api/payments', '/orinPayments'], paymentsHandle);
+app.all(['/api/payments/nowpayments/ipn', '/orinPayments/nowpayments/ipn'], paymentsHandle);
+app.get(['/api/payments/readiness', '/orinPayments/readiness'], paymentsHandle);
+app.use(['/api/payments', '/orinPayments'], authMiddleware, paymentsHandle);
 
 // Public identity & registration endpoints
 app.use('/orinIdentity', identityHandle);

@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { NowPayments } from './nowpayments.ts';
 import { paymentService, ApiError, type Identity } from './payments.ts';
+import { adminAuth } from './firebase-admin-init.ts';
 import { PAYMENT_COINS } from '../../lib/payments';
 
 const defaultOrigins = [
@@ -72,8 +73,31 @@ export async function paymentsHandle(req: Request, res: Response) {
       return;
     }
 
-    // Get user from req.user (set by auth middleware)
-    const user: Identity = (req as any).user;
+    // Get user from req.user (set by auth middleware) or authenticate directly from Bearer token
+    let user: Identity = (req as any).user;
+    if (!user || !user.id) {
+      const authHeader = req.headers.authorization;
+      if (authHeader?.startsWith('Bearer ')) {
+        try {
+          const token = authHeader.slice(7);
+          const decoded = await adminAuth.verifyIdToken(token, false);
+          user = {
+            id: decoded.uid,
+            email: decoded.email || `${decoded.uid}@orin.top`,
+            name: typeof decoded.name === 'string' ? decoded.name : 'مستخدم ORIN',
+            verified: decoded.email_verified === true
+          };
+          (req as any).user = user;
+        } catch (authErr: any) {
+          const code = String(authErr?.code || '');
+          if (code === 'auth/id-token-expired') {
+            throw new ApiError('انتهت جلسة الدخول. سجّل الدخول مجددًا.', 401);
+          }
+          throw new ApiError('سجّل الدخول للمتابعة.', 401);
+        }
+      }
+    }
+
     if (!user || !user.id) {
       throw new ApiError('سجّل الدخول للمتابعة.', 401);
     }

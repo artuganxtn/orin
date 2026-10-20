@@ -292,10 +292,15 @@ export function paymentService(provider: Pick<NowPayments, 'create' | 'get'>, ip
   }
 
   async function list(u: Identity, accountId: string): Promise<DepositView[]> {
-    safeId(accountId);
+    if (!accountId) return [];
+    try {
+      safeId(accountId);
+    } catch {
+      return [];
+    }
     return withTx(async (client) => {
       const accRes = await client.query('SELECT id FROM accounts WHERE user_id = $1 AND id = $2', [u.id, accountId]);
-      if (accRes.rows.length === 0) throw new ApiError('الحساب غير متاح.', 404);
+      if (accRes.rows.length === 0) return [];
 
       const depRes = await client.query(
         'SELECT * FROM deposits WHERE user_id = $1 AND account_id = $2 ORDER BY created_at DESC LIMIT 20',
