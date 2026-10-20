@@ -175,18 +175,19 @@ export async function requestWithdrawal(
       userId: user.id,
       title: 'طلب سحب قيد المراجعة',
       message: `تم استلام طلب سحب بقيمة ${(amountCents / 100).toFixed(2)} USDT بنجاح. تم خصم الرصيد تلقائياً والطلب قيد المراجعة والتنفيذ.`,
-      category: 'finance',
+      category: 'financial',
       deepLink: '/withdraw'
     });
 
-    // In-app Notification for the Admin
+    // In-app Notification for the Admin (Admin role ONLY)
     const profRes = await client.query('SELECT email FROM profiles WHERE id = $1', [user.id]);
     const userEmail = profRes.rows[0]?.email || user.id;
     await createNotice(client, {
-      userId: '*',
+      userId: 'admin',
+      targetRole: 'admin',
       title: 'طلب سحب جديد بانتظار الموافقة',
       message: `المستخدم ${userEmail} قدم طلب سحب بقيمة ${(amountCents / 100).toFixed(2)} USDT (${coin}).`,
-      category: 'finance',
+      category: 'financial',
       deepLink: '/admin/withdrawals'
     });
 
@@ -278,6 +279,19 @@ export async function approveWithdrawal(
       [apprId, appr.reference]
     );
 
+    // Notify the user of withdrawal approval
+    const wdRes = await client.query('SELECT * FROM withdrawal_requests WHERE id = $1', [appr.reference]);
+    if (wdRes.rowCount > 0) {
+      const wd = wdRes.rows[0];
+      await createNotice(client, {
+        userId: wd.user_id,
+        title: 'تمت الموافقة على طلب السحب',
+        message: `تمت الموافقة على طلب السحب بقيمة ${(Number(wd.amount_cents) / 100).toFixed(2)} USDT (${wd.coin}). سيتم إرسال الحوالة إلى عنوان محفظتك قريباً.`,
+        category: 'financial',
+        deepLink: '/activity'
+      });
+    }
+
     return {
       ok: true,
       approvalId: apprId,
@@ -356,7 +370,7 @@ export async function markWithdrawalPaid(
       userId: wd.user_id,
       title: 'تم تنفيذ السحب بنجاح',
       message: `تمت الموافقة وتحويل مبلغ ${(Number(wd.net_amount_cents) / 100).toFixed(2)} USDT إلى محفظتك بنجاح. معرّف التحويل: ${txHash || 'مكتمل'}.`,
-      category: 'finance',
+      category: 'financial',
       deepLink: '/activity'
     });
 
@@ -445,7 +459,7 @@ export async function rejectWithdrawal(
       userId: wd.user_id,
       title: 'تم رفض طلب السحب',
       message: `تم رفض طلب السحب (${reason}) وتمت إعادة المبلغ (${(Number(wd.amount_cents) / 100).toFixed(2)} USDT) بالكامل إلى محفظتك.`,
-      category: 'finance',
+      category: 'financial',
       deepLink: '/withdraw'
     });
 

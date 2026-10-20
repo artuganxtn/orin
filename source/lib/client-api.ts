@@ -21,7 +21,7 @@ export async function apiFetch(path:string,init:RequestInit={}){
   const token=await runtime.token();
   if(token)headers.set('Authorization',`Bearer ${token}`);
  }
- const defaultApiBase = (typeof navigator !== 'undefined' && /ORINAndroid\//.test(navigator.userAgent)) || (typeof window !== 'undefined' && (window.location.hostname === 'orin-99951.web.app' || window.location.hostname === 'orin-99951.firebaseapp.com'))
+ const defaultApiBase = (typeof navigator !== 'undefined' && /ORINAndroid\//.test(navigator.userAgent)) || (typeof window !== 'undefined' && (window.location.hostname === 'orin-trader.top' || window.location.hostname.endsWith('.orin-trader.top') || window.location.hostname === 'orin-99951.web.app' || window.location.hostname === 'orin-99951.firebaseapp.com'))
   ? 'https://firebase-functions-pc5h.onrender.com'
   : '';
  const targetUrl = (runtime?.base || (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_ORIN_API_URL) || defaultApiBase || '').replace(/\/+$/, '') + path;

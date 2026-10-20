@@ -11,8 +11,38 @@ export class NotificationError extends Error {
 export type Identity = { id: string; email: string; name?: string; role?: string };
 export type Data = Record<string, any>;
 
-function visible(n: Data, uid: string, now: number) {
-  if (n.user_id !== uid && n.user_id !== '*') return false;
+function visible(n: Data, uid: string, role: string | undefined, now: number) {
+  const isAdmin = role === 'admin';
+  const targetRole = n.target_role || (n.deep_link?.startsWith('/admin') ? 'admin' : null);
+
+  // If notice is designated for admin:
+  if (targetRole === 'admin' || n.category === 'admin' || n.user_id === 'admin') {
+    return isAdmin;
+  }
+
+  // Hide legacy admin notices from normal users (even if user_id was stored as '*')
+  if (!isAdmin) {
+    if (n.deep_link && n.deep_link.startsWith('/admin')) return false;
+    const title = String(n.title || '');
+    if (title.includes('طلب سحب جديد') || title.includes('بانتظار الموافقة') || title.includes('سحب جديد')) {
+      return false;
+    }
+  }
+
+  // Target matching
+  if (n.user_id === '*') {
+    // Broadcast notices: non-admins only see general announcements or public campaigns
+    if (!isAdmin && n.category !== 'announcement' && !n.audience) {
+      return false;
+    }
+    return true;
+  } else if (n.user_id === 'admin') {
+    return isAdmin;
+  } else if (n.user_id !== uid) {
+    // Private notification meant for another user
+    return false;
+  }
+
   if (n.created_at > now) return false;
   if (n.expires_at !== null && n.expires_at !== undefined && n.expires_at <= now) return false;
   return true;
@@ -20,13 +50,23 @@ function visible(n: Data, uid: string, now: number) {
 
 export async function inbox(u: Identity, now = Date.now(), offset = 0, key?: string) {
   return await withTx(async (client) => {
+    const isAdmin = u.role === 'admin';
+
     // 1. Fetch user notifications from docs
+    // Strictly isolate: each user only fetches their own notices (owner_id = u.id OR data->>'user_id' = u.id),
+    // plus legitimate broadcast campaigns (user_id = '*' AND category = 'announcement').
+    // Admins also fetch administrative notices.
     const noticeRows = await client.query(
       `SELECT id, data FROM docs
        WHERE collection = 'orinNotices'
-         AND (owner_id = $1 OR owner_id IS NULL OR data->>'user_id' = $1 OR data->>'user_id' = '*')
+         AND (
+           owner_id = $1 
+           OR data->>'user_id' = $1
+           OR (data->>'user_id' = '*' AND ($2::boolean = true OR (data->>'category' = 'announcement' AND COALESCE(data->>'target_role', '') <> 'admin' AND COALESCE(data->>'deep_link', '') NOT LIKE '/admin%')))
+           OR ($2::boolean = true AND (data->>'user_id' = 'admin' OR data->>'target_role' = 'admin' OR data->>'category' = 'admin' OR data->>'deep_link' LIKE '/admin%'))
+         )
        ORDER BY updated_at DESC LIMIT 100`,
-      [u.id]
+      [u.id, isAdmin]
     );
 
     // 2. Fetch user read states
@@ -46,7 +86,7 @@ export async function inbox(u: Identity, now = Date.now(), offset = 0, key?: str
 
     const items = noticeRows.rows
       .map(r => ({ id: r.id, ...(r.data || {}) }))
-      .filter(n => visible(n, u.id, now))
+      .filter(n => visible(n, u.id, u.role, now))
       .sort((a, b) => (b.created_at || 0) - (a.created_at || 0))
       .map(n => ({
         ...n,
@@ -190,6 +230,7 @@ export async function campaign(u: Identity, input: Data, now = Date.now()) {
 
 export async function createNotice(client: any, opts: {
   userId: string;
+  targetRole?: string;
   title: string;
   message: string;
   category?: string;
@@ -198,20 +239,27 @@ export async function createNotice(client: any, opts: {
 }) {
   const noticeId = 'notif-' + randomUUID();
   const ts = opts.now || Date.now();
-  const noticeData = {
+  const cat = opts.category === 'finance' ? 'financial' : (opts.category || 'financial');
+  const targetRole = opts.targetRole || (opts.userId === 'admin' || opts.deepLink?.startsWith('/admin') ? 'admin' : undefined);
+  const noticeData: Record<string, any> = {
     id: noticeId,
     user_id: opts.userId,
     title: opts.title,
     message: opts.message,
-    category: opts.category || 'finance',
+    category: cat,
     created_at: ts,
     deep_link: opts.deepLink || '/notifications'
   };
+  if (targetRole) {
+    noticeData.target_role = targetRole;
+  }
+  const ownerId = (opts.userId === '*' || opts.userId === 'admin') ? null : opts.userId;
   await client.query(
     `INSERT INTO docs (collection, id, owner_id, data, updated_at)
      VALUES ('orinNotices', $1, $2, $3::jsonb, NOW())
      ON CONFLICT (collection, id) DO UPDATE SET data = $3::jsonb, updated_at = NOW()`,
-    [noticeId, opts.userId === '*' ? null : opts.userId, JSON.stringify(noticeData)]
+    [noticeId, ownerId, JSON.stringify(noticeData)]
   );
   return noticeData;
 }
+
