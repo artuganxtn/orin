@@ -2,6 +2,6 @@ export const FINANCIAL_UNAVAILABLE = 'تشغيل العقود وحجز الأر�
 
 export function createSparkApi(db: any, getUser: () => Promise<any>, programRequest?: any) {
   return async (path: string, init: RequestInit = {}) => {
-    throw new Error('All requests must route to Express backend');
+    return fetch(path, init);
   };
 }

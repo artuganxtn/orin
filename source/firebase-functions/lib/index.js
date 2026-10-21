@@ -10449,10 +10449,6 @@ app2.get(["/build-info", "/api/build-info"], (req, res) => {
   });
 });
 var candidates = [
-  resolve(process.cwd(), "source/firebase-security-dist"),
-  resolve(process.cwd(), "firebase-security-dist"),
-  resolve(__dirname, "../../firebase-security-dist"),
-  resolve(process.cwd(), "../firebase-security-dist"),
   resolve(process.cwd(), "source/firebase-dist"),
   resolve(process.cwd(), "firebase-dist"),
   resolve(__dirname, "../../firebase-dist"),
@@ -10460,6 +10456,10 @@ var candidates = [
   resolve(process.cwd(), "../firebase-web/dist"),
   resolve(process.cwd(), "../dist"),
   resolve(process.cwd(), "dist"),
+  resolve(process.cwd(), "source/firebase-security-dist"),
+  resolve(process.cwd(), "firebase-security-dist"),
+  resolve(__dirname, "../../firebase-security-dist"),
+  resolve(process.cwd(), "../firebase-security-dist"),
   resolve(process.cwd(), "public"),
   resolve(process.cwd(), "source/public")
 ];

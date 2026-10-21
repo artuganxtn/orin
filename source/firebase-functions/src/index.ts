@@ -1648,10 +1648,6 @@ app.get(['/build-info', '/api/build-info'], (req: Request, res: Response) => {
 
 // 6. Built web app as static files
 const candidates = [
-  resolve(process.cwd(), 'source/firebase-security-dist'),
-  resolve(process.cwd(), 'firebase-security-dist'),
-  resolve(__dirname, '../../firebase-security-dist'),
-  resolve(process.cwd(), '../firebase-security-dist'),
   resolve(process.cwd(), 'source/firebase-dist'),
   resolve(process.cwd(), 'firebase-dist'),
   resolve(__dirname, '../../firebase-dist'),
@@ -1659,6 +1655,10 @@ const candidates = [
   resolve(process.cwd(), '../firebase-web/dist'),
   resolve(process.cwd(), '../dist'),
   resolve(process.cwd(), 'dist'),
+  resolve(process.cwd(), 'source/firebase-security-dist'),
+  resolve(process.cwd(), 'firebase-security-dist'),
+  resolve(__dirname, '../../firebase-security-dist'),
+  resolve(process.cwd(), '../firebase-security-dist'),
   resolve(process.cwd(), 'public'),
   resolve(process.cwd(), 'source/public')
 ];
