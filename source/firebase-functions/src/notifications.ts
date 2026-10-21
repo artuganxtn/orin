@@ -286,8 +286,8 @@ export async function notifyWithdrawalSubmitted(client: any, p: {
     title: 'طلب سحب قيد المراجعة والتدقيق ⏳',
     message: `تم استلام طلب السحب رقم (${p.wdId}) بقيمة ${amountUsd} USDT بنجاح.\n` +
              `• المبلغ المطلوب: ${amountUsd} USDT\n` +
-             `• الرسوم: 0.00 USDT (غير مطبقة - مجانًا)\n` +
-             `• الصافي المستحق: ${amountUsd} USDT (${p.coin})\n` +
+             `• رسوم السحب (5%): ${feeUsd} USDT\n` +
+             `• الصافي المستحق: ${netUsd} USDT (${p.coin})\n` +
              `• عنوان المحفظة: ${shortAddr}\n` +
              `الطلب قيد المراجعة والتحقق المالي من قِبل إدارة ORIN.`,
     category: 'financial',
@@ -490,6 +490,8 @@ export async function notifyTradeSettled(client: any, p: {
 export async function notifyTransferCompleted(client: any, p: {
   userId: string;
   amountCents: number;
+  feeCents?: number;
+  netAmountCents?: number;
   from: string;
   to: string;
 }) {
@@ -502,7 +504,9 @@ export async function notifyTransferCompleted(client: any, p: {
     userId: p.userId,
     title: isToWithdrawal ? 'تحويل ناجح إلى محفظة السحب 💳' : 'تحويل ناجح إلى محفظة التداول 📊',
     message: `تم تحويل ${amountUsd} USDT بنجاح من ${fromName} إلى ${toName}.\n` +
-             (isToWithdrawal ? 'الرصيد متاح الآن في قسم السحب.' : 'الرصيد متاح وجاهز لفتح الصفقات الآن.'),
+             (p.feeCents && p.feeCents > 0
+               ? `• رسوم الانسحاب المبكر (20% قبل 29 يوماً): -${(p.feeCents / 100).toFixed(2)} USDT\n• المبلغ الصافي الواصل: ${((p.netAmountCents || (p.amountCents - p.feeCents)) / 100).toFixed(2)} USDT (جاهز ومتاح للسحب).`
+               : (isToWithdrawal ? '• الرصيد متاح وجاهز للسحب الآن بدون رسوم تحويل.' : 'الرصيد متاح وجاهز لفتح الصفقات الآن.')),
     category: 'financial',
     deepLink: isToWithdrawal ? '/withdraw' : '/transfer',
     metadata: {

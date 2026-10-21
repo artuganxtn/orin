@@ -196,8 +196,8 @@ export async function getDemoWallet(user: { id: string }, accountId: string) {
         elapsedDays,
         lockRemainingDays,
         isBefore29Days,
-        transferFeeRate: 0.0,
-        withdrawalFeeRate: 0.0
+        transferFeeRate: isBefore29Days ? 0.20 : 0.0,
+        withdrawalFeeRate: 0.05
       };
     }
 
@@ -285,8 +285,18 @@ export async function operateDemoWallet(
         if (nextFutures < amountCents) {
           throw new ClientError('الرصيد المتاح في العقود الآجلة غير كافٍ للتحويل. / Insufficient available balance in futures.', 400);
         }
+        // Funding trading wallet is always 100% free with 0% fee
+        feeRate = 0;
+        feeCents = 0;
+        netAmountCents = amountCents;
+        nextFutures -= amountCents;
+        nextPerp += amountCents;
+      } else {
+        if (nextPerp < amountCents) {
+          throw new ClientError('الرصيد المتاح في العقود الدائمة غير كافٍ للتحويل. / Insufficient available balance in perpetual.', 400);
+        }
 
-        // Check 29-day challenge status
+        // Early transfer from Perpetual Trading to Withdrawable Futures (20% fee if before 29 days)
         if (isReal) {
           const depRes = await client.query(
             `SELECT MIN(created_at) AS earliest_deposit
@@ -300,19 +310,34 @@ export async function operateDemoWallet(
           const lockRemainingDays = earliestMs ? Math.max(0, 29 - elapsedDays) : 29;
           const isBefore29Days = lockRemainingDays > 0;
 
-          feeRate = 0;
-          feeCents = 0;
-          netAmountCents = amountCents;
+          if (isBefore29Days) {
+            feeRate = 0.20;
+            feeCents = Math.round(amountCents * 0.20);
+            netAmountCents = amountCents - feeCents;
+          } else {
+            feeRate = 0;
+            feeCents = 0;
+            netAmountCents = amountCents;
+          }
         }
 
-        nextFutures -= amountCents;
-        nextPerp += netAmountCents;
-      } else {
-        if (nextPerp < amountCents) {
-          throw new ClientError('الرصيد المتاح في العقود الدائمة غير كافٍ للتحويل. / Insufficient available balance in perpetual.', 400);
-        }
         nextPerp -= amountCents;
-        nextFutures += amountCents;
+        nextFutures += netAmountCents;
+
+        // Deduct early exit fee from accounts cash ledger so total wallet cents match account balance cents
+        if (isReal && feeCents > 0) {
+          const jnlId = 'jnl-fee-' + randomUUID();
+          await client.query(
+            `INSERT INTO journals (id, kind, reference, created_at) VALUES ($1, 'early_exit_fee', $2, NOW())`,
+            [jnlId, requestId]
+          );
+          await client.query(
+            `INSERT INTO journal_entries (journal_id, user_id, account_id, bucket, amount_cents) VALUES
+             ($1, $2, $3, 'cash', $4),
+             ($1, NULL, NULL, 'system:early-exit-fee', $5)`,
+            [jnlId, user.id, accountId, -feeCents, feeCents]
+          );
+        }
       }
     }
 
@@ -349,6 +374,8 @@ export async function operateDemoWallet(
       await notifyTransferCompleted(client, {
         userId: user.id,
         amountCents,
+        feeCents,
+        netAmountCents,
         from: input.from || 'futures',
         to: input.from === 'futures' ? 'perpetual' : 'futures'
       });

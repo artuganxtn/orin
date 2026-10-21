@@ -19,7 +19,7 @@ export function AccountTransfer({ account, onSaved }: { account: TradingAccount 
   const [loading, setLoading] = useState(false);
 
   const to = from === 'futures' ? 'perpetual' : 'futures';
-  const label = (type: string) => type === 'futures' ? t('العقود الآجلة (محفظة السحب والإيداع)', 'Futures (Withdrawal & Deposit)') : t('العقود الدائمة (محفظة التداول - غير قابلة للسحب)', 'Permanent Contracts (Trading - Non-Withdrawable)');
+  const label = (type: string) => type === 'futures' ? t('الرصيد المتاح للسحب (العقود الآجلة)', 'Available for Withdrawal (Futures)') : t('رصيد العقود الدائمة (للتداول فقط - غير قابل للسحب)', 'Permanent Contracts (Trading Only - Non-Withdrawable)');
 
   // Load live wallet pockets and history on mount and when account changes
   useEffect(() => {
@@ -215,20 +215,43 @@ export function AccountTransfer({ account, onSaved }: { account: TradingAccount 
         </div>
       </div>
 
-      {/* Fee Notice: Free 0% Instant Transfers */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px', borderRadius: '14px', background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#166534', fontSize: '13px', width: '100%', boxSizing: 'border-box' }}>
-        <CheckCircle2 size={18} style={{ color: '#16a34a', flexShrink: 0 }} />
-        <span><b>{t('تحويل فوري ومجاني (0% رسوم)', 'Instant Free Transfer (0% Fee)')}</b> · {t('فصل تام: العقود الدائمة مخصصة حصراً للتداول وحمايتها تامة ولا يمكن سحبها، بينما العقود الآجلة مخصصة لعمليات السحب والإيداع.', 'Full separation: Permanent contracts are reserved for trading and cannot be withdrawn directly. Futures contracts are dedicated for deposits and withdrawals.')}</span>
-      </div>
-
-      {/* Info Alert */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px', borderRadius: '14px', background: '#edf5ff', border: '1px solid #d6e7fc', color: '#3f5a82', fontSize: '13px', lineHeight: 1.6, width: '100%', boxSizing: 'border-box' }}>
-        <Info size={18} style={{ color: '#0788ff', flexShrink: 0 }} />
-        <div style={{ minWidth: 0 }}>
-          <b style={{ display: 'block', fontSize: '13.5px', marginBottom: '2px' }}>{t('آلية التحويل والسحب', 'Transfer & Withdrawal Flow')}</b>
-          <span>{t('لتحويل أرباح أو رأس مال التداول إلى رصيد قابل للسحب، قم بنقله من العقود الدائمة إلى العقود الآجلة لتتمكن من سحبه فوراً.', 'To withdraw your trading profits or funds, transfer from Permanent Contracts to Futures to withdraw instantly.')}</span>
+      {/* 20% Early Exit Calculation when transferring from Perpetual to Futures */}
+      {from === 'perpetual' && Number(amount) > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '14px 16px', borderRadius: '16px', background: '#fffbeb', border: '1px solid #fde68a', fontSize: '13px', width: '100%', boxSizing: 'border-box' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ color: '#92400e', fontWeight: 600 }}>{t('المبلغ المحوّل من العقود الدائمة:', 'Transfer Amount from Perpetual:')}</span>
+            <b dir="ltr" style={{ color: '#0f172a' }}>{Number(amount).toFixed(2)} USDT</b>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ color: '#92400e', fontWeight: 600 }}>{t('رسوم الانسحاب المبكر (20% قبل 29 يوماً):', 'Early Exit Fee (20% before 29 days):')}</span>
+            <b dir="ltr" style={{ color: '#dc2626', fontWeight: 700 }}>-{(Number(amount) * 0.20).toFixed(2)} USDT</b>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed #fcd34d', paddingTop: '8px' }}>
+            <span style={{ color: '#92400e', fontWeight: 800, fontSize: '13.5px' }}>{t('الصافي الواصل لمحفظة السحب (العقود الآجلة):', 'Net Credited to Withdrawable Futures:')}</span>
+            <b dir="ltr" style={{ color: '#0788ff', fontSize: '15px', fontWeight: 800 }}>{(Number(amount) * 0.80).toFixed(2)} USDT</b>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Direction-specific Policy Alert */}
+      {from === 'perpetual' ? (
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '14px 16px', borderRadius: '16px', background: '#fef3c7', border: '1px solid #fde68a', color: '#92400e', fontSize: '13px', lineHeight: 1.6, width: '100%', boxSizing: 'border-box' }}>
+          <Info size={19} style={{ color: '#d97706', flexShrink: 0, marginTop: '2px' }} />
+          <div style={{ minWidth: 0 }}>
+            <b style={{ display: 'block', fontSize: '14px', marginBottom: '3px' }}>
+              {t('سياسة الانسحاب المبكر (20% قبل 29 يوماً)', 'Early Exit Policy (20% before 29 days)')}
+            </b>
+            <span>
+              {t('العقود الدائمة مخصصة للتداول حصراً وغير قابلة للسحب مباشرة. عند نقل الرصيد إلى محفظة السحب (العقود الآجلة) قبل استيفاء مدة الـ 29 يوماً، تُفرض رسوم انسحاب مبكر بنسبة 20% وفق سياسة إدارة رأس المال المعتمدة.', 'Permanent Contracts are for trading only and not directly withdrawable. Transferring to Withdrawable Futures before 29 days incurs a 20% early exit fee per capital management policy.')}
+            </span>
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '14px 16px', borderRadius: '16px', background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#166534', fontSize: '13px', width: '100%', boxSizing: 'border-box' }}>
+          <CheckCircle2 size={19} style={{ color: '#16a34a', flexShrink: 0 }} />
+          <span><b>{t('تمويل التداول فوري ومجاني (0% رسوم)', 'Trading Funding is Free (0% Fee)')}</b> · {t('نقل الرصيد من العقود الآجلة إلى العقود الدائمة لفتح صفقات التداول مجاني وفوري 100%.', 'Transferring funds from Futures to Permanent Contracts to open trades is 100% free and instant.')}</span>
+        </div>
+      )}
 
       {done && (
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px', borderRadius: '14px', background: '#e8f8f1', border: '1px solid #bfe9d6', color: '#11795a', fontSize: '13px', width: '100%', boxSizing: 'border-box' }}>

@@ -236,9 +236,9 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
         return;
       }
 
-      // Withdrawal fees are NOT applicable (0% fee, full payout)
-      const fee = 0;
-      const netAmount = val;
+      // 5% standard withdrawal fee
+      const fee = Math.round(val * 0.05 * 100) / 100;
+      const netAmount = Math.max(0, Math.round((val - fee) * 100) / 100);
 
       try {
         setBusy(true);
@@ -472,7 +472,7 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '14px' }}>
                 <span style={{ color: '#64748b', fontWeight: 500 }}>{t('الرسوم', 'Fees')}</span>
                 <span style={{ fontWeight: 700, color: '#0f172a', fontFamily: 'Arial, sans-serif' }} dir="ltr">
-                  0.00 USDT
+                  {Number(wNotice.fee || (Number(wNotice.amount) * 0.05)).toFixed(2)} USDT
                 </span>
               </div>
             </div>
@@ -483,7 +483,7 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
                 {t('صافي الاستلام', 'Net Received')}
               </span>
               <strong style={{ fontSize: '20px', fontWeight: 900, color: '#0066cc', fontFamily: 'Arial, sans-serif' }} dir="ltr">
-                {Number(wNotice.netAmount || wNotice.amount).toFixed(2)} USDT
+                {Number(wNotice.netAmount || (Number(wNotice.amount) * 0.95)).toFixed(2)} USDT
               </strong>
             </div>
           </div>
@@ -562,7 +562,7 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
                     <span style={{ fontWeight: 600 }}>{t('رصيدك متاح بالكامل في محفظة التداول (العقود الدائمة)', 'Your balance is in Trading (Permanent Contracts)')}</span>
                   </div>
                   <p style={{ margin: 0, fontSize: '12.5px', lineHeight: 1.5 }}>
-                    {t('العقود الدائمة مخصصة للتداول وحمايتها تامة. للسحب، يرجى نقل المبلغ الذي ترغب في سحبه إلى العقود الآجلة (محفظة السحب) أولاً بدون رسوم.', 'Permanent contracts are reserved for trading. To withdraw, transfer your desired amount to Futures (Withdrawal Wallet) first for free.')}
+                    {t('العقود الدائمة مخصصة للتداول وحمايتها تامة. للسحب، يرجى نقل المبلغ الذي ترغب في سحبه إلى العقود الآجلة (المتاحة للسحب) وفق سياسة إدارة رأس المال.', 'Permanent contracts are reserved for trading. To withdraw, transfer your desired amount to Futures (Withdrawable) per capital management policy.')}
                   </p>
                   <button
                     type="button"
@@ -599,14 +599,14 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
                 </div>
               </div>
 
-              {/* Real-time 0 Fee Calculation */}
+              {/* Real-time 5% Fee Calculation */}
               {Number(wAmount) > 0 && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderRadius: '12px', background: '#f0fdf4', border: '1px solid #bbf7d0', fontSize: '13px' }}>
                   <span style={{ color: '#166534' }}>
-                    {t('الرسوم:', 'Fee:')} <b dir="ltr" style={{ color: '#16a34a' }}>0.00 USDT ({t('غير مطبقة - مجانًا', 'Not applicable - Free')})</b>
+                    {t('رسوم السحب (5%):', 'Withdrawal Fee (5%):')} <b dir="ltr" style={{ color: '#dc2626' }}>-{(Number(wAmount) * 0.05).toFixed(2)} USDT</b>
                   </span>
                   <span style={{ color: '#166534', fontWeight: 700 }}>
-                    {t('صافي الاستلام:', 'Net payout:')} <b dir="ltr" style={{ color: '#0788ff' }}>{(Number(wAmount)).toFixed(2)} USDT</b>
+                    {t('صافي الاستلام:', 'Net payout:')} <b dir="ltr" style={{ color: '#0788ff' }}>{(Number(wAmount) * 0.95).toFixed(2)} USDT</b>
                   </span>
                 </div>
               )}
@@ -619,7 +619,7 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
                 </span>
               </div>
 
-              <Note kind="info">{t('السحب بدون أي رسوم إضافية (0%). يصلك كامل المبلغ المطلوب إلى محفظتك.', 'Withdrawals have 0% fees. You receive the full requested amount into your wallet.')}</Note>
+              <Note kind="info">{t('رسوم السحب العادية 5% وفق سياسة إدارة رأس المال المعتمدة. تُخصم تلقائياً من المبلغ المطلوب.', 'Standard withdrawal fee is 5% in accordance with the approved capital management policy. Automatically deducted from requested amount.')}</Note>
             </div>
 
             <ErrorBox />
