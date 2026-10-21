@@ -286,8 +286,8 @@ export async function notifyWithdrawalSubmitted(client: any, p: {
     title: 'طلب سحب قيد المراجعة والتدقيق ⏳',
     message: `تم استلام طلب السحب رقم (${p.wdId}) بقيمة ${amountUsd} USDT بنجاح.\n` +
              `• المبلغ المطلوب: ${amountUsd} USDT\n` +
-             `• رسوم المعالجة (5%): ${feeUsd} USDT\n` +
-             `• الصافي المستحق: ${netUsd} USDT (${p.coin})\n` +
+             `• الرسوم: 0.00 USDT (غير مطبقة - مجانًا)\n` +
+             `• الصافي المستحق: ${amountUsd} USDT (${p.coin})\n` +
              `• عنوان المحفظة: ${shortAddr}\n` +
              `الطلب قيد المراجعة والتحقق المالي من قِبل إدارة ORIN.`,
     category: 'financial',

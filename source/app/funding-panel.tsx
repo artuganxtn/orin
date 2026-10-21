@@ -236,9 +236,9 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
         return;
       }
 
-      // Always 5% withdrawal fee
-      const fee = Math.round(val * 0.05 * 100) / 100;
-      const netAmount = Math.max(0, Math.round((val - fee) * 100) / 100);
+      // Withdrawal fees are NOT applicable (0% fee, full payout)
+      const fee = 0;
+      const netAmount = val;
 
       try {
         setBusy(true);
@@ -259,9 +259,7 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
         }
         const nowObj = new Date();
         const dateCode = nowObj.getFullYear() + String(nowObj.getMonth() + 1).padStart(2, '0') + String(nowObj.getDate()).padStart(2, '0');
-        const formattedId = data.id && !data.id.startsWith('wd-')
-          ? data.id
-          : `WD-${dateCode}-${Math.floor(1000 + Math.random() * 9000)}`;
+        const formattedId = data.id || `wd-${dateCode}-${Math.floor(1000 + Math.random() * 9000)}`;
 
         setWNotice({
           id: formattedId,
@@ -297,175 +295,201 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
 
     // Screenshot 1 & 2 — Clean 1-Page Receipt View matching attached screenshots
     if (wNotice) {
-      const formattedDate = new Date(wNotice.createdAt).toLocaleString(prefs.chartLocale === 'ar' ? 'ar-u-nu-latn' : 'en-GB', {
-        timeZone: prefs.timezone,
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
+      const userTz = typeof Intl !== 'undefined' ? (Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC') : 'UTC';
+      const wDate = new Date(wNotice.createdAt || Date.now());
+
+      const formattedLocalDate = new Intl.DateTimeFormat(prefs.chartLocale === 'ar' ? 'ar-u-nu-latn' : 'en-GB', {
+        timeZone: userTz,
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+      }).format(wDate);
+
+      const formattedLocalTime = new Intl.DateTimeFormat(prefs.chartLocale === 'ar' ? 'ar-u-nu-latn' : 'en-GB', {
+        timeZone: userTz,
         hour: '2-digit',
-        minute: '2-digit'
-      }).replace(',', ' ·');
+        minute: '2-digit',
+        hour12: true
+      }).format(wDate);
 
       const isPaid = wNotice.status === 'paid' || wNotice.status === 'approved';
       const isRejected = wNotice.status === 'rejected';
 
-      const shortAddr = wNotice.address.length > 18
-        ? (wNotice.address.slice(0, 6) + '...' + wNotice.address.slice(-4))
-        : wNotice.address;
+      const shortAddr = wNotice.address && wNotice.address.length > 18
+        ? (wNotice.address.slice(0, 4) + '...........' + wNotice.address.slice(-3))
+        : (wNotice.address || '—');
+
+      const netCoin = PAYMENT_COINS.find(c => c.id === wNotice.coin) || { label: 'BNB Smart Chain', network: 'BEP20' };
 
       return (
-        <section className="fp fp-receipt-screen" style={{ width: '100%', maxWidth: '440px', margin: '0 auto', padding: '8px 16px 20px', boxSizing: 'border-box', minHeight: '94vh', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+        <section className="fp fp-receipt-screen" style={{ width: '100%', maxWidth: '440px', margin: '0 auto', padding: '16px 18px 24px', boxSizing: 'border-box', minHeight: '94vh', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', background: '#fff' }}>
           <div>
-            {/* Top Bar matching Image 1 & 2: ORIN Brand left, Chevron right */}
-            <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0 14px', width: '100%' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <img src="/brand/orin-mark.png" alt="ORIN" style={{ width: '32px', height: '32px', objectFit: 'contain' }} />
-                <strong style={{ fontSize: '20px', fontWeight: 900, color: '#06111f', letterSpacing: '0.5px' }}>ORIN</strong>
-              </div>
+            {/* Top Bar: Back Chevron */}
+            <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', padding: '0 0 10px', width: '100%' }}>
               <button
                 type="button"
                 onClick={() => setWNotice(null)}
                 style={{ border: 0, background: 'none', color: '#0788ff', cursor: 'pointer', padding: '6px', display: 'grid', placeItems: 'center' }}
               >
-                <ChevronLeft size={24} style={{ transform: prefs.chartLocale === 'ar' ? 'scaleX(-1)' : 'none' }} />
+                <ChevronLeft size={26} style={{ transform: prefs.chartLocale === 'ar' ? 'scaleX(-1)' : 'none' }} />
               </button>
             </header>
 
-            {/* Central Circle with Wallet Icon */}
-            <div style={{ textAlign: 'center', margin: '4px 0 16px' }}>
-              <div style={{ width: '68px', height: '68px', borderRadius: '50%', background: '#eaf2ff', display: 'grid', placeItems: 'center', margin: '0 auto 10px' }}>
-                <Wallet size={32} color="#0788ff" />
+            {/* Central Circle with ArrowUpRight Icon matching user screenshot */}
+            <div style={{ textAlign: 'center', margin: '2px 0 16px' }}>
+              <div style={{ width: '60px', height: '60px', borderRadius: '50%', background: '#e0efff', display: 'grid', placeItems: 'center', margin: '0 auto 12px' }}>
+                <ArrowUpRight size={30} color="#0084ff" strokeWidth={2.4} />
               </div>
 
-              <div style={{ fontSize: '15px', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>
-                {t('سحب USDT', 'USDT Withdrawal')}
+              <div style={{ fontSize: '16px', fontWeight: 700, color: '#1e293b', marginBottom: '6px' }}>
+                {t('سحب USDT', 'Withdraw USDT')}
               </div>
 
-              <div style={{ fontSize: '36px', fontWeight: 900, color: '#06111f', margin: '4px 0 10px', fontFamily: 'Arial, sans-serif' }} dir="ltr">
-                {Number(wNotice.amount).toFixed(2)} <span style={{ fontSize: '22px', fontWeight: 800 }}>USDT</span>
+              <div style={{ fontSize: '38px', fontWeight: 900, color: '#09152b', margin: '4px 0 14px', fontFamily: 'Arial, sans-serif' }} dir="ltr">
+                <span style={{ fontSize: '26px', fontWeight: 800, marginInlineEnd: '8px' }}>USDT</span>
+                {Number(wNotice.amount).toFixed(2)}
               </div>
 
-              {/* Status Pill matching Image 1 & 2 */}
+              {/* Status Pill matching user screenshot */}
               {isPaid ? (
                 <div>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#dcfce7', color: '#15803d', padding: '5px 16px', borderRadius: '999px', fontSize: '13px', fontWeight: 700 }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#dcfce7', color: '#15803d', padding: '5px 18px', borderRadius: '999px', fontSize: '13.5px', fontWeight: 700 }}>
                     <CheckCircle2 size={16} />
                     <span>{t('تم السحب', 'Withdrawn')}</span>
                   </span>
-                  <p style={{ margin: '6px 0 0', fontSize: '12.5px', color: '#64748b' }}>
-                    {t('تم تحويل المبلغ إلى محفظتك', 'Amount transferred to your wallet')}
+                  <p style={{ margin: '8px 0 0', fontSize: '13px', color: '#64748b' }}>
+                    {t('تم تحويل المبلغ إلى محفظتك بنجاح', 'Amount successfully transferred to your wallet')}
                   </p>
                 </div>
               ) : isRejected ? (
                 <div>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#fee2e2', color: '#b91c1c', padding: '5px 16px', borderRadius: '999px', fontSize: '13px', fontWeight: 700 }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#fee2e2', color: '#b91c1c', padding: '5px 18px', borderRadius: '999px', fontSize: '13.5px', fontWeight: 700 }}>
                     <CircleAlert size={16} />
                     <span>{t('مرفوض', 'Rejected')}</span>
                   </span>
-                  <p style={{ margin: '6px 0 0', fontSize: '12.5px', color: '#64748b' }}>
+                  <p style={{ margin: '8px 0 0', fontSize: '13px', color: '#64748b' }}>
                     {t('تم رفض طلب السحب وإعادة الرصيد', 'Withdrawal rejected and refunded')}
                   </p>
                 </div>
               ) : (
                 <div>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#fef3c7', color: '#b45309', padding: '5px 16px', borderRadius: '999px', fontSize: '13px', fontWeight: 700 }}>
-                    <Clock3 size={15} />
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#fef3c7', color: '#b45309', padding: '5px 18px', borderRadius: '999px', fontSize: '13.5px', fontWeight: 700 }}>
+                    <Clock3 size={16} />
                     <span>{t('قيد المراجعة', 'Under Review')}</span>
                   </span>
-                  <p style={{ margin: '6px 0 0', fontSize: '12.5px', color: '#64748b' }}>
+                  <p style={{ margin: '8px 0 0', fontSize: '13px', color: '#64748b' }}>
                     {t('بانتظار تنفيذ التحويل', 'Awaiting transfer execution')}
                   </p>
                 </div>
               )}
             </div>
 
-            {/* List Table matching Image 1 & 2 */}
-            <div style={{ background: '#ffffff', borderRadius: '18px', border: '1px solid #f1f5f9', overflow: 'hidden', margin: '14px 0 6px' }}>
+            {/* Subtle Divider */}
+            <div style={{ borderTop: '1px dashed #e2e8f0', margin: '22px 0 16px' }} />
+
+            {/* Section Title */}
+            <div style={{ fontSize: '16px', fontWeight: 800, color: '#09152b', textAlign: 'start', margin: '0 0 14px' }}>
+              {t('تفاصيل التحويل', 'Transfer Details')}
+            </div>
+
+            {/* Key-Value Details matching user screenshot */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               {/* Row 1: Order ID */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '13px 14px', borderBottom: '1px solid #f1f5f9', fontSize: '14px' }}>
-                <span style={{ color: '#475569', fontWeight: 500 }}>{t('رقم الطلب', 'Order ID')}</span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, color: '#0f172a' }} dir="ltr">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', fontSize: '13.5px' }}>
+                <span style={{ color: '#64748b', fontWeight: 500, minWidth: '70px', textAlign: 'end' }}>{t('رقم الطلب', 'Order ID')}</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, color: '#0f172a', maxWidth: '75%', wordBreak: 'break-all' }} dir="ltr">
                   <span>{wNotice.id}</span>
-                  <button type="button" onClick={() => copy(wNotice.id, 'wdId')} style={{ border: 0, background: 'none', cursor: 'pointer', padding: '2px', color: '#0788ff', display: 'grid', placeItems: 'center' }}>
+                  <button type="button" onClick={() => copy(wNotice.id, 'wdId')} style={{ border: 0, background: 'none', cursor: 'pointer', padding: '2px', color: '#0788ff', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
                     {copied === 'wdId' ? <Check size={16} /> : <Copy size={16} />}
                   </button>
                 </span>
               </div>
 
-              {/* Row 2: Order Date */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '13px 14px', borderBottom: '1px solid #f1f5f9', fontSize: '14px' }}>
-                <span style={{ color: '#475569', fontWeight: 500 }}>{t('تاريخ الطلب', 'Order Date')}</span>
-                <span style={{ fontWeight: 600, color: '#0f172a' }} dir="ltr">
-                  {formattedDate}
-                </span>
-              </div>
-
-              {/* Row 3: Network */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '13px 14px', borderBottom: '1px solid #f1f5f9', fontSize: '14px' }}>
-                <span style={{ color: '#475569', fontWeight: 500 }}>{t('الشبكة', 'Network')}</span>
+              {/* Row 2: Network */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13.5px' }}>
+                <span style={{ color: '#64748b', fontWeight: 500 }}>{t('الشبكة', 'Network')}</span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, color: '#0f172a' }} dir="ltr">
                   <Mark kind={wNotice.coin} size={22} />
-                  <span>{wNotice.network || 'BEP20'}</span>
+                  <span>{netCoin.label} · {netCoin.network}</span>
                 </span>
               </div>
 
-              {/* Row 4: Wallet Address */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '13px 14px', borderBottom: '1px solid #f1f5f9', fontSize: '14px' }}>
-                <span style={{ color: '#475569', fontWeight: 500 }}>{t('عنوان المحفظة', 'Wallet Address')}</span>
+              {/* Row 3: Date */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13.5px' }}>
+                <span style={{ color: '#64748b', fontWeight: 500 }}>{t('التاريخ', 'Date')}</span>
+                <span style={{ fontWeight: 700, color: '#0f172a' }} dir="auto">
+                  {formattedLocalDate}
+                </span>
+              </div>
+
+              {/* Row 4: Time (Local user device time matching status bar!) */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13.5px' }}>
+                <span style={{ color: '#64748b', fontWeight: 500 }}>{t('الوقت', 'Time')}</span>
+                <span style={{ fontWeight: 700, color: '#0f172a' }} dir="ltr">
+                  {formattedLocalTime}
+                </span>
+              </div>
+
+              {/* Row 5: Recipient Address */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13.5px' }}>
+                <span style={{ color: '#64748b', fontWeight: 500 }}>{t('عنوان الاستلام', 'Recipient Address')}</span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, color: '#0f172a' }} dir="ltr">
                   <span>{shortAddr}</span>
-                  <button type="button" onClick={() => copy(wNotice.address, 'wdAddr')} style={{ border: 0, background: 'none', cursor: 'pointer', padding: '2px', color: '#0788ff', display: 'grid', placeItems: 'center' }}>
+                  <button type="button" onClick={() => copy(wNotice.address, 'wdAddr')} style={{ border: 0, background: 'none', cursor: 'pointer', padding: '2px', color: '#0788ff', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
                     {copied === 'wdAddr' ? <Check size={16} /> : <Copy size={16} />}
                   </button>
                 </span>
               </div>
 
-              {/* Row 5: Fees */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '13px 14px', borderBottom: '1px solid #f1f5f9', fontSize: '14px' }}>
-                <span style={{ color: '#475569', fontWeight: 500 }}>{t('الرسوم (5%)', 'Fees (5%)')}</span>
-                <span style={{ fontWeight: 600, color: '#0f172a' }} dir="ltr">
-                  {Number(wNotice.fee).toFixed(2)} USDT
+              {/* Row 6: Transfer TxID */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13.5px' }}>
+                <span style={{ color: '#64748b', fontWeight: 500 }}>{t('معرّف التحويل', 'Transaction Hash')}</span>
+                <span style={{ fontWeight: 600, color: wNotice.txHash ? '#0f172a' : '#94a3b8' }} dir="ltr">
+                  {wNotice.txHash ? (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span>{wNotice.txHash.length > 20 ? wNotice.txHash.slice(0, 8) + '...' + wNotice.txHash.slice(-6) : wNotice.txHash}</span>
+                      <button type="button" onClick={() => copy(wNotice.txHash, 'wdTx')} style={{ border: 0, background: 'none', cursor: 'pointer', padding: '2px', color: '#0788ff', display: 'grid', placeItems: 'center' }}>
+                        {copied === 'wdTx' ? <Check size={16} /> : <Copy size={16} />}
+                      </button>
+                    </span>
+                  ) : t('لم يصدر بعد', 'Not issued yet')}
+                </span>
+              </div>
+            </div>
+
+            {/* Divider */}
+            <div style={{ borderTop: '1px solid #f1f5f9', margin: '16px 0 12px' }} />
+
+            {/* Amounts & Fees rows */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '14px' }}>
+                <span style={{ color: '#64748b', fontWeight: 500 }}>{t('مبلغ السحب', 'Withdrawal Amount')}</span>
+                <span style={{ fontWeight: 700, color: '#0f172a', fontFamily: 'Arial, sans-serif' }} dir="ltr">
+                  {Number(wNotice.amount).toFixed(2)} USDT
                 </span>
               </div>
 
-              {/* Row 6: Net Received */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '13px 14px', fontSize: '14.5px' }}>
-                <span style={{ color: '#475569', fontWeight: 600 }}>{t('صافي الاستلام', 'Net Received')}</span>
-                <strong style={{ fontSize: '18px', fontWeight: 800, color: '#0788ff', fontFamily: 'Arial, sans-serif' }} dir="ltr">
-                  {Number(wNotice.netAmount).toFixed(2)} USDT
-                </strong>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '14px' }}>
+                <span style={{ color: '#64748b', fontWeight: 500 }}>{t('الرسوم', 'Fees')}</span>
+                <span style={{ fontWeight: 700, color: '#0f172a', fontFamily: 'Arial, sans-serif' }} dir="ltr">
+                  0.00 USDT
+                </span>
               </div>
-
-              {/* Collapsible Details */}
-              {showMoreDetails && (
-                <div style={{ padding: '12px 14px', background: '#f8fafc', borderTop: '1px dashed #e2e8f0', fontSize: '13px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: '#64748b' }}>{t('العنوان الكامل', 'Full Address')}:</span>
-                    <span style={{ wordBreak: 'break-all', fontSize: '12px' }} dir="ltr">{wNotice.address}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: '#64748b' }}>{t('حالة الطلب', 'Status')}:</span>
-                    <span style={{ fontWeight: 600 }}>{isPaid ? t('مكتمل', 'Completed') : isRejected ? t('مرفوض', 'Rejected') : t('قيد التدقيق', 'Processing')}</span>
-                  </div>
-                </div>
-              )}
             </div>
 
-            {/* Toggle Show More Details */}
-            <div style={{ textAlign: 'center', margin: '4px 0 12px' }}>
-              <button
-                type="button"
-                onClick={() => setShowMoreDetails(v => !v)}
-                style={{ border: 0, background: 'none', color: '#0788ff', fontSize: '13px', fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-              >
-                <span>{showMoreDetails ? t('عرض تفاصيل أقل', 'Show less details') : t('عرض المزيد من التفاصيل', 'Show more details')}</span>
-                <ChevronDown size={15} style={{ transform: showMoreDetails ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
-              </button>
+            {/* Light Blue Container for Net Received matching screenshot */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#eaf2ff', borderRadius: '16px', padding: '16px 20px', marginTop: '16px' }}>
+              <span style={{ fontSize: '15.5px', fontWeight: 800, color: '#004080' }}>
+                {t('صافي الاستلام', 'Net Received')}
+              </span>
+              <strong style={{ fontSize: '20px', fontWeight: 900, color: '#0066cc', fontFamily: 'Arial, sans-serif' }} dir="ltr">
+                {Number(wNotice.netAmount || wNotice.amount).toFixed(2)} USDT
+              </strong>
             </div>
           </div>
 
-          {/* Bottom Actions matching Image 1 & 2 */}
-          <div style={{ marginTop: 'auto', paddingTop: '10px' }}>
+          {/* Bottom Actions */}
+          <div style={{ marginTop: 'auto', paddingTop: '16px' }}>
             <button
               type="button"
               className="fp-btn primary big"
@@ -493,31 +517,6 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
               <span>{t('العودة إلى المعاملات', 'Return to Transactions')}</span>
               <Fwd size={18} className="fp-flip" />
             </button>
-
-            <button
-              type="button"
-              onClick={() => nav.navigate('/support')}
-              style={{
-                border: 0,
-                background: 'none',
-                color: '#0788ff',
-                fontSize: '14px',
-                fontWeight: 600,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '6px',
-                cursor: 'pointer',
-                margin: '12px auto 6px'
-              }}
-            >
-              <MessageCircleMore size={18} />
-              <span>{t('تحتاج مساعدة؟', 'Need help?')}</span>
-            </button>
-
-            <p style={{ textAlign: 'center', fontSize: '11.5px', color: '#94a3b8', margin: 0 }}>
-              {t('تخضع الطلبات لشروط السحب المعتمدة', 'Requests are subject to approved withdrawal terms')}
-            </p>
           </div>
         </section>
       );
@@ -600,14 +599,14 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
                 </div>
               </div>
 
-              {/* Real-time 5% Fee Calculation */}
+              {/* Real-time 0 Fee Calculation */}
               {Number(wAmount) > 0 && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderRadius: '12px', background: '#f0fdf4', border: '1px solid #bbf7d0', fontSize: '13px' }}>
                   <span style={{ color: '#166534' }}>
-                    {t('رسوم السحب (5%):', 'Withdrawal Fee (5%):')} <b dir="ltr">-{(Number(wAmount) * 0.05).toFixed(2)} USDT</b>
+                    {t('الرسوم:', 'Fee:')} <b dir="ltr" style={{ color: '#16a34a' }}>0.00 USDT ({t('غير مطبقة - مجانًا', 'Not applicable - Free')})</b>
                   </span>
                   <span style={{ color: '#166534', fontWeight: 700 }}>
-                    {t('صافي الاستلام:', 'Net payout:')} <b dir="ltr" style={{ color: '#0788ff' }}>{(Number(wAmount) * 0.95).toFixed(2)} USDT</b>
+                    {t('صافي الاستلام:', 'Net payout:')} <b dir="ltr" style={{ color: '#0788ff' }}>{(Number(wAmount)).toFixed(2)} USDT</b>
                   </span>
                 </div>
               )}
@@ -620,7 +619,7 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
                 </span>
               </div>
 
-              <Note kind="info">{t('رسوم السحب ثابتة 5% دائمًا. يتم خصم 5% رسوم شبكة وسحب تلقائيًا من المبلغ المطلوب.', 'Withdrawal fee is always 5%. A 5% withdrawal fee is automatically deducted from requested amount.')}</Note>
+              <Note kind="info">{t('السحب بدون أي رسوم إضافية (0%). يصلك كامل المبلغ المطلوب إلى محفظتك.', 'Withdrawals have 0% fees. You receive the full requested amount into your wallet.')}</Note>
             </div>
 
             <ErrorBox />
@@ -695,7 +694,15 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
                           {number(amt)} USD
                         </b>
                         <small style={{ color: 'var(--fp-muted)', fontSize: '12px' }}>
-                          {new Date(item.created_at || item.createdAt).toLocaleDateString('en-CA')} · {item.coin || 'USDT'}
+                          {new Intl.DateTimeFormat(prefs.chartLocale === 'ar' ? 'ar-u-nu-latn' : 'en-GB', {
+                            timeZone: typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'UTC',
+                            day: 'numeric',
+                            month: 'short',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            hour12: true
+                          }).format(new Date(item.created_at || item.createdAt))} · {item.coin || 'USDT'}
                         </small>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

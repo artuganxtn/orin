@@ -196,8 +196,8 @@ export async function getDemoWallet(user: { id: string }, accountId: string) {
         elapsedDays,
         lockRemainingDays,
         isBefore29Days,
-        transferFeeRate: isBefore29Days ? 0.20 : 0.0,
-        withdrawalFeeRate: 0.05
+        transferFeeRate: 0.0,
+        withdrawalFeeRate: 0.0
       };
     }
 

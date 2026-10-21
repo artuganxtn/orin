@@ -98,7 +98,7 @@ export function transactionDetails(row:AccountTransaction,ar=true):[string,strin
   [text('رقم الحساب','Account number'),row.accountNumber],
   [text('نوع الحساب','Account type'),row.accountType==='real'?text('حقيقي','Real'):text('تجريبي - غير قابل للسحب','Demo - non-withdrawable')],
   [text('العملة','Currency'),row.currency],
-  [text('التاريخ والتوقيت','Date and time'),new Date(row.createdAt).toISOString().replace('T',' ').replace('.000Z',' UTC')],
+  [text('التاريخ والتوقيت','Date and time'),new Intl.DateTimeFormat(ar?'ar-u-nu-latn':'en-GB',{timeZone:typeof Intl!=='undefined'?Intl.DateTimeFormat().resolvedOptions().timeZone:'UTC',year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:true}).format(new Date(row.createdAt))],
  ];
  if(d)rows.push(
   [text('مزود الدفع','Payment provider'),'ORIN Pay'],
@@ -119,8 +119,8 @@ export function transactionDetails(row:AccountTransaction,ar=true):[string,strin
    [text('العملة والشبكة','Coin & Network'),coinObj?`${coinObj.label} · ${coinObj.network}`:w.coin],
    [text('عنوان المحفظة المستلمة','Recipient address'),w.address||'—'],
    [text('مبلغ السحب المطلوب','Requested withdrawal'),`${(w.amountCents/100).toFixed(2)} USD`],
-   [text('رسوم السحب (5%)','Withdrawal fee (5%)'),w.feeCents?`${(w.feeCents/100).toFixed(2)} USD`:`${((w.amountCents*0.05)/100).toFixed(2)} USD`],
-   [text('صافي المبلغ المستلم','Net amount'),w.netAmountCents?`${(w.netAmountCents/100).toFixed(2)} USD`:`${((w.amountCents*0.95)/100).toFixed(2)} USD`],
+   [text('رسوم السحب','Withdrawal fee'),text('0.00 USD (غير مطبقة - مجانًا)','0.00 USD (Not applicable - Free)')],
+   [text('صافي المبلغ المستلم','Net amount'),`${(w.amountCents/100).toFixed(2)} USD`],
    [text('رمز المعاملة / إثبات السحب (TxID)','Transaction Hash / Proof (TxID)'),w.txHash?w.txHash:(row.status==='approved'?text('معتمد من الإدارة - جار الإرسال على الشبكة','Approved by admin - broadcasting'):row.status==='requested'?text('قيد المراجعة والتدقيق','Under review'):row.status==='rejected'?text('تم رفض الطلب واسترداد الرصيد إلى الحساب','Rejected - balance refunded'):text('بانتظار التأكيد','Awaiting confirmation'))],
    [text('خصم الرصيد','Balance debit'),row.status==='rejected'?text('أُعيد المبلغ إلى الرصيد (مسترد)','Refunded to account balance'):text('تم خصم الرصيد من الحساب','Debited from account balance')]
   );

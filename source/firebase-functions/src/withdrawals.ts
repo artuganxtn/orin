@@ -117,9 +117,9 @@ export async function requestWithdrawal(
       }
     }
 
-    // Always 5% withdrawal fee
-    const feeCents = Math.round(amountCents * 0.05);
-    const netAmountCents = amountCents - feeCents;
+    // Withdrawal fees are NOT applicable (0% fee, full payout)
+    const feeCents = 0;
+    const netAmountCents = amountCents;
 
     const wdId = 'wd-' + randomUUID();
     await client.query(
@@ -196,9 +196,9 @@ export async function requestWithdrawal(
       ok: true,
       id: wdId,
       amountCents,
-      feeCents,
-      feeRate: 0.05,
-      netAmountCents,
+      feeCents: 0,
+      feeRate: 0.0,
+      netAmountCents: amountCents,
       coin,
       currency,
       address,
