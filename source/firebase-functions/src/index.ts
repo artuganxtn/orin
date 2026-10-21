@@ -1632,8 +1632,26 @@ app.use('/api', (req: Request, res: Response) => {
   res.status(501).json({ error: 'Route not implemented on server yet', path: req.path });
 });
 
+// Version & build validation endpoint
+app.get(['/build-info', '/api/build-info'], (req: Request, res: Response) => {
+  res.json({
+    app: 'ORIN Trader',
+    version: '1.6.2',
+    policies: {
+      withdrawalFeeRate: 0.05,
+      earlyExitFeeRate: 0.20,
+      earlyExitDays: 29
+    },
+    deployedAt: '2026-10-21T03:45:00Z'
+  });
+});
+
 // 6. Built web app as static files
 const candidates = [
+  resolve(process.cwd(), 'source/firebase-security-dist'),
+  resolve(process.cwd(), 'firebase-security-dist'),
+  resolve(__dirname, '../../firebase-security-dist'),
+  resolve(process.cwd(), '../firebase-security-dist'),
   resolve(process.cwd(), 'source/firebase-dist'),
   resolve(process.cwd(), 'firebase-dist'),
   resolve(__dirname, '../../firebase-dist'),
@@ -1656,7 +1674,7 @@ if (staticPath) {
     }
   }));
   app.use((req: Request, res: Response, next) => {
-    if (req.path.startsWith('/api') || req.path === '/healthz') return next();
+    if (req.path.startsWith('/api') || req.path === '/healthz' || req.path === '/build-info') return next();
     res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
     res.sendFile(resolve(staticPath!, 'index.html'));
   });

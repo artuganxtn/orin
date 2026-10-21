@@ -44,7 +44,6 @@ next-env.d.ts
 /.codex/
 /outputs/
 /work/
-/firebase-dist/
 /firebase-web/.firebase/
 /firebase-web/*debug.log
 /firebase-debug.log
@@ -53,7 +52,6 @@ next-env.d.ts
 
 /firebase-app-dist/
 /firebase-functions/node_modules/
-/firebase-functions/lib/
 /firebase-app/*debug.log
 
 firebase-spark-dist/

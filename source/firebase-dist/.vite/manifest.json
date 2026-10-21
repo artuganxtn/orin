@@ -1,0 +1,160 @@
+{
+  "../app/program-pages.tsx": {
+    "file": "assets/program-pages-Chp8_FzW.js",
+    "name": "program-pages",
+    "src": "../app/program-pages.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "index.html",
+      "_programs-D9Mh0MZ4.js",
+      "_trading-accounts-wmsHtH5d.js",
+      "_star-CBbkfKDl.js"
+    ]
+  },
+  "../app/trading-workspace.tsx": {
+    "file": "assets/trading-workspace-CdVfRgMM.js",
+    "name": "trading-workspace",
+    "src": "../app/trading-workspace.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "index.html",
+      "_chart-boundary-BvBj21Qm.js",
+      "_account-transactions-tN2xVxRQ.js",
+      "_contracts-DnPJ9ZBC.js",
+      "_trading-accounts-wmsHtH5d.js",
+      "_star-CBbkfKDl.js"
+    ],
+    "dynamicImports": [
+      "../lib/statement-pdf.ts",
+      "../app/program-pages.tsx",
+      "../app/tradingview-widget.tsx",
+      "_account-transactions-tN2xVxRQ.js"
+    ],
+    "css": [
+      "assets/trading-workspace-BwoRBMGk.css"
+    ]
+  },
+  "../app/tradingview-widget.tsx": {
+    "file": "assets/tradingview-widget-_9P4JgQu.js",
+    "name": "tradingview-widget",
+    "src": "../app/tradingview-widget.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "index.html",
+      "_chart-boundary-BvBj21Qm.js"
+    ]
+  },
+  "../lib/statement-pdf.ts": {
+    "file": "assets/statement-pdf-C6Mowkl5.js",
+    "name": "statement-pdf",
+    "src": "../lib/statement-pdf.ts",
+    "isDynamicEntry": true,
+    "imports": [
+      "index.html",
+      "_account-transactions-tN2xVxRQ.js",
+      "_typeof-DsF8qdHM.js"
+    ],
+    "dynamicImports": [
+      "../node_modules/html2canvas/dist/html2canvas.js",
+      "../node_modules/dompurify/dist/purify.es.mjs",
+      "../node_modules/canvg/lib/index.es.js"
+    ]
+  },
+  "../node_modules/canvg/lib/index.es.js": {
+    "file": "assets/index.es-BiFAGFyO.js",
+    "name": "index.es",
+    "src": "../node_modules/canvg/lib/index.es.js",
+    "isDynamicEntry": true,
+    "imports": [
+      "index.html",
+      "_typeof-DsF8qdHM.js"
+    ]
+  },
+  "../node_modules/dompurify/dist/purify.es.mjs": {
+    "file": "assets/purify.es-BiD-UTqQ.js",
+    "name": "purify.es",
+    "src": "../node_modules/dompurify/dist/purify.es.mjs",
+    "isDynamicEntry": true
+  },
+  "../node_modules/html2canvas/dist/html2canvas.js": {
+    "file": "assets/html2canvas-BNhsMFVE.js",
+    "name": "html2canvas",
+    "src": "../node_modules/html2canvas/dist/html2canvas.js",
+    "isDynamicEntry": true,
+    "imports": [
+      "index.html"
+    ]
+  },
+  "_account-transactions-tN2xVxRQ.js": {
+    "file": "assets/account-transactions-tN2xVxRQ.js",
+    "name": "account-transactions",
+    "imports": [
+      "index.html",
+      "_trading-accounts-wmsHtH5d.js"
+    ],
+    "dynamicImports": [
+      "index.html"
+    ]
+  },
+  "_chart-boundary-BvBj21Qm.js": {
+    "file": "assets/chart-boundary-BvBj21Qm.js",
+    "name": "chart-boundary",
+    "imports": [
+      "index.html"
+    ]
+  },
+  "_contracts-DnPJ9ZBC.js": {
+    "file": "assets/contracts-DnPJ9ZBC.js",
+    "name": "contracts",
+    "imports": [
+      "index.html"
+    ]
+  },
+  "_programs-D9Mh0MZ4.js": {
+    "file": "assets/programs-D9Mh0MZ4.js",
+    "name": "programs"
+  },
+  "_star-CBbkfKDl.js": {
+    "file": "assets/star-CBbkfKDl.js",
+    "name": "star",
+    "imports": [
+      "index.html"
+    ]
+  },
+  "_trading-accounts-wmsHtH5d.js": {
+    "file": "assets/trading-accounts-wmsHtH5d.js",
+    "name": "trading-accounts"
+  },
+  "_typeof-DsF8qdHM.js": {
+    "file": "assets/typeof-DsF8qdHM.js",
+    "name": "typeof"
+  },
+  "control-center.tsx": {
+    "file": "assets/control-center-hlpn7XbJ.js",
+    "name": "control-center",
+    "src": "control-center.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "index.html",
+      "_contracts-DnPJ9ZBC.js",
+      "_programs-D9Mh0MZ4.js"
+    ],
+    "css": [
+      "assets/control-center-DRsJ1bgC.css"
+    ]
+  },
+  "index.html": {
+    "file": "assets/index-x3wA-nVy.js",
+    "name": "index",
+    "src": "index.html",
+    "isEntry": true,
+    "dynamicImports": [
+      "index.html",
+      "../app/trading-workspace.tsx",
+      "control-center.tsx"
+    ],
+    "css": [
+      "assets/index-xHx3wQfy.css"
+    ]
+  }
+}
