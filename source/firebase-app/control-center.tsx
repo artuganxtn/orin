@@ -389,8 +389,72 @@ export function ControlCenter({ path = '/admin', navigate, request = apiFetch, r
         );
     }
     return <div className="occ" dir="rtl">
-  <aside className={'occ-sidebar' + (mobile ? ' is-open' : '')}><a className="occ-brand" href="/admin" onClick={e => { e.preventDefault(); go('dashboard'); }}><img src="/brand/orin-mark.png" alt=""/><span>ORIN<small>CONTROL CENTER</small></span></a><span className="occ-nav-label">مساحة الإدارة</span><nav aria-label="أقسام الإدارة">{CONTROL_MODULES.map(([m, ar, en, p], i) => { const Icon = icons[i]; return can(p) ? <button key={m} className={module === m ? 'active' : ''} onClick={() => go(m)} aria-current={module === m ? 'page' : undefined}><Icon size={18}/><span>{ar}</span>{module === m && <i />}</button> : null; })}</nav><div className="occ-sidebar-foot"><ShieldCheck size={19}/><div><span>{(session?.roles ?? []).map(r => ROLES[r]?.name ?? r).join(' · ')}<small>جلسة محمية · صلاحيات كاملة</small></span><button style={{background:'transparent',border:'none',color:'#f87171',cursor:'pointer',fontSize:'12px',padding:'4px 0',display:'block'}} onClick={()=>void reauthenticate?.()}>تسجيل الخروج</button></div></div></aside>
-  <div className="occ-workspace"><header className="occ-topbar"><button className="occ-menu" aria-label="القائمة" onClick={() => setMobile(!mobile)}><Menu /></button><div className="occ-breadcrumb">مركز التحكم <ChevronLeft size={14}/><strong>{title?.[1] ?? 'القسم'}</strong></div>{can('users.read') && <form className="occ-global-search" onSubmit={e => { e.preventDefault(); go('users'); setSearch(globalSearch.trim()); }}><Search size={15}/><input aria-label="البحث العام عن المستخدم" placeholder="بحث باسم، بريد أو رقم حساب" value={globalSearch} onChange={e => setGlobalSearch(e.target.value)}/></form>}<button className="occ-app-link" style={{cursor:'pointer',background:'transparent',border:'none',color:'inherit'}} onClick={()=>void reauthenticate?.()}>تسجيل الخروج</button><div className="occ-avatar"><Shield size={18}/></div></header>
+  {mobile && <div className="occ-sidebar-backdrop" onClick={() => setMobile(false)} aria-hidden="true" />}
+  <aside className={'occ-sidebar' + (mobile ? ' is-open' : '')}>
+    <div className="occ-sidebar-head">
+      <a className="occ-brand" href="/admin" onClick={e => { e.preventDefault(); go('dashboard'); }}>
+        <img src="/brand/orin-mark.png" alt=""/>
+        <span>ORIN<small>CONTROL CENTER</small></span>
+      </a>
+      <button className="occ-sidebar-close" aria-label="إغلاق القائمة" onClick={() => setMobile(false)}>
+        <X size={20}/>
+      </button>
+    </div>
+    <span className="occ-nav-label">مساحة الإدارة</span>
+    <nav aria-label="أقسام الإدارة">
+      {CONTROL_MODULES.map(([m, ar, en, p], i) => {
+        const Icon = icons[i];
+        return can(p) ? (
+          <button
+            key={m}
+            className={module === m ? 'active' : ''}
+            onClick={() => go(m)}
+            aria-current={module === m ? 'page' : undefined}
+          >
+            <Icon size={18}/>
+            <span>{ar}</span>
+            {module === m && <i />}
+          </button>
+        ) : null;
+      })}
+    </nav>
+    <div className="occ-sidebar-foot">
+      <ShieldCheck size={19}/>
+      <div>
+        <span>
+          {(session?.roles ?? []).map(r => ROLES[r]?.name ?? r).join(' · ')}
+          <small>جلسة محمية · صلاحيات كاملة</small>
+        </span>
+        <button
+          style={{background:'transparent',border:'none',color:'#f87171',cursor:'pointer',fontSize:'12px',padding:'4px 0',display:'block'}}
+          onClick={()=>void reauthenticate?.()}
+        >
+          تسجيل الخروج
+        </button>
+      </div>
+    </div>
+  </aside>
+  <div className="occ-workspace">
+    <header className="occ-topbar">
+      <button className="occ-menu" aria-label="القائمة" onClick={() => setMobile(!mobile)}>
+        <Menu size={22}/>
+      </button>
+      <div className="occ-breadcrumb">
+        <span className="occ-breadcrumb-prefix">مركز التحكم</span>
+        <ChevronLeft size={14}/>
+        <strong>{title?.[1] ?? 'القسم'}</strong>
+      </div>
+      {can('users.read') && (
+        <form className="occ-global-search" onSubmit={e => { e.preventDefault(); go('users'); setSearch(globalSearch.trim()); }}>
+          <Search size={15}/>
+          <input aria-label="البحث العام عن المستخدم" placeholder="بحث باسم، بريد أو رقم حساب" value={globalSearch} onChange={e => setGlobalSearch(e.target.value)}/>
+        </form>
+      )}
+      <button className="occ-app-link" style={{cursor:'pointer',background:'transparent',border:'none',color:'inherit'}} onClick={()=>void reauthenticate?.()}>
+        تسجيل الخروج
+      </button>
+      <div className="occ-avatar"><Shield size={18}/></div>
+    </header>
   <main className="occ-main">{module==='tickets'&&!preview&&can('tickets.manage')&&<SupportDesk/>}{preview && <div className="occ-preview-banner">معاينة تفاعلية ببيانات توضيحية — لا اتصال بحسابات أو أموال حقيقية.</div>}
    <div className="occ-quick-nav">
     {CONTROL_MODULES.map(([m, ar, en, p], i) => {
