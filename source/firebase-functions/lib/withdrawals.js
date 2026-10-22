@@ -470,7 +470,7 @@ async function requestWithdrawal(user, input) {
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'requested')`,
       [wdId, user.id, accountId, amountCents, feeCents, netAmountCents, currency, coin, address]
     );
-    const journalId = "jnl-wd-" + randomUUID2();
+    const journalId = "jnl-" + wdId;
     await client.query(
       `INSERT INTO journals (id, kind, reference, created_at) VALUES ($1, 'withdrawal', $2, NOW())`,
       [journalId, wdId]

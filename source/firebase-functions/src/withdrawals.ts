@@ -118,7 +118,7 @@ export async function requestWithdrawal(
 
     // Immediately create journal and journal entries to debit user's cash balance
     // The database trigger apply_journal_entry_to_account automatically subtracts amountCents from accounts.balance_cents
-    const journalId = 'jnl-wd-' + randomUUID();
+    const journalId = 'jnl-' + wdId;
     await client.query(
       `INSERT INTO journals (id, kind, reference, created_at) VALUES ($1, 'withdrawal', $2, NOW())`,
       [journalId, wdId]

@@ -5661,6 +5661,7 @@ async function state2(u, now = Date.now()) {
       amount_cents: Number(je.amount_cents),
       amountCents: Number(je.amount_cents),
       kind: je.kind,
+      reference: je.reference || null,
       effective_at: je.created_at ? new Date(je.created_at).getTime() : 0,
       effectiveAt: je.created_at ? new Date(je.created_at).getTime() : 0
     }));
@@ -6187,7 +6188,7 @@ async function requestWithdrawal(user, input) {
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'requested')`,
       [wdId, user.id, accountId, amountCents, feeCents, netAmountCents, currency, coin, address]
     );
-    const journalId = "jnl-wd-" + randomUUID6();
+    const journalId = "jnl-" + wdId;
     await client.query(
       `INSERT INTO journals (id, kind, reference, created_at) VALUES ($1, 'withdrawal', $2, NOW())`,
       [journalId, wdId]

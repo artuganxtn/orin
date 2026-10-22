@@ -608,6 +608,7 @@ export async function state(u: Identity, now = Date.now()) {
       amount_cents: Number(je.amount_cents),
       amountCents: Number(je.amount_cents),
       kind: je.kind,
+      reference: je.reference || null,
       effective_at: je.created_at ? new Date(je.created_at).getTime() : 0,
       effectiveAt: je.created_at ? new Date(je.created_at).getTime() : 0
     }));

@@ -48,12 +48,34 @@ export function buildTransactions(state:LabState,account:TradingAccount,deposits
  for(const [id,entries] of journals){
   const payment=items.find(t=>t.deposit?.paymentId&&id==='deposit-nowpayments-'+t.deposit.paymentId);
   if(payment){payment.entries=entries;continue}
-  const withdrawal=items.find(t=>t.withdrawal&&(id==='jnl-wd-'+t.withdrawal.id||id==='j-wd-'+t.withdrawal.id||id===t.withdrawal.id||(t.id&&id.includes(t.id))));
+  const withdrawal=items.find(t=>t.withdrawal&&(
+    id==='jnl-wd-'+t.withdrawal.id||
+    id==='jnl-'+t.withdrawal.id||
+    id==='j-wd-'+t.withdrawal.id||
+    id===t.withdrawal.id||
+    (entries[0] as any)?.reference===t.withdrawal.id||
+    (t.id&&id.includes(t.id))||
+    (t.withdrawal.id&&id.includes(t.withdrawal.id.replace(/^wd-/, '')))||
+    (t.id&&t.id.includes(id.replace(/^jnl-wd-/, '').replace(/^jnl-/, '')))||
+    (entries[0]?.kind==='withdrawal'&&Math.abs(t.amountCents||0)===Math.abs(entries[0].amount_cents)&&Math.abs(entries[0].effective_at-t.createdAt)<300000)
+  ));
   if(withdrawal){withdrawal.entries=entries;continue}
   // Use the customer leg, never the sum of a balanced journal or its clearing leg.
   const cash=(entries ?? []).filter(r=>r.account==='cash'||r.account===`user:${state.user.id}:cash`||r.account===`customer:${state.user.id}:${account.id}`);
   const amount=cash.length?cash.reduce((n,r)=>n+r.amount_cents,0):null;
-  items.push({id,kind:entries[0].kind,status:'recorded',amountCents:amount!==null&&Number.isSafeInteger(amount)?amount:null,currency:account.currency,createdAt:Math.min(...entries.map(r=>r.effective_at)),accountId:account.id,accountNumber:account.accountNumber,accountType:account.type,entries});
+  const fallbackWd:WithdrawalTransactionView|undefined=entries[0]?.kind==='withdrawal'?{
+    id:id.startsWith('jnl-')?id.replace(/^jnl-/,''):id,
+    accountId:account.id,
+    amountCents:Math.abs(amount||entries[0].amount_cents),
+    feeCents:Math.round(Math.abs(amount||entries[0].amount_cents)*0.05),
+    netAmountCents:Math.round(Math.abs(amount||entries[0].amount_cents)*0.95),
+    coin:'usdtbsc',
+    currency:'USD',
+    address:'',
+    status:'requested',
+    createdAt:Math.min(...entries.map(r=>r.effective_at))
+  }:undefined;
+  items.push({id,kind:entries[0].kind,status:fallbackWd?'requested':'recorded',amountCents:amount!==null&&Number.isSafeInteger(amount)?amount:null,currency:account.currency,createdAt:Math.min(...entries.map(r=>r.effective_at)),accountId:account.id,accountNumber:account.accountNumber,accountType:account.type,entries,withdrawal:fallbackWd});
  }
  return items.sort((a,b)=>b.createdAt-a.createdAt||a.id.localeCompare(b.id));
 }
