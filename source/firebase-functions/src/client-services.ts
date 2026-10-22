@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { withTx } from './db.ts';
 import { notifyTransferCompleted } from './notifications.ts';
+import { loadContractWallet, saveContractWallet, challengeInfo, readBalanceCents } from './wallet-ledger.ts';
 
 export class ClientError extends Error {
   constructor(message: string, public status = 400) {
@@ -138,7 +139,7 @@ export async function selectTradingAccount(user: { id: string }, input: { id?: s
   });
 }
 
-// 2. Demo Wallets
+// 2. Demo & Contract Wallets
 export async function getDemoWallet(user: { id: string }, accountId: string) {
   return await withTx(async (client) => {
     const accRes = await client.query(
@@ -151,56 +152,30 @@ export async function getDemoWallet(user: { id: string }, accountId: string) {
 
     const acc = accRes.rows[0];
     const isReal = acc.type === 'real';
-    const collName = isReal ? 'contract_wallets' : 'demo_wallets';
-    const initialFutures = isReal ? Math.max(0, Number(acc.balance_cents)) : 1000000;
 
+    if (isReal) {
+      const { state } = await loadContractWallet(client, accountId, user.id, acc.balance_cents, false);
+      const challenge = await challengeInfo(client, user.id);
+      return { ...state, challenge };
+    }
+
+    // Demo Account wallet
     const docRes = await client.query(
-      `SELECT data FROM docs WHERE collection = $1 AND id = $2`,
-      [collName, accountId]
+      `SELECT data FROM docs WHERE collection = 'demo_wallets' AND id = $1`,
+      [accountId]
     );
-
     const data = docRes.rows[0]?.data || {
       wallet: {
         ownerId: user.id,
         accountId,
         currency: 'USD',
-        futuresCents: initialFutures,
+        futuresCents: 1000000,
         perpetualCents: 0,
         version: 1,
         updatedAt: Date.now()
       },
       operations: []
     };
-
-    if (isReal) {
-      const currentTotal = Math.max(0, Number(acc.balance_cents));
-      const currentPerp = Math.min(currentTotal, Math.max(0, Number(data.wallet.perpetualCents || 0)));
-      data.wallet.perpetualCents = currentPerp;
-      data.wallet.futuresCents = currentTotal - currentPerp;
-
-      // Calculate challenge and fee status
-      const depRes = await client.query(
-        `SELECT MIN(created_at) AS earliest_deposit
-         FROM deposits
-         WHERE user_id = $1 AND (status = 'finished' OR credited = true)`,
-        [user.id]
-      );
-      const earliestDeposit = depRes.rows[0]?.earliest_deposit;
-      const earliestMs = earliestDeposit ? new Date(earliestDeposit).getTime() : null;
-      const elapsedDays = earliestMs ? Math.floor((Date.now() - earliestMs) / 86400000) : 0;
-      const lockRemainingDays = earliestMs ? Math.max(0, 29 - elapsedDays) : 29;
-      const isBefore29Days = lockRemainingDays > 0;
-
-      data.challenge = {
-        earliestDepositAt: earliestMs,
-        elapsedDays,
-        lockRemainingDays,
-        isBefore29Days,
-        transferFeeRate: isBefore29Days ? 0.20 : 0.0,
-        withdrawalFeeRate: 0.05
-      };
-    }
-
     return data;
   });
 }
@@ -220,7 +195,7 @@ export async function operateDemoWallet(
 
   return await withTx(async (client) => {
     const accRes = await client.query(
-      `SELECT id, user_id, type, balance_cents FROM accounts WHERE id = $1 AND user_id = $2`,
+      `SELECT id, user_id, type, balance_cents FROM accounts WHERE id = $1 AND user_id = $2 FOR UPDATE`,
       [accountId, user.id]
     );
     if (accRes.rowCount === 0) {
@@ -229,103 +204,59 @@ export async function operateDemoWallet(
 
     const acc = accRes.rows[0];
     const isReal = acc.type === 'real';
-    const collName = isReal ? 'contract_wallets' : 'demo_wallets';
-    const initialFutures = isReal ? Math.max(0, Number(acc.balance_cents)) : 1000000;
 
-    const docRes = await client.query(
-      `SELECT data FROM docs WHERE collection = $1 AND id = $2 FOR UPDATE`,
-      [collName, accountId]
-    );
-
-    let state = docRes.rows[0]?.data || {
-      wallet: {
-        ownerId: user.id,
-        accountId,
-        currency: 'USD',
-        futuresCents: initialFutures,
-        perpetualCents: 0,
-        version: 1,
-        updatedAt: Date.now()
-      },
-      operations: []
-    };
+    if (isReal && kind === 'reset') {
+      throw new ClientError('لا يمكن إعادة تعيين الحساب الحقيقي. / Cannot reset real account.', 400);
+    }
 
     if (isReal) {
-      const currentTotal = Math.max(0, Number(acc.balance_cents));
-      const currentPerp = Math.min(currentTotal, Math.max(0, Number(state.wallet.perpetualCents || 0)));
-      state.wallet.perpetualCents = currentPerp;
-      state.wallet.futuresCents = currentTotal - currentPerp;
-    }
+      const { state } = await loadContractWallet(client, accountId, user.id, acc.balance_cents, true);
 
-    const existingOp = state.operations.find((o: any) => o.id === requestId);
-    if (existingOp) {
-      return state;
-    }
+      const existingOp = state.operations.find((o: any) => o.id === requestId);
+      if (existingOp) {
+        const challenge = await challengeInfo(client, user.id);
+        return { ...state, challenge };
+      }
 
-    if (kind === 'transfer') {
       if (amountCents <= 0) {
         throw new ClientError('يرجى إدخال مبلغ تحويل صالح أكبر من الصفر. / Please enter a valid transfer amount.', 400);
       }
-      if (isReal && Number(acc.balance_cents) <= 0) {
-        throw new ClientError('الرصيد المتاح غير كافٍ للتحويل (الرصيد الحالي 0). / Insufficient balance for transfer.', 400);
-      }
-    }
 
-    let nextFutures = state.wallet.futuresCents;
-    let nextPerp = state.wallet.perpetualCents;
-    let feeCents = 0;
-    let feeRate = 0;
-    let netAmountCents = amountCents;
+      const curFutures = state.wallet.futuresCents;
+      const curPerp = state.wallet.perpetualCents;
+      let feeCents = 0;
+      let feeRate = 0;
+      let netAmountCents = amountCents;
 
-    if (kind === 'reset') {
-      nextFutures = initialFutures;
-      nextPerp = 0;
-    } else if (kind === 'transfer') {
       if (input.from === 'futures') {
-        if (nextFutures < amountCents) {
+        if (curFutures < amountCents) {
           throw new ClientError('الرصيد المتاح في العقود الآجلة غير كافٍ للتحويل. / Insufficient available balance in futures.', 400);
         }
         // Funding trading wallet is always 100% free with 0% fee
         feeRate = 0;
         feeCents = 0;
         netAmountCents = amountCents;
-        nextFutures -= amountCents;
-        nextPerp += amountCents;
+        state.wallet.perpetualCents = curPerp + amountCents;
+        state.wallet.futuresCents = curFutures - amountCents;
       } else {
-        if (nextPerp < amountCents) {
+        if (curPerp < amountCents) {
           throw new ClientError('الرصيد المتاح في العقود الدائمة غير كافٍ للتحويل. / Insufficient available balance in perpetual.', 400);
         }
 
         // Early transfer from Perpetual Trading to Withdrawable Futures (20% fee if before 29 days)
-        if (isReal) {
-          const depRes = await client.query(
-            `SELECT MIN(created_at) AS earliest_deposit
-             FROM deposits
-             WHERE user_id = $1 AND (status = 'finished' OR credited = true)`,
-            [user.id]
-          );
-          const earliestDeposit = depRes.rows[0]?.earliest_deposit;
-          const earliestMs = earliestDeposit ? new Date(earliestDeposit).getTime() : null;
-          const elapsedDays = earliestMs ? Math.floor((Date.now() - earliestMs) / 86400000) : 0;
-          const lockRemainingDays = earliestMs ? Math.max(0, 29 - elapsedDays) : 29;
-          const isBefore29Days = lockRemainingDays > 0;
-
-          if (isBefore29Days) {
-            feeRate = 0.20;
-            feeCents = Math.round(amountCents * 0.20);
-            netAmountCents = amountCents - feeCents;
-          } else {
-            feeRate = 0;
-            feeCents = 0;
-            netAmountCents = amountCents;
-          }
+        const challenge = await challengeInfo(client, user.id);
+        if (challenge.isBefore29Days) {
+          feeRate = 0.20;
+          feeCents = Math.round(amountCents * 0.20);
+          netAmountCents = amountCents - feeCents;
+        } else {
+          feeRate = 0;
+          feeCents = 0;
+          netAmountCents = amountCents;
         }
 
-        nextPerp -= amountCents;
-        nextFutures += netAmountCents;
-
         // Deduct early exit fee from accounts cash ledger so total wallet cents match account balance cents
-        if (isReal && feeCents > 0) {
+        if (feeCents > 0) {
           const jnlId = 'jnl-fee-' + randomUUID();
           await client.query(
             `INSERT INTO journals (id, kind, reference, created_at) VALUES ($1, 'early_exit_fee', $2, NOW())`,
@@ -338,39 +269,29 @@ export async function operateDemoWallet(
             [jnlId, user.id, accountId, -feeCents, feeCents]
           );
         }
+
+        // Post-fee balance
+        const balanceAfter = await readBalanceCents(client, accountId);
+        state.wallet.perpetualCents = curPerp - amountCents;
+        state.wallet.futuresCents = Math.max(0, balanceAfter - state.wallet.perpetualCents);
       }
-    }
 
-    const newOp = {
-      id: requestId,
-      kind,
-      amountCents,
-      feeCents,
-      feeRate,
-      netAmountCents,
-      from: kind === 'reset' ? 'reset' : input.from,
-      to: kind === 'reset' ? 'futures' : (input.from === 'futures' ? 'perpetual' : 'futures'),
-      afterFuturesCents: nextFutures,
-      afterPerpetualCents: nextPerp,
-      createdAt: Date.now()
-    };
+      const newOp = {
+        id: requestId,
+        kind: 'transfer',
+        amountCents,
+        feeCents,
+        feeRate,
+        netAmountCents,
+        from: input.from,
+        to: input.from === 'futures' ? 'perpetual' : 'futures',
+        afterFuturesCents: state.wallet.futuresCents,
+        afterPerpetualCents: state.wallet.perpetualCents,
+        createdAt: Date.now()
+      };
+      state.operations.unshift(newOp);
+      await saveContractWallet(client, accountId, user.id, state);
 
-    state.wallet.futuresCents = nextFutures;
-    state.wallet.perpetualCents = nextPerp;
-    state.wallet.version += 1;
-    state.wallet.updatedAt = Date.now();
-    state.operations.unshift(newOp);
-    if (state.operations.length > 50) state.operations.pop();
-
-    await client.query(
-      `INSERT INTO docs (collection, id, data, updated_at)
-       VALUES ($1, $2, $3, NOW())
-       ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
-      [collName, accountId, JSON.stringify(state)]
-    );
-
-    // Send enhanced notification for wallet transfer
-    if (kind === 'transfer') {
       await notifyTransferCompleted(client, {
         userId: user.id,
         amountCents,
@@ -379,7 +300,73 @@ export async function operateDemoWallet(
         from: input.from || 'futures',
         to: input.from === 'futures' ? 'perpetual' : 'futures'
       });
+
+      const updatedChallenge = await challengeInfo(client, user.id);
+      return { ...state, challenge: updatedChallenge };
     }
+
+    // Demo account logic
+    const docRes = await client.query(
+      `SELECT data FROM docs WHERE collection = 'demo_wallets' AND id = $1 FOR UPDATE`,
+      [accountId]
+    );
+
+    let state = docRes.rows[0]?.data || {
+      wallet: {
+        ownerId: user.id,
+        accountId,
+        currency: 'USD',
+        futuresCents: 1000000,
+        perpetualCents: 0,
+        version: 1,
+        updatedAt: Date.now()
+      },
+      operations: []
+    };
+
+    const existingOp = state.operations.find((o: any) => o.id === requestId);
+    if (existingOp) return state;
+
+    if (kind === 'reset') {
+      state.wallet.futuresCents = 1000000;
+      state.wallet.perpetualCents = 0;
+    } else {
+      if (amountCents <= 0) throw new ClientError('يرجى إدخال مبلغ صالح.', 400);
+      if (input.from === 'futures') {
+        if (state.wallet.futuresCents < amountCents) throw new ClientError('الرصيد غير كافٍ.', 400);
+        state.wallet.futuresCents -= amountCents;
+        state.wallet.perpetualCents += amountCents;
+      } else {
+        if (state.wallet.perpetualCents < amountCents) throw new ClientError('الرصيد غير كافٍ.', 400);
+        state.wallet.perpetualCents -= amountCents;
+        state.wallet.futuresCents += amountCents;
+      }
+    }
+
+    const newOp = {
+      id: requestId,
+      kind,
+      amountCents,
+      feeCents: 0,
+      feeRate: 0,
+      netAmountCents: amountCents,
+      from: kind === 'reset' ? 'reset' : input.from,
+      to: kind === 'reset' ? 'futures' : (input.from === 'futures' ? 'perpetual' : 'futures'),
+      afterFuturesCents: state.wallet.futuresCents,
+      afterPerpetualCents: state.wallet.perpetualCents,
+      createdAt: Date.now()
+    };
+    state.operations.unshift(newOp);
+    if (state.operations.length > 50) state.operations.pop();
+    state.wallet.version = (state.wallet.version || 1) + 1;
+    state.wallet.updatedAt = Date.now();
+
+    await client.query(
+      `INSERT INTO docs (collection, id, data, updated_at)
+       VALUES ('demo_wallets', $1, $2, NOW())
+       ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+      [accountId, JSON.stringify(state)]
+    );
 
     return state;
   });

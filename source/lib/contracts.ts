@@ -9,7 +9,7 @@ export interface Notice {id:string;title:string;message:string;contract_id:strin
 export interface Receipt {id:string;position_id:string;payload:string;hash:string;created_at:number;}
 export interface AuditEvent {id:string;actor_id:string;action:string;reference:string;payload:string;payload_hash:string;created_at:number;}
 export interface LedgerRow {id:string;journal_id:string;account:string;amount_cents:number;kind:string;effective_at:number;}
-export interface LabState {activityUnavailable?:boolean;accountDirectory?:AccountDirectory|null;serverTime:number;user:{id:string;name:string;tier:string;accepted_at:number|null;seen_at:number};isAdmin:boolean;balanceCents:number;reservedCents:number;realizedCents:number;dailyProfitCents?:number;contracts:Contract[];positions:Position[];notifications:Notice[];receipts:Receipt[];ledger:LedgerRow[];audit:AuditEvent[];}
+export interface LabState {activityUnavailable?:boolean;accountDirectory?:AccountDirectory|null;serverTime:number;user:{id:string;name:string;tier:string;accepted_at:number|null;seen_at:number};isAdmin:boolean;balanceCents:number;perpetualCents?:number;futuresCents?:number;reservedCents:number;realizedCents:number;dailyProfitCents?:number;contracts:Contract[];positions:Position[];notifications:Notice[];receipts:Receipt[];ledger:LedgerRow[];audit:AuditEvent[];}
 export interface Candle {time:number;open:number;high:number;low:number;close:number;volume?:number;}
 export interface MarketData {pair:string;price:number;open:number;high:number;low:number;volume:number;change:number;candles:Candle[];fetchedAt:number;tradeTime:string;source:string;}
 export const money=(cents:number)=>new Intl.NumberFormat("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}).format(cents/100);

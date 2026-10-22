@@ -8,6 +8,7 @@ import {
   notifyWithdrawalPaid,
   notifyWithdrawalRejected
 } from './notifications.ts';
+import { loadContractWallet, saveContractWallet, readBalanceCents } from './wallet-ledger.ts';
 
 export class WithdrawalError extends Error {
   constructor(message: string, public status = 400, public code = 'withdrawal_error') {
@@ -92,29 +93,16 @@ export async function requestWithdrawal(
     );
     const pendingCents = BigInt(pendingRes.rows[0]?.total_pending || 0);
 
-    // Check wallet spot/futures balance if contract_wallets document exists
-    const docRes = await client.query(
-      `SELECT data FROM docs WHERE collection = 'contract_wallets' AND id = $1 FOR UPDATE`,
-      [accountId]
-    );
-
-    const availableCash = BigInt(account.balance_cents) - BigInt(account.reserved_cents);
-    if (availableCash < BigInt(amountCents) || availableCash <= 0n) {
-      throw new WithdrawalError('المبلغ المطلوب يتجاوز الرصيد المتاح للسحب في الحساب.', 409);
-    }
-
     // Strict wallet separation:
     // perpetualCents = Permanent Futures (trading only, CANNOT be withdrawn!)
     // futuresCents = Withdrawable Futures (withdrawable)
-    let wState = docRes.rows[0]?.data;
-    if (wState?.wallet) {
-      const curFutures = Math.max(0, Number(wState.wallet.futuresCents || 0));
-      if (curFutures < amountCents) {
-        throw new WithdrawalError(
-          'المبلغ المطلوب يتجاوز الرصيد المتاح في العقود الآجلة (محفظة السحب). رصيد العقود الدائمة مخصص للتداول فقط ولا يمكن سحبه مباشرة. يرجى تحويل المبلغ المراد سحبه من العقود الدائمة إلى العقود الآجلة أولاً.',
-          409
-        );
-      }
+    const { state: wState } = await loadContractWallet(client, accountId, user.id, account.balance_cents, true);
+    const curFutures = wState.wallet.futuresCents;
+    if (curFutures < amountCents) {
+      throw new WithdrawalError(
+        'المبلغ المطلوب يتجاوز الرصيد المتاح في العقود الآجلة (محفظة السحب). رصيد العقود الدائمة مخصص للتداول فقط ولا يمكن سحبه مباشرة. يرجى تحويل المبلغ المراد سحبه من العقود الدائمة إلى العقود الآجلة أولاً.',
+        409
+      );
     }
 
     // 5% standard withdrawal fee
@@ -142,31 +130,25 @@ export async function requestWithdrawal(
       [journalId, user.id, accountId, -amountCents, amountCents]
     );
 
-    // Deduct amountCents strictly from futuresCents in contract_wallets doc if present.
+    // Deduct amountCents strictly from futuresCents in contract_wallets doc.
     // perpetualCents (Permanent Futures / Trading) is completely protected and CAN NEVER BE WITHDRAWN!
-    if (wState?.wallet) {
-      wState.wallet.futuresCents = Math.max(0, Number(wState.wallet.futuresCents || 0) - amountCents);
-      wState.wallet.version = (wState.wallet.version || 1) + 1;
-      wState.wallet.updatedAt = Date.now();
+    const balanceAfter = await readBalanceCents(client, accountId);
+    wState.wallet.futuresCents = Math.max(0, balanceAfter - wState.wallet.perpetualCents);
 
-      if (Array.isArray(wState.operations)) {
-        wState.operations.push({
-          id: 'wd-op-' + wdId,
-          kind: 'withdrawal',
-          amountCents,
-          feeCents,
-          netAmountCents,
-          afterFuturesCents: wState.wallet.futuresCents,
-          afterPerpetualCents: wState.wallet.perpetualCents,
-          createdAt: Date.now()
-        });
-      }
-
-      await client.query(
-        `UPDATE docs SET data = $1, updated_at = NOW() WHERE collection = 'contract_wallets' AND id = $2`,
-        [JSON.stringify(wState), accountId]
-      );
+    if (Array.isArray(wState.operations)) {
+      wState.operations.unshift({
+        id: 'wd-op-' + wdId,
+        kind: 'withdrawal',
+        amountCents,
+        feeCents,
+        netAmountCents,
+        afterFuturesCents: wState.wallet.futuresCents,
+        afterPerpetualCents: wState.wallet.perpetualCents,
+        createdAt: Date.now()
+      });
     }
+
+    await saveContractWallet(client, accountId, user.id, wState);
 
     // Also register an approval record so it appears under financial approvals
     await client.query(
@@ -343,22 +325,9 @@ export async function markWithdrawalPaid(
         [journalId, wd.user_id, wd.account_id, -amountCents, amountCents]
       );
 
-      const docRes = await client.query(
-        `SELECT data FROM docs WHERE collection = 'contract_wallets' AND id = $1 FOR UPDATE`,
-        [wd.account_id]
-      );
-      if (docRes.rows[0]?.data) {
-        const wState = docRes.rows[0].data;
-        if (wState.wallet) {
-          wState.wallet.perpetualCents = Math.max(0, (Number(wState.wallet.perpetualCents) || 0) - amountCents);
-          wState.wallet.version = (wState.wallet.version || 1) + 1;
-          wState.wallet.updatedAt = Date.now();
-          await client.query(
-            `UPDATE docs SET data = $1, updated_at = NOW() WHERE collection = 'contract_wallets' AND id = $2`,
-            [JSON.stringify(wState), wd.account_id]
-          );
-        }
-      }
+      const balanceAfter = await readBalanceCents(client, wd.account_id);
+      const { state: wState } = await loadContractWallet(client, wd.account_id, wd.user_id, balanceAfter, true);
+      await saveContractWallet(client, wd.account_id, wd.user_id, wState);
     }
 
     await client.query(
@@ -427,22 +396,9 @@ export async function rejectWithdrawal(
       );
 
       // Restore contract_wallets futuresCents (withdrawable futures)
-      const docRes = await client.query(
-        `SELECT data FROM docs WHERE collection = 'contract_wallets' AND id = $1 FOR UPDATE`,
-        [wd.account_id]
-      );
-      if (docRes.rows[0]?.data) {
-        const wState = docRes.rows[0].data;
-        if (wState.wallet) {
-          wState.wallet.futuresCents = (Number(wState.wallet.futuresCents) || 0) + amountCents;
-          wState.wallet.version = (wState.wallet.version || 1) + 1;
-          wState.wallet.updatedAt = Date.now();
-          await client.query(
-            `UPDATE docs SET data = $1, updated_at = NOW() WHERE collection = 'contract_wallets' AND id = $2`,
-            [JSON.stringify(wState), wd.account_id]
-          );
-        }
-      }
+      const balanceAfter = await readBalanceCents(client, wd.account_id);
+      const { state: wState } = await loadContractWallet(client, wd.account_id, wd.user_id, balanceAfter, true);
+      await saveContractWallet(client, wd.account_id, wd.user_id, wState);
     }
 
     await client.query(

@@ -172,7 +172,7 @@ export function ReferenceMarkets({onSelect,prefs,active=true}:{onSelect:(pair:st
  <Dialog open={edit} onOpenChange={setEdit}><DialogContent className="popup favorites-dialog"><DialogHeader><DialogTitle>{t('قائمة المفضلة','Favorites')}</DialogTitle><DialogDescription>{t('أصولك المفضلة تتزامن مع حسابك عند تسجيل الدخول.','Favorites sync across devices when you sign in.')}</DialogDescription></DialogHeader><div className="favorite-manager">{symbols.map(s=><button key={s.pair} disabled={busy} aria-pressed={favorites.includes(s.pair)} onClick={()=>toggle(s.pair)}><CoinIcon symbol={s.pair.split('-')[0]}/><span><b className="num">{s.label}</b><small>{s.name}</small></span><Star className={favorites.includes(s.pair)?'saved':''}/></button>)}</div></DialogContent></Dialog>
  </div>;
 }
-interface TradeProps{state:LabState|null;current:Contract;selected:Contract|null;active?:Position;now:number;progress:number;code:string;setCode:(s:string)=>void;amount:string;setAmount:(s:string)=>void;lookup:()=>void;onExecuteCode?:(code:string,amount?:string)=>void;startJoin:()=>void;onBack:()=>void;onNotifications:()=>void;referencePair:string;setReferencePair:(s:string)=>void;mode:string;setMode:(s:string)=>void;busy:boolean;onAsset:(asset:Asset)=>void;prefs:Preferences;}
+interface TradeProps{state:LabState|null;current:Contract;selected:Contract|null;active?:Position;now:number;progress:number;code:string;setCode:(s:string)=>void;amount:string;setAmount:(s:string)=>void;lookup:()=>void;onExecuteCode?:(code:string,amount?:string)=>void;startJoin:()=>void;onBack:()=>void;onNotifications:()=>void;referencePair:string;setReferencePair:(s:string)=>void;mode:string;setMode:(s:string)=>void;busy:boolean;onAsset:(asset:Asset)=>void;prefs:Preferences;onTransfer?:()=>void;}
 export function ReferenceTrade(p:TradeProps){
  const {prefs,configuration:c,change,t,number,settings,status,marketReady}=useOrin(),{favorites,toggle,enabled,busy}=useFavorites();const stage=useRef<HTMLDivElement>(null);const [full,setFull]=useState(false),[options,setOptions]=useState(false),[reset,setReset]=useState(0);
  useEffect(()=>{if(!full)return;const old=document.body.style.overflow;document.body.style.overflow='hidden';const previousFocus=document.activeElement as HTMLElement|null;stage.current?.querySelector<HTMLButtonElement>('button')?.focus();const escape=(e:KeyboardEvent)=>{if(document.querySelector('[data-slot=dialog-content]'))return;if(e.key==='Escape')setFull(false);if(e.key==='Tab'){const nodes=Array.from(stage.current?.querySelectorAll<HTMLElement>('button:not(:disabled),a[href],iframe')??[]).filter(el=>el.getBoundingClientRect().width>0);const first=nodes[0],last=nodes[nodes.length-1];if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}}};document.addEventListener('keydown',escape);return()=>{document.body.style.overflow=old;document.removeEventListener('keydown',escape);previousFocus?.focus();};},[full]);
@@ -183,6 +183,9 @@ export function ReferenceTrade(p:TradeProps){
  const [panel,setPanel]=useRoutePanel('/trade',['indicators','drawings','alerts'] as const);
  const canJoin=!sparkMode()&&!!p.selected&&!p.active&&!p.busy&&settings?.profile.closureStatus!=='requested'&&p.now>=p.selected.opens_at&&p.now<p.selected.closes_at&&!p.state?.positions.some(row=>row.contract_id===p.selected!.id);
  const selectPair=(value:string)=>{if(invited&&['BTC-USD','ETH-USD','XAU-USD'].includes(value))p.onAsset(value.replace('-','') as Asset);else{p.setReferencePair(value);p.setMode('market');}void change({chartPair:value});};
+ const activeAcc=activeTradingAccount(p.state?.accountDirectory);
+ const isReal=activeAcc?.type==='real';
+ const availTradeCents=isReal?((p.state?.perpetualCents??0)>0?(p.state?.perpetualCents??0):(p.state?.balanceCents??0)):(p.state?.balanceCents??0);
  return <div className="reference-trade"><AssetBackdrop pair={pair}/><div className="trade-titlebar"><button aria-label={t('العودة','Back')} onClick={p.onBack}><ArrowLeft/></button><SymbolSelector onSelect={selectPair} disabled={invited&&!!locked}><CoinIcon symbol={asset}/><span className="num">{symbol.label}</span><ChevronDown size={17}/></SymbolSelector>{enabled&&<button aria-label={t('المفضلة','Favorite')} disabled={busy} aria-pressed={favorites.includes(pair)} className={favorites.includes(pair)?'selected-star':''} onClick={()=>toggle(pair)}><Star/></button>}<button aria-label={t('تفاصيل العرض','Chart information')} onClick={()=>setOptions(!options)}><MoreHorizontal/></button></div>
   {options&&<div className="trade-options">{native?t('شموع مرجعية من Coinbase Exchange. مصدر بيانات البطاقة ووقت تحديثها موضحان أسفل السعر.','Reference candles from Coinbase Exchange. The card shows its quote source and update time below the price.'):t('المصدر TradingView. قد تتأخر الأسعار. وقت آخر سعر غير متاح عبر هذا التكامل لـ ORIN. تتحقق الأداة من اتصالها بالسوق؛ ORIN يستطيع اكتشاف انقطاع شبكة الجهاز فقط.','Source: TradingView. Quotes may be delayed. The last quote timestamp is not exposed to ORIN. The widget manages its market connection; ORIN can detect device network loss only.')}</div>}
   {pair!==requestedPair&&invited&&<p className="execution-note">{t('أصل العقد غير مفعّل في قائمة الشارت الحالية. الرمز الظاهر مرجع آخر ولا يغيّر العقد.','The contract asset is disabled in the chart list. The displayed reference symbol does not change your contract.')}</p>}
@@ -212,13 +215,23 @@ export function ReferenceTrade(p:TradeProps){
    <progress value={p.progress} max="1"/>
    <small>{t('تسوية داخلية مقفلة؛ لا تتغير مع الشارت.','Locked internal settlement; independent of the chart.')}</small>
   </div>}
-  <label className="amount-label" htmlFor="trade-amount">{t('المبلغ','Amount')} <span className="num">(USD)</span></label>
+  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:'6px'}}>
+   <label className="amount-label" htmlFor="trade-amount" style={{margin:0}}>{t('المبلغ','Amount')} <span className="num">(USD)</span></label>
+   {isReal&&(
+     <div style={{display:'flex',alignItems:'center',gap:'6px',fontSize:'12px'}}>
+       <span style={{color:'var(--orin-muted)'}}>
+         {t('متاح للتداول:','Available:')} <b className="num" style={{color:'#0788ff'}}>${number((p.state?.perpetualCents??0)/100)}</b>
+       </span>
+       {p.onTransfer&&<button type="button" onClick={p.onTransfer} style={{border:0,background:'#eef4fc',color:'#0788ff',borderRadius:'6px',padding:'2px 8px',fontSize:'11.5px',fontWeight:700,cursor:'pointer'}}>{t('تحويل مجاني','Free Transfer')}</button>}
+     </div>
+   )}
+  </div>
   <div className="trade-amount">
    <button aria-label={t('إعادة تعيين المبلغ','Reset amount')} onClick={()=>p.setAmount('1000')} disabled={!!p.active&&invited}><RefreshCw size={16}/></button>
    <input id="trade-amount" type="number" step="0.01" min="1" value={p.active&&invited?(p.active.amount_cents/100):p.amount} onChange={e=>p.setAmount(e.target.value)} disabled={!!p.active&&invited}/>
   </div>
   <div className="amount-percent">
-   {[100,75,50,25].map(n=><button key={n} disabled={!p.state||(!!p.active&&invited)} onClick={()=>p.setAmount((Math.floor((p.state?.balanceCents??0)*n/100)/100).toFixed(2))}>{n}%</button>)}
+   {[100,75,50,25].map(n=><button key={n} disabled={!p.state||(!!p.active&&invited)} onClick={()=>p.setAmount((Math.floor(availTradeCents*n/100)/100).toFixed(2))}>{n}%</button>)}
   </div>
   <div className="trade-totals">
    <div><span>{t('الرسوم','Fees')}</span><b className="num">{invited&&!sparkMode()?`${number(0)} USD`:'—'}</b></div>

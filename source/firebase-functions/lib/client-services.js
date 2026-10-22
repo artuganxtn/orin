@@ -641,6 +641,75 @@ async function notifyTransferCompleted(client, p) {
   });
 }
 
+// src/wallet-ledger.ts
+async function loadContractWallet(client, accountId, ownerId, balanceCents, lock = true) {
+  const res = await client.query(
+    `SELECT data FROM docs WHERE collection = 'contract_wallets' AND id = $1${lock ? " FOR UPDATE" : ""}`,
+    [accountId]
+  );
+  const raw = res.rows[0]?.data;
+  const existed = !!raw?.wallet;
+  const state = existed ? { ...raw, operations: Array.isArray(raw.operations) ? raw.operations : [] } : {
+    wallet: {
+      ownerId,
+      accountId,
+      currency: "USD",
+      futuresCents: 0,
+      perpetualCents: 0,
+      version: 1,
+      updatedAt: Date.now()
+    },
+    operations: []
+  };
+  normalizeWallet(state, balanceCents);
+  return { state, existed };
+}
+function normalizeWallet(state, balanceCents) {
+  const total = Math.max(0, Number(balanceCents) || 0);
+  const perp = Math.min(total, Math.max(0, Math.trunc(Number(state.wallet.perpetualCents) || 0)));
+  state.wallet.perpetualCents = perp;
+  state.wallet.futuresCents = total - perp;
+  return state;
+}
+async function saveContractWallet(client, accountId, ownerId, state) {
+  state.wallet.version = (Number(state.wallet.version) || 1) + 1;
+  state.wallet.updatedAt = Date.now();
+  if (state.operations.length > 50) state.operations.length = 50;
+  await client.query(
+    `INSERT INTO docs (collection, id, owner_id, data, updated_at)
+     VALUES ('contract_wallets', $1, $2, $3, NOW())
+     ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+    [accountId, ownerId, JSON.stringify(state)]
+  );
+}
+async function readBalanceCents(client, accountId) {
+  const r = await client.query("SELECT balance_cents FROM accounts WHERE id = $1", [accountId]);
+  return Number(r.rows[0]?.balance_cents || 0);
+}
+async function challengeInfo(client, userId, now = Date.now()) {
+  const depRes = await client.query(
+    `SELECT MIN(created_at) AS earliest_deposit
+     FROM deposits
+     WHERE user_id = $1 AND (status = 'finished' OR credited = true)`,
+    [userId]
+  );
+  const earliest = depRes.rows[0]?.earliest_deposit;
+  const earliestMs = earliest ? new Date(earliest).getTime() : null;
+  const elapsedDays = earliestMs ? Math.max(0, Math.floor((now - earliestMs) / 864e5)) : 0;
+  const lockRemainingDays = earliestMs ? Math.max(0, 29 - elapsedDays) : 29;
+  const isBefore29Days = lockRemainingDays > 0;
+  return {
+    earliestDepositAt: earliestMs,
+    elapsedDays,
+    lockRemainingDays,
+    isBefore29Days,
+    transferFeeRate: isBefore29Days ? EARLY_TRANSFER_FEE_RATE : 0,
+    withdrawalFeeRate: WITHDRAWAL_FEE_RATE
+  };
+}
+var EARLY_TRANSFER_FEE_RATE = 0.2;
+var WITHDRAWAL_FEE_RATE = 0.05;
+
 // src/client-services.ts
 var ClientError = class extends Error {
   constructor(message, status = 400) {
@@ -771,49 +840,27 @@ async function getDemoWallet(user, accountId) {
     }
     const acc = accRes.rows[0];
     const isReal = acc.type === "real";
-    const collName = isReal ? "contract_wallets" : "demo_wallets";
-    const initialFutures = isReal ? Math.max(0, Number(acc.balance_cents)) : 1e6;
+    if (isReal) {
+      const { state } = await loadContractWallet(client, accountId, user.id, acc.balance_cents, false);
+      const challenge = await challengeInfo(client, user.id);
+      return { ...state, challenge };
+    }
     const docRes = await client.query(
-      `SELECT data FROM docs WHERE collection = $1 AND id = $2`,
-      [collName, accountId]
+      `SELECT data FROM docs WHERE collection = 'demo_wallets' AND id = $1`,
+      [accountId]
     );
     const data = docRes.rows[0]?.data || {
       wallet: {
         ownerId: user.id,
         accountId,
         currency: "USD",
-        futuresCents: initialFutures,
+        futuresCents: 1e6,
         perpetualCents: 0,
         version: 1,
         updatedAt: Date.now()
       },
       operations: []
     };
-    if (isReal) {
-      const currentTotal = Math.max(0, Number(acc.balance_cents));
-      const currentPerp = Math.min(currentTotal, Math.max(0, Number(data.wallet.perpetualCents || 0)));
-      data.wallet.perpetualCents = currentPerp;
-      data.wallet.futuresCents = currentTotal - currentPerp;
-      const depRes = await client.query(
-        `SELECT MIN(created_at) AS earliest_deposit
-         FROM deposits
-         WHERE user_id = $1 AND (status = 'finished' OR credited = true)`,
-        [user.id]
-      );
-      const earliestDeposit = depRes.rows[0]?.earliest_deposit;
-      const earliestMs = earliestDeposit ? new Date(earliestDeposit).getTime() : null;
-      const elapsedDays = earliestMs ? Math.floor((Date.now() - earliestMs) / 864e5) : 0;
-      const lockRemainingDays = earliestMs ? Math.max(0, 29 - elapsedDays) : 29;
-      const isBefore29Days = lockRemainingDays > 0;
-      data.challenge = {
-        earliestDepositAt: earliestMs,
-        elapsedDays,
-        lockRemainingDays,
-        isBefore29Days,
-        transferFeeRate: isBefore29Days ? 0.2 : 0,
-        withdrawalFeeRate: 0.05
-      };
-    }
     return data;
   });
 }
@@ -827,7 +874,7 @@ async function operateDemoWallet(user, input) {
   }
   return await withTx(async (client) => {
     const accRes = await client.query(
-      `SELECT id, user_id, type, balance_cents FROM accounts WHERE id = $1 AND user_id = $2`,
+      `SELECT id, user_id, type, balance_cents FROM accounts WHERE id = $1 AND user_id = $2 FOR UPDATE`,
       [accountId, user.id]
     );
     if (accRes.rowCount === 0) {
@@ -835,89 +882,48 @@ async function operateDemoWallet(user, input) {
     }
     const acc = accRes.rows[0];
     const isReal = acc.type === "real";
-    const collName = isReal ? "contract_wallets" : "demo_wallets";
-    const initialFutures = isReal ? Math.max(0, Number(acc.balance_cents)) : 1e6;
-    const docRes = await client.query(
-      `SELECT data FROM docs WHERE collection = $1 AND id = $2 FOR UPDATE`,
-      [collName, accountId]
-    );
-    let state = docRes.rows[0]?.data || {
-      wallet: {
-        ownerId: user.id,
-        accountId,
-        currency: "USD",
-        futuresCents: initialFutures,
-        perpetualCents: 0,
-        version: 1,
-        updatedAt: Date.now()
-      },
-      operations: []
-    };
+    if (isReal && kind === "reset") {
+      throw new ClientError("\u0644\u0627 \u064A\u0645\u0643\u0646 \u0625\u0639\u0627\u062F\u0629 \u062A\u0639\u064A\u064A\u0646 \u0627\u0644\u062D\u0633\u0627\u0628 \u0627\u0644\u062D\u0642\u064A\u0642\u064A. / Cannot reset real account.", 400);
+    }
     if (isReal) {
-      const currentTotal = Math.max(0, Number(acc.balance_cents));
-      const currentPerp = Math.min(currentTotal, Math.max(0, Number(state.wallet.perpetualCents || 0)));
-      state.wallet.perpetualCents = currentPerp;
-      state.wallet.futuresCents = currentTotal - currentPerp;
-    }
-    const existingOp = state.operations.find((o) => o.id === requestId);
-    if (existingOp) {
-      return state;
-    }
-    if (kind === "transfer") {
+      const { state: state2 } = await loadContractWallet(client, accountId, user.id, acc.balance_cents, true);
+      const existingOp2 = state2.operations.find((o) => o.id === requestId);
+      if (existingOp2) {
+        const challenge = await challengeInfo(client, user.id);
+        return { ...state2, challenge };
+      }
       if (amountCents <= 0) {
         throw new ClientError("\u064A\u0631\u062C\u0649 \u0625\u062F\u062E\u0627\u0644 \u0645\u0628\u0644\u063A \u062A\u062D\u0648\u064A\u0644 \u0635\u0627\u0644\u062D \u0623\u0643\u0628\u0631 \u0645\u0646 \u0627\u0644\u0635\u0641\u0631. / Please enter a valid transfer amount.", 400);
       }
-      if (isReal && Number(acc.balance_cents) <= 0) {
-        throw new ClientError("\u0627\u0644\u0631\u0635\u064A\u062F \u0627\u0644\u0645\u062A\u0627\u062D \u063A\u064A\u0631 \u0643\u0627\u0641\u064D \u0644\u0644\u062A\u062D\u0648\u064A\u0644 (\u0627\u0644\u0631\u0635\u064A\u062F \u0627\u0644\u062D\u0627\u0644\u064A 0). / Insufficient balance for transfer.", 400);
-      }
-    }
-    let nextFutures = state.wallet.futuresCents;
-    let nextPerp = state.wallet.perpetualCents;
-    let feeCents = 0;
-    let feeRate = 0;
-    let netAmountCents = amountCents;
-    if (kind === "reset") {
-      nextFutures = initialFutures;
-      nextPerp = 0;
-    } else if (kind === "transfer") {
+      const curFutures = state2.wallet.futuresCents;
+      const curPerp = state2.wallet.perpetualCents;
+      let feeCents = 0;
+      let feeRate = 0;
+      let netAmountCents = amountCents;
       if (input.from === "futures") {
-        if (nextFutures < amountCents) {
+        if (curFutures < amountCents) {
           throw new ClientError("\u0627\u0644\u0631\u0635\u064A\u062F \u0627\u0644\u0645\u062A\u0627\u062D \u0641\u064A \u0627\u0644\u0639\u0642\u0648\u062F \u0627\u0644\u0622\u062C\u0644\u0629 \u063A\u064A\u0631 \u0643\u0627\u0641\u064D \u0644\u0644\u062A\u062D\u0648\u064A\u0644. / Insufficient available balance in futures.", 400);
         }
         feeRate = 0;
         feeCents = 0;
         netAmountCents = amountCents;
-        nextFutures -= amountCents;
-        nextPerp += amountCents;
+        state2.wallet.perpetualCents = curPerp + amountCents;
+        state2.wallet.futuresCents = curFutures - amountCents;
       } else {
-        if (nextPerp < amountCents) {
+        if (curPerp < amountCents) {
           throw new ClientError("\u0627\u0644\u0631\u0635\u064A\u062F \u0627\u0644\u0645\u062A\u0627\u062D \u0641\u064A \u0627\u0644\u0639\u0642\u0648\u062F \u0627\u0644\u062F\u0627\u0626\u0645\u0629 \u063A\u064A\u0631 \u0643\u0627\u0641\u064D \u0644\u0644\u062A\u062D\u0648\u064A\u0644. / Insufficient available balance in perpetual.", 400);
         }
-        if (isReal) {
-          const depRes = await client.query(
-            `SELECT MIN(created_at) AS earliest_deposit
-             FROM deposits
-             WHERE user_id = $1 AND (status = 'finished' OR credited = true)`,
-            [user.id]
-          );
-          const earliestDeposit = depRes.rows[0]?.earliest_deposit;
-          const earliestMs = earliestDeposit ? new Date(earliestDeposit).getTime() : null;
-          const elapsedDays = earliestMs ? Math.floor((Date.now() - earliestMs) / 864e5) : 0;
-          const lockRemainingDays = earliestMs ? Math.max(0, 29 - elapsedDays) : 29;
-          const isBefore29Days = lockRemainingDays > 0;
-          if (isBefore29Days) {
-            feeRate = 0.2;
-            feeCents = Math.round(amountCents * 0.2);
-            netAmountCents = amountCents - feeCents;
-          } else {
-            feeRate = 0;
-            feeCents = 0;
-            netAmountCents = amountCents;
-          }
+        const challenge = await challengeInfo(client, user.id);
+        if (challenge.isBefore29Days) {
+          feeRate = 0.2;
+          feeCents = Math.round(amountCents * 0.2);
+          netAmountCents = amountCents - feeCents;
+        } else {
+          feeRate = 0;
+          feeCents = 0;
+          netAmountCents = amountCents;
         }
-        nextPerp -= amountCents;
-        nextFutures += netAmountCents;
-        if (isReal && feeCents > 0) {
+        if (feeCents > 0) {
           const jnlId = "jnl-fee-" + randomUUID3();
           await client.query(
             `INSERT INTO journals (id, kind, reference, created_at) VALUES ($1, 'early_exit_fee', $2, NOW())`,
@@ -930,34 +936,25 @@ async function operateDemoWallet(user, input) {
             [jnlId, user.id, accountId, -feeCents, feeCents]
           );
         }
+        const balanceAfter = await readBalanceCents(client, accountId);
+        state2.wallet.perpetualCents = curPerp - amountCents;
+        state2.wallet.futuresCents = Math.max(0, balanceAfter - state2.wallet.perpetualCents);
       }
-    }
-    const newOp = {
-      id: requestId,
-      kind,
-      amountCents,
-      feeCents,
-      feeRate,
-      netAmountCents,
-      from: kind === "reset" ? "reset" : input.from,
-      to: kind === "reset" ? "futures" : input.from === "futures" ? "perpetual" : "futures",
-      afterFuturesCents: nextFutures,
-      afterPerpetualCents: nextPerp,
-      createdAt: Date.now()
-    };
-    state.wallet.futuresCents = nextFutures;
-    state.wallet.perpetualCents = nextPerp;
-    state.wallet.version += 1;
-    state.wallet.updatedAt = Date.now();
-    state.operations.unshift(newOp);
-    if (state.operations.length > 50) state.operations.pop();
-    await client.query(
-      `INSERT INTO docs (collection, id, data, updated_at)
-       VALUES ($1, $2, $3, NOW())
-       ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
-      [collName, accountId, JSON.stringify(state)]
-    );
-    if (kind === "transfer") {
+      const newOp2 = {
+        id: requestId,
+        kind: "transfer",
+        amountCents,
+        feeCents,
+        feeRate,
+        netAmountCents,
+        from: input.from,
+        to: input.from === "futures" ? "perpetual" : "futures",
+        afterFuturesCents: state2.wallet.futuresCents,
+        afterPerpetualCents: state2.wallet.perpetualCents,
+        createdAt: Date.now()
+      };
+      state2.operations.unshift(newOp2);
+      await saveContractWallet(client, accountId, user.id, state2);
       await notifyTransferCompleted(client, {
         userId: user.id,
         amountCents,
@@ -966,7 +963,65 @@ async function operateDemoWallet(user, input) {
         from: input.from || "futures",
         to: input.from === "futures" ? "perpetual" : "futures"
       });
+      const updatedChallenge = await challengeInfo(client, user.id);
+      return { ...state2, challenge: updatedChallenge };
     }
+    const docRes = await client.query(
+      `SELECT data FROM docs WHERE collection = 'demo_wallets' AND id = $1 FOR UPDATE`,
+      [accountId]
+    );
+    let state = docRes.rows[0]?.data || {
+      wallet: {
+        ownerId: user.id,
+        accountId,
+        currency: "USD",
+        futuresCents: 1e6,
+        perpetualCents: 0,
+        version: 1,
+        updatedAt: Date.now()
+      },
+      operations: []
+    };
+    const existingOp = state.operations.find((o) => o.id === requestId);
+    if (existingOp) return state;
+    if (kind === "reset") {
+      state.wallet.futuresCents = 1e6;
+      state.wallet.perpetualCents = 0;
+    } else {
+      if (amountCents <= 0) throw new ClientError("\u064A\u0631\u062C\u0649 \u0625\u062F\u062E\u0627\u0644 \u0645\u0628\u0644\u063A \u0635\u0627\u0644\u062D.", 400);
+      if (input.from === "futures") {
+        if (state.wallet.futuresCents < amountCents) throw new ClientError("\u0627\u0644\u0631\u0635\u064A\u062F \u063A\u064A\u0631 \u0643\u0627\u0641\u064D.", 400);
+        state.wallet.futuresCents -= amountCents;
+        state.wallet.perpetualCents += amountCents;
+      } else {
+        if (state.wallet.perpetualCents < amountCents) throw new ClientError("\u0627\u0644\u0631\u0635\u064A\u062F \u063A\u064A\u0631 \u0643\u0627\u0641\u064D.", 400);
+        state.wallet.perpetualCents -= amountCents;
+        state.wallet.futuresCents += amountCents;
+      }
+    }
+    const newOp = {
+      id: requestId,
+      kind,
+      amountCents,
+      feeCents: 0,
+      feeRate: 0,
+      netAmountCents: amountCents,
+      from: kind === "reset" ? "reset" : input.from,
+      to: kind === "reset" ? "futures" : input.from === "futures" ? "perpetual" : "futures",
+      afterFuturesCents: state.wallet.futuresCents,
+      afterPerpetualCents: state.wallet.perpetualCents,
+      createdAt: Date.now()
+    };
+    state.operations.unshift(newOp);
+    if (state.operations.length > 50) state.operations.pop();
+    state.wallet.version = (state.wallet.version || 1) + 1;
+    state.wallet.updatedAt = Date.now();
+    await client.query(
+      `INSERT INTO docs (collection, id, data, updated_at)
+       VALUES ('demo_wallets', $1, $2, NOW())
+       ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+      [accountId, JSON.stringify(state)]
+    );
     return state;
   });
 }

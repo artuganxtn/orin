@@ -1,8 +1,9 @@
 import { withTx, pool } from './db.ts';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { getTradingAccounts } from './client-services.ts';
 import { requireVerifiedKyc } from './kyc.ts';
 import { notifyTradeOpened, notifyTradeSettled } from './notifications.ts';
+import { loadContractWallet, saveContractWallet, readBalanceCents } from './wallet-ledger.ts';
 
 export interface Identity {
   id: string;
@@ -190,44 +191,47 @@ export async function join(u: Identity, input: any, now = Date.now()) {
       if (BigInt(acc.balance_cents) < BigInt(amount)) {
         throw new ApiError('الرصيد المتاح غير كافٍ لهذا العقد.', 409);
       }
-      // Check Permanent Futures (Trading wallet) in contract_wallets
+      // Strict separation: real-account trades are funded from Permanent Contracts (perpetualCents).
+      // If Permanent Contracts balance is lower than trade amount, but Withdrawable Futures has enough,
+      // seamlessly fund the needed deficit (100% free, 0% fee) so the trade never fails.
       if (acc.type === 'real') {
-        const docRes = await client.query(
-          `SELECT data FROM docs WHERE collection = 'contract_wallets' AND id = $1 FOR UPDATE`,
-          [acc.id]
-        );
-        let wState = docRes.rows[0]?.data;
-        if (!wState || !wState.wallet) {
-          wState = {
-            wallet: {
-              ownerId: u.id,
-              accountId: acc.id,
-              currency: 'USD',
-              futuresCents: Math.max(0, Number(acc.balance_cents) - amount),
-              perpetualCents: 0,
-              version: 1,
-              updatedAt: Date.now()
-            },
-            operations: []
-          };
-        } else {
-          const curPerp = Math.max(0, Number(wState.wallet.perpetualCents || 0));
-          if (curPerp < amount) {
+        const { state: wState } = await loadContractWallet(client, acc.id, u.id, acc.balance_cents, true);
+        const curPerp = wState.wallet.perpetualCents;
+        let finalPerp = curPerp;
+        let finalFutures = wState.wallet.futuresCents;
+
+        if (curPerp < amount) {
+          const deficit = amount - curPerp;
+          if (finalFutures >= deficit) {
+            // Auto-fund from Withdrawable Futures to Permanent Contracts
+            finalPerp += deficit;
+            finalFutures -= deficit;
+            wState.operations.unshift({
+              id: 'fund-' + randomUUID(),
+              kind: 'transfer',
+              amountCents: deficit,
+              feeCents: 0,
+              feeRate: 0,
+              netAmountCents: deficit,
+              from: 'futures',
+              to: 'perpetual',
+              afterFuturesCents: finalFutures,
+              afterPerpetualCents: finalPerp,
+              createdAt: now
+            });
+          } else {
+            const totalAvail = ((curPerp + finalFutures) / 100).toFixed(2);
             throw new ApiError(
-              'الرصيد المتاح في العقود الدائمة (محفظة التداول) غير كافٍ لهذا العقد. يرجى تحويل الرصيد المطلوب من العقود الآجلة إلى العقود الدائمة أولاً.',
+              `إجمالي الرصيد المتاح في الحساب (${totalAvail} USD) غير كافٍ لقيمة هذا العقد (${(amount / 100).toFixed(2)} USD). يرجى شحن الرصيد أولاً.`,
               409
             );
           }
-          wState.wallet.perpetualCents = curPerp - amount;
-          wState.wallet.version = (wState.wallet.version || 1) + 1;
-          wState.wallet.updatedAt = Date.now();
         }
-        await client.query(
-          `INSERT INTO docs (collection, id, data, updated_at)
-           VALUES ('contract_wallets', $1, $2, NOW())
-           ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
-          [acc.id, JSON.stringify(wState)]
-        );
+
+        // Allocate trade amount from Permanent Contracts
+        wState.wallet.perpetualCents = finalPerp - amount;
+        wState.wallet.futuresCents = finalFutures;
+        await saveContractWallet(client, acc.id, u.id, wState);
       }
     }
 
@@ -398,23 +402,16 @@ export async function settle(u: Identity, now = Date.now()) {
         );
       }
 
-      // Return principal + profit directly to Permanent Futures (perpetualCents)
+      // Return principal + P&L directly to Permanent Contracts (perpetualCents) — never to withdrawable futures.
       if (!p.is_bonus) {
-        const docRes = await client.query(
-          `SELECT data FROM docs WHERE collection = 'contract_wallets' AND id = $1 FOR UPDATE`,
-          [p.account_id]
-        );
-        if (docRes.rows[0]?.data) {
-          const wState = docRes.rows[0].data;
-          if (wState.wallet) {
-            wState.wallet.perpetualCents = Math.max(0, (Number(wState.wallet.perpetualCents) || 0) + (amountCents + expected));
-            wState.wallet.version = (wState.wallet.version || 1) + 1;
-            wState.wallet.updatedAt = Date.now();
-            await client.query(
-              `UPDATE docs SET data = $1, updated_at = NOW() WHERE collection = 'contract_wallets' AND id = $2`,
-              [JSON.stringify(wState), p.account_id]
-            );
-          }
+        const accTypeRes = await client.query('SELECT type FROM accounts WHERE id = $1', [p.account_id]);
+        if (accTypeRes.rows[0]?.type === 'real') {
+          // Ledger entries above have already credited cash; read post-settlement balance.
+          const balanceAfter = await readBalanceCents(client, p.account_id);
+          const { state: wState } = await loadContractWallet(client, p.account_id, u.id, balanceAfter - (amountCents + expected), true);
+          wState.wallet.perpetualCents = wState.wallet.perpetualCents + Math.max(0, amountCents + expected);
+          wState.wallet.futuresCents = Math.max(0, balanceAfter - wState.wallet.perpetualCents);
+          await saveContractWallet(client, p.account_id, u.id, wState);
         }
       }
 
@@ -478,6 +475,19 @@ export async function state(u: Identity, now = Date.now()) {
       accountDirectory = await getTradingAccounts(u, client);
     } catch {
       accountDirectory = { accounts: [], activeId: '' };
+    }
+
+    // Wallet split for the real account (permanent = trading only, futures = withdrawable)
+    let perpetualCents = 0;
+    let futuresCents = Number(acc.balance_cents || 0);
+    if (acc.id) {
+      try {
+        const { state: w } = await loadContractWallet(client, acc.id, u.id, acc.balance_cents, false);
+        perpetualCents = w.wallet.perpetualCents;
+        futuresCents = w.wallet.futuresCents;
+      } catch {
+        /* keep defaults */
+      }
     }
 
     const contracts = cntRes.rows.map(c => ({
@@ -655,6 +665,8 @@ export async function state(u: Identity, now = Date.now()) {
       isAdmin,
       accountDirectory,
       balanceCents: Number(acc.balance_cents),
+      perpetualCents,
+      futuresCents,
       reservedCents: Number(acc.reserved_cents),
       realizedCents: totalRealizedCents,
       dailyProfitCents,

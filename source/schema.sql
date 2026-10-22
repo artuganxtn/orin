@@ -48,7 +48,7 @@ CREATE UNIQUE INDEX idx_accounts_one_real_per_user ON accounts(user_id) WHERE ty
 -- 3. ONE LEDGER: JOURNALS & JOURNAL_ENTRIES
 CREATE TABLE journals (
   id VARCHAR(128) PRIMARY KEY,
-  kind VARCHAR(50) NOT NULL CHECK (kind IN ('deposit', 'allocation', 'settlement', 'adjustment', 'referral_reward', 'team_activity', 'nonwithdrawable_bonus', 'bonus_allocation', 'bonus_settlement', 'bonus_profit_unlock', 'withdrawal', 'bonus_expired')),
+  kind VARCHAR(50) NOT NULL CHECK (kind IN ('deposit', 'allocation', 'settlement', 'adjustment', 'referral_reward', 'team_activity', 'nonwithdrawable_bonus', 'bonus_allocation', 'bonus_settlement', 'bonus_profit_unlock', 'withdrawal', 'bonus_expired', 'early_exit_fee', 'withdrawal_fee', 'wallet_transfer')),
   reference VARCHAR(128) NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

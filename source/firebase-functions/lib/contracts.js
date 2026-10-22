@@ -56,7 +56,7 @@ var init_db = __esm({
 
 // src/contracts.ts
 init_db();
-import { createHash } from "node:crypto";
+import { createHash, randomUUID as randomUUID2 } from "node:crypto";
 
 // src/client-services.ts
 init_db();
@@ -131,6 +131,52 @@ async function notifyTradeSettled(client, p) {
       isGain
     }
   });
+}
+
+// src/wallet-ledger.ts
+async function loadContractWallet(client, accountId, ownerId, balanceCents, lock = true) {
+  const res = await client.query(
+    `SELECT data FROM docs WHERE collection = 'contract_wallets' AND id = $1${lock ? " FOR UPDATE" : ""}`,
+    [accountId]
+  );
+  const raw = res.rows[0]?.data;
+  const existed = !!raw?.wallet;
+  const state2 = existed ? { ...raw, operations: Array.isArray(raw.operations) ? raw.operations : [] } : {
+    wallet: {
+      ownerId,
+      accountId,
+      currency: "USD",
+      futuresCents: 0,
+      perpetualCents: 0,
+      version: 1,
+      updatedAt: Date.now()
+    },
+    operations: []
+  };
+  normalizeWallet(state2, balanceCents);
+  return { state: state2, existed };
+}
+function normalizeWallet(state2, balanceCents) {
+  const total = Math.max(0, Number(balanceCents) || 0);
+  const perp = Math.min(total, Math.max(0, Math.trunc(Number(state2.wallet.perpetualCents) || 0)));
+  state2.wallet.perpetualCents = perp;
+  state2.wallet.futuresCents = total - perp;
+  return state2;
+}
+async function saveContractWallet(client, accountId, ownerId, state2) {
+  state2.wallet.version = (Number(state2.wallet.version) || 1) + 1;
+  state2.wallet.updatedAt = Date.now();
+  if (state2.operations.length > 50) state2.operations.length = 50;
+  await client.query(
+    `INSERT INTO docs (collection, id, owner_id, data, updated_at)
+     VALUES ('contract_wallets', $1, $2, $3, NOW())
+     ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+    [accountId, ownerId, JSON.stringify(state2)]
+  );
+}
+async function readBalanceCents(client, accountId) {
+  const r = await client.query("SELECT balance_cents FROM accounts WHERE id = $1", [accountId]);
+  return Number(r.rows[0]?.balance_cents || 0);
 }
 
 // src/client-services.ts
@@ -340,42 +386,39 @@ async function join(u, input, now = Date.now()) {
         throw new ApiError("\u0627\u0644\u0631\u0635\u064A\u062F \u0627\u0644\u0645\u062A\u0627\u062D \u063A\u064A\u0631 \u0643\u0627\u0641\u064D \u0644\u0647\u0630\u0627 \u0627\u0644\u0639\u0642\u062F.", 409);
       }
       if (acc.type === "real") {
-        const docRes = await client.query(
-          `SELECT data FROM docs WHERE collection = 'contract_wallets' AND id = $1 FOR UPDATE`,
-          [acc.id]
-        );
-        let wState = docRes.rows[0]?.data;
-        if (!wState || !wState.wallet) {
-          wState = {
-            wallet: {
-              ownerId: u.id,
-              accountId: acc.id,
-              currency: "USD",
-              futuresCents: Math.max(0, Number(acc.balance_cents) - amount),
-              perpetualCents: 0,
-              version: 1,
-              updatedAt: Date.now()
-            },
-            operations: []
-          };
-        } else {
-          const curPerp = Math.max(0, Number(wState.wallet.perpetualCents || 0));
-          if (curPerp < amount) {
+        const { state: wState } = await loadContractWallet(client, acc.id, u.id, acc.balance_cents, true);
+        const curPerp = wState.wallet.perpetualCents;
+        let finalPerp = curPerp;
+        let finalFutures = wState.wallet.futuresCents;
+        if (curPerp < amount) {
+          const deficit = amount - curPerp;
+          if (finalFutures >= deficit) {
+            finalPerp += deficit;
+            finalFutures -= deficit;
+            wState.operations.unshift({
+              id: "fund-" + randomUUID2(),
+              kind: "transfer",
+              amountCents: deficit,
+              feeCents: 0,
+              feeRate: 0,
+              netAmountCents: deficit,
+              from: "futures",
+              to: "perpetual",
+              afterFuturesCents: finalFutures,
+              afterPerpetualCents: finalPerp,
+              createdAt: now
+            });
+          } else {
+            const totalAvail = ((curPerp + finalFutures) / 100).toFixed(2);
             throw new ApiError(
-              "\u0627\u0644\u0631\u0635\u064A\u062F \u0627\u0644\u0645\u062A\u0627\u062D \u0641\u064A \u0627\u0644\u0639\u0642\u0648\u062F \u0627\u0644\u062F\u0627\u0626\u0645\u0629 (\u0645\u062D\u0641\u0638\u0629 \u0627\u0644\u062A\u062F\u0627\u0648\u0644) \u063A\u064A\u0631 \u0643\u0627\u0641\u064D \u0644\u0647\u0630\u0627 \u0627\u0644\u0639\u0642\u062F. \u064A\u0631\u062C\u0649 \u062A\u062D\u0648\u064A\u0644 \u0627\u0644\u0631\u0635\u064A\u062F \u0627\u0644\u0645\u0637\u0644\u0648\u0628 \u0645\u0646 \u0627\u0644\u0639\u0642\u0648\u062F \u0627\u0644\u0622\u062C\u0644\u0629 \u0625\u0644\u0649 \u0627\u0644\u0639\u0642\u0648\u062F \u0627\u0644\u062F\u0627\u0626\u0645\u0629 \u0623\u0648\u0644\u0627\u064B.",
+              `\u0625\u062C\u0645\u0627\u0644\u064A \u0627\u0644\u0631\u0635\u064A\u062F \u0627\u0644\u0645\u062A\u0627\u062D \u0641\u064A \u0627\u0644\u062D\u0633\u0627\u0628 (${totalAvail} USD) \u063A\u064A\u0631 \u0643\u0627\u0641\u064D \u0644\u0642\u064A\u0645\u0629 \u0647\u0630\u0627 \u0627\u0644\u0639\u0642\u062F (${(amount / 100).toFixed(2)} USD). \u064A\u0631\u062C\u0649 \u0634\u062D\u0646 \u0627\u0644\u0631\u0635\u064A\u062F \u0623\u0648\u0644\u0627\u064B.`,
               409
             );
           }
-          wState.wallet.perpetualCents = curPerp - amount;
-          wState.wallet.version = (wState.wallet.version || 1) + 1;
-          wState.wallet.updatedAt = Date.now();
         }
-        await client.query(
-          `INSERT INTO docs (collection, id, data, updated_at)
-           VALUES ('contract_wallets', $1, $2, NOW())
-           ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
-          [acc.id, JSON.stringify(wState)]
-        );
+        wState.wallet.perpetualCents = finalPerp - amount;
+        wState.wallet.futuresCents = finalFutures;
+        await saveContractWallet(client, acc.id, u.id, wState);
       }
     }
     const durationSec = c.duration_sec;
@@ -522,21 +565,13 @@ async function settle(u, now = Date.now()) {
         );
       }
       if (!p.is_bonus) {
-        const docRes = await client.query(
-          `SELECT data FROM docs WHERE collection = 'contract_wallets' AND id = $1 FOR UPDATE`,
-          [p.account_id]
-        );
-        if (docRes.rows[0]?.data) {
-          const wState = docRes.rows[0].data;
-          if (wState.wallet) {
-            wState.wallet.perpetualCents = Math.max(0, (Number(wState.wallet.perpetualCents) || 0) + (amountCents + expected));
-            wState.wallet.version = (wState.wallet.version || 1) + 1;
-            wState.wallet.updatedAt = Date.now();
-            await client.query(
-              `UPDATE docs SET data = $1, updated_at = NOW() WHERE collection = 'contract_wallets' AND id = $2`,
-              [JSON.stringify(wState), p.account_id]
-            );
-          }
+        const accTypeRes = await client.query("SELECT type FROM accounts WHERE id = $1", [p.account_id]);
+        if (accTypeRes.rows[0]?.type === "real") {
+          const balanceAfter = await readBalanceCents(client, p.account_id);
+          const { state: wState } = await loadContractWallet(client, p.account_id, u.id, balanceAfter - (amountCents + expected), true);
+          wState.wallet.perpetualCents = wState.wallet.perpetualCents + Math.max(0, amountCents + expected);
+          wState.wallet.futuresCents = Math.max(0, balanceAfter - wState.wallet.perpetualCents);
+          await saveContractWallet(client, p.account_id, u.id, wState);
         }
       }
       await notifyTradeSettled(client, {
@@ -593,6 +628,16 @@ async function state(u, now = Date.now()) {
       accountDirectory = await getTradingAccounts(u, client);
     } catch {
       accountDirectory = { accounts: [], activeId: "" };
+    }
+    let perpetualCents = 0;
+    let futuresCents = Number(acc.balance_cents || 0);
+    if (acc.id) {
+      try {
+        const { state: w } = await loadContractWallet(client, acc.id, u.id, acc.balance_cents, false);
+        perpetualCents = w.wallet.perpetualCents;
+        futuresCents = w.wallet.futuresCents;
+      } catch {
+      }
     }
     const contracts = cntRes.rows.map((c) => ({
       id: c.id,
@@ -762,6 +807,8 @@ async function state(u, now = Date.now()) {
       isAdmin,
       accountDirectory,
       balanceCents: Number(acc.balance_cents),
+      perpetualCents,
+      futuresCents,
       reservedCents: Number(acc.reserved_cents),
       realizedCents: totalRealizedCents,
       dailyProfitCents,
