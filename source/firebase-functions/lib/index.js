@@ -6816,6 +6816,11 @@ async function controlRead(u, module, q = {}) {
               uid: d.uid || d.userId || r.id,
               status: d.status || "open",
               priority: d.priority || "high",
+              description: d.description || d.message || "\u062A\u0645 \u062A\u062D\u0648\u064A\u0644 \u0647\u0630\u0647 \u0627\u0644\u062A\u0630\u0643\u0631\u0629 \u0622\u0644\u064A\u0627\u064B \u0645\u0646 \u0627\u0644\u0645\u0633\u0627\u0639\u062F \u0627\u0644\u0630\u0643\u064A \u0644\u0645\u062A\u0627\u0628\u0639\u0629 \u0641\u0631\u064A\u0642 \u0627\u0644\u062F\u0639\u0645 \u0627\u0644\u0628\u0634\u0631\u064A.",
+              category: d.category || "technical",
+              createdAt: d.createdAt ? typeof d.createdAt === "number" ? d.createdAt : new Date(d.createdAt).getTime() : new Date(r.updated_at).getTime(),
+              conversationId: d.conversationId || d.uid || d.userId || r.id,
+              revision: d.revision || 0,
               updatedAt: new Date(r.updated_at).getTime()
             };
           }),
@@ -7786,6 +7791,40 @@ async function controlAction(u, input) {
         [u.id, action2, threadId, auditPayload, auditHash]
       );
       return { ok: true, threadId, resumed: true };
+    });
+  }
+  if (action2 === "support.reply") {
+    const threadId = String(target || payload.threadId || payload.uid || "");
+    const replyText = String(payload.text || payload.body || "").trim();
+    if (!threadId) throw new ApiError6("\u0645\u0639\u0631\u0651\u0641 \u0627\u0644\u0645\u062D\u0627\u062F\u062B\u0629 \u0645\u0637\u0644\u0648\u0628", 400);
+    if (!replyText) throw new ApiError6("\u0646\u0635 \u0627\u0644\u0631\u062F \u0645\u0637\u0644\u0648\u0628", 400);
+    const msgId = String(payload.id || "staff-" + randomUUID9());
+    return await withTx(async (client) => {
+      const docRes = await client.query("SELECT data FROM docs WHERE collection = 'support_threads' AND id = $1 FOR UPDATE", [threadId]);
+      const thread = docRes.rows[0]?.data || { id: threadId, messages: [], handoffRequested: false, updatedAt: Date.now() };
+      thread.messages = thread.messages || [];
+      thread.messages.push({
+        id: msgId,
+        text: replyText,
+        senderId: u.id,
+        kind: "staff",
+        createdAt: Date.now()
+      });
+      thread.updatedAt = Date.now();
+      await client.query(
+        `INSERT INTO docs (collection, id, data, updated_at)
+         VALUES ('support_threads', $1, $2, NOW())
+         ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+        [threadId, JSON.stringify(thread)]
+      );
+      const auditPayload = JSON.stringify({ actorId: u.id, action: "support_reply_sent", threadId, msgId });
+      const auditHash = createHash10("sha256").update(auditPayload).digest("hex");
+      await client.query(
+        `INSERT INTO audit (actor_id, action, reference, payload, payload_hash)
+         VALUES ($1, 'support_reply_sent', $2, $3::jsonb, $4)`,
+        [u.id, threadId + "-" + msgId, auditPayload, auditHash]
+      );
+      return { ok: true, messageId: msgId, threadId };
     });
   }
   if (action2 === "reward.propose") {

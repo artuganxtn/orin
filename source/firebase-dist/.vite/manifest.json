@@ -1,6 +1,6 @@
 {
   "../app/program-pages.tsx": {
-    "file": "assets/program-pages-DNJnz4Xf.js",
+    "file": "assets/program-pages-D9JOZNs2.js",
     "name": "program-pages",
     "src": "../app/program-pages.tsx",
     "isDynamicEntry": true,
@@ -8,50 +8,50 @@
       "index.html",
       "_programs-D9Mh0MZ4.js",
       "_trading-accounts-wmsHtH5d.js",
-      "_star-DEY-OMDo.js"
+      "_star-VMaeBPHU.js"
     ]
   },
   "../app/trading-workspace.tsx": {
-    "file": "assets/trading-workspace-BAKLCX6e.js",
+    "file": "assets/trading-workspace-DA7Mqjfw.js",
     "name": "trading-workspace",
     "src": "../app/trading-workspace.tsx",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_chart-boundary-CoqeC8Xq.js",
-      "_account-transactions-C27AXmeg.js",
-      "_contracts-D6C2w_Fv.js",
+      "_chart-boundary-C9o67xof.js",
+      "_account-transactions-ZRex0NEQ.js",
+      "_contracts-D9bX-UUo.js",
       "_trading-accounts-wmsHtH5d.js",
-      "_star-DEY-OMDo.js"
+      "_star-VMaeBPHU.js"
     ],
     "dynamicImports": [
       "../lib/statement-pdf.ts",
       "../app/program-pages.tsx",
       "../app/tradingview-widget.tsx",
-      "_account-transactions-C27AXmeg.js"
+      "_account-transactions-ZRex0NEQ.js"
     ],
     "css": [
       "assets/trading-workspace-BwoRBMGk.css"
     ]
   },
   "../app/tradingview-widget.tsx": {
-    "file": "assets/tradingview-widget-CF-d2Cj3.js",
+    "file": "assets/tradingview-widget-vHcDGIGg.js",
     "name": "tradingview-widget",
     "src": "../app/tradingview-widget.tsx",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_chart-boundary-CoqeC8Xq.js"
+      "_chart-boundary-C9o67xof.js"
     ]
   },
   "../lib/statement-pdf.ts": {
-    "file": "assets/statement-pdf-D4xQkMru.js",
+    "file": "assets/statement-pdf-D1ecxin1.js",
     "name": "statement-pdf",
     "src": "../lib/statement-pdf.ts",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_account-transactions-C27AXmeg.js",
+      "_account-transactions-ZRex0NEQ.js",
       "_typeof-DsF8qdHM.js"
     ],
     "dynamicImports": [
@@ -61,7 +61,7 @@
     ]
   },
   "../node_modules/canvg/lib/index.es.js": {
-    "file": "assets/index.es-CK2KX11L.js",
+    "file": "assets/index.es-DXzj90h6.js",
     "name": "index.es",
     "src": "../node_modules/canvg/lib/index.es.js",
     "isDynamicEntry": true,
@@ -77,7 +77,7 @@
     "isDynamicEntry": true
   },
   "../node_modules/html2canvas/dist/html2canvas.js": {
-    "file": "assets/html2canvas-AWXhoPEP.js",
+    "file": "assets/html2canvas-BPEeUbJj.js",
     "name": "html2canvas",
     "src": "../node_modules/html2canvas/dist/html2canvas.js",
     "isDynamicEntry": true,
@@ -85,8 +85,8 @@
       "index.html"
     ]
   },
-  "_account-transactions-C27AXmeg.js": {
-    "file": "assets/account-transactions-C27AXmeg.js",
+  "_account-transactions-ZRex0NEQ.js": {
+    "file": "assets/account-transactions-ZRex0NEQ.js",
     "name": "account-transactions",
     "imports": [
       "index.html",
@@ -96,15 +96,15 @@
       "index.html"
     ]
   },
-  "_chart-boundary-CoqeC8Xq.js": {
-    "file": "assets/chart-boundary-CoqeC8Xq.js",
+  "_chart-boundary-C9o67xof.js": {
+    "file": "assets/chart-boundary-C9o67xof.js",
     "name": "chart-boundary",
     "imports": [
       "index.html"
     ]
   },
-  "_contracts-D6C2w_Fv.js": {
-    "file": "assets/contracts-D6C2w_Fv.js",
+  "_contracts-D9bX-UUo.js": {
+    "file": "assets/contracts-D9bX-UUo.js",
     "name": "contracts",
     "imports": [
       "index.html"
@@ -114,8 +114,8 @@
     "file": "assets/programs-D9Mh0MZ4.js",
     "name": "programs"
   },
-  "_star-DEY-OMDo.js": {
-    "file": "assets/star-DEY-OMDo.js",
+  "_star-VMaeBPHU.js": {
+    "file": "assets/star-VMaeBPHU.js",
     "name": "star",
     "imports": [
       "index.html"
@@ -130,13 +130,13 @@
     "name": "typeof"
   },
   "control-center.tsx": {
-    "file": "assets/control-center-Ct-iwM7i.js",
+    "file": "assets/control-center-CUfpH7Y7.js",
     "name": "control-center",
     "src": "control-center.tsx",
     "isDynamicEntry": true,
     "imports": [
       "index.html",
-      "_contracts-D6C2w_Fv.js",
+      "_contracts-D9bX-UUo.js",
       "_programs-D9Mh0MZ4.js"
     ],
     "css": [
@@ -144,7 +144,7 @@
     ]
   },
   "index.html": {
-    "file": "assets/index-BfxbDLwS.js",
+    "file": "assets/index-CZ23-2pl.js",
     "name": "index",
     "src": "index.html",
     "isEntry": true,

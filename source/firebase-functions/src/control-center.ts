@@ -139,6 +139,11 @@ export async function controlRead(u: Identity, module: string, q: Data = {}) {
               uid: d.uid || d.userId || r.id,
               status: d.status || 'open',
               priority: d.priority || 'high',
+              description: d.description || d.message || 'تم تحويل هذه التذكرة آلياً من المساعد الذكي لمتابعة فريق الدعم البشري.',
+              category: d.category || 'technical',
+              createdAt: d.createdAt ? (typeof d.createdAt === 'number' ? d.createdAt : new Date(d.createdAt).getTime()) : new Date(r.updated_at).getTime(),
+              conversationId: d.conversationId || d.uid || d.userId || r.id,
+              revision: d.revision || 0,
               updatedAt: new Date(r.updated_at).getTime()
             };
           }),
@@ -1232,6 +1237,41 @@ export async function controlAction(u: Identity, input: Data) {
         [u.id, action, threadId, auditPayload, auditHash]
       );
       return { ok: true, threadId, resumed: true };
+    });
+  }
+
+  if (action === 'support.reply') {
+    const threadId = String(target || payload.threadId || payload.uid || '');
+    const replyText = String(payload.text || payload.body || '').trim();
+    if (!threadId) throw new ApiError('معرّف المحادثة مطلوب', 400);
+    if (!replyText) throw new ApiError('نص الرد مطلوب', 400);
+    const msgId = String(payload.id || 'staff-' + randomUUID());
+    return await withTx(async (client) => {
+      const docRes = await client.query("SELECT data FROM docs WHERE collection = 'support_threads' AND id = $1 FOR UPDATE", [threadId]);
+      const thread = docRes.rows[0]?.data || { id: threadId, messages: [], handoffRequested: false, updatedAt: Date.now() };
+      thread.messages = thread.messages || [];
+      thread.messages.push({
+        id: msgId,
+        text: replyText,
+        senderId: u.id,
+        kind: 'staff',
+        createdAt: Date.now()
+      });
+      thread.updatedAt = Date.now();
+      await client.query(
+        `INSERT INTO docs (collection, id, data, updated_at)
+         VALUES ('support_threads', $1, $2, NOW())
+         ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+        [threadId, JSON.stringify(thread)]
+      );
+      const auditPayload = JSON.stringify({ actorId: u.id, action: 'support_reply_sent', threadId, msgId });
+      const auditHash = createHash('sha256').update(auditPayload).digest('hex');
+      await client.query(
+        `INSERT INTO audit (actor_id, action, reference, payload, payload_hash)
+         VALUES ($1, 'support_reply_sent', $2, $3::jsonb, $4)`,
+        [u.id, threadId + '-' + msgId, auditPayload, auditHash]
+      );
+      return { ok: true, messageId: msgId, threadId };
     });
   }
 
