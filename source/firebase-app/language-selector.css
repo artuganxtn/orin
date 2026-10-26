@@ -1,0 +1,22 @@
+/* Scoped entry control: does not change the app's existing theme or settings. */
+.orin-entry-language{position:relative;display:block;flex:none;color:#14204d;font-size:14px;line-height:1.5;z-index:5}
+.orin-entry-language>summary{display:flex;align-items:center;gap:9px;min-height:44px;padding:7px 8px;border-radius:14px;list-style:none;cursor:pointer;user-select:none;touch-action:manipulation}
+.orin-entry-language>summary::-webkit-details-marker{display:none}
+.orin-entry-language>summary::marker{content:''}
+.orin-entry-language>summary>svg{flex:none;color:#354e88}
+.orin-entry-language>summary>span{font-weight:500}
+.orin-entry-language>summary:focus-visible,.orin-entry-language .orin-entry-language-options>button:focus-visible{outline:3px solid #0788ff;outline-offset:2px}
+.orin-entry-language>summary[aria-disabled=true]{cursor:default;opacity:.55}
+.orin-entry-language-options{position:absolute;inset-block-start:calc(100% + 6px);inset-inline-start:0;min-width:176px;max-width:calc(100vw - 40px);padding:7px 10px;background:#fff;border:1px solid #e5edf9;border-radius:18px;box-shadow:0 12px 36px #1f579426;overflow:hidden}
+.orin-entry-language .orin-entry-language-options>button{display:flex;align-items:center;gap:12px;width:100%;min-height:45px;padding:9px 7px;border:0;border-bottom:1px solid #edf2fa;border-radius:0;background:transparent;color:inherit;font:inherit;text-align:start;touch-action:manipulation}
+.orin-entry-language .orin-entry-language-options>button:last-child{border-bottom:0}
+.orin-entry-language .orin-entry-language-options>button:hover{background:#f3f8ff}
+.orin-entry-language .orin-entry-language-options>button[aria-pressed=true]{font-weight:600}
+.orin-entry-language-check{display:grid;place-items:center;flex:0 0 22px;width:22px;color:#087bfa}
+.orin-auth-language{display:flex;justify-content:flex-end;margin-bottom:2px}
+.orin-auth-language .orin-entry-language-options{inset-inline-start:auto;inset-inline-end:0}
+[data-theme=dark] .orin-auth-language .orin-entry-language{color:#e7f2ff}
+[data-theme=dark] .orin-auth-language .orin-entry-language>summary>svg{color:#9fcfff}
+[data-theme=dark] .orin-auth-language .orin-entry-language-options{background:#10243a;border-color:#28415d}
+[data-theme=dark] .orin-auth-language .orin-entry-language-options>button{border-color:#28415d}
+[data-theme=dark] .orin-auth-language .orin-entry-language-options>button:hover{background:#17304b}

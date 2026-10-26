@@ -1,11 +1,12 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ArrowDownUp, Info, CheckCircle2, History } from 'lucide-react';
 import type { TradingAccount } from '@/lib/trading-accounts';
 import { useOrin } from './orin-settings';
 import { toast } from 'sonner';
 import { demoWalletRequest } from '@/lib/demo-wallet-client';
-import type { DemoWalletView } from '@/lib/demo-wallet';
+import { parseUsdAmount, type DemoWalletView, type TransferQuote } from '@/lib/demo-wallet';
+import { transferAmounts } from '@/lib/financial-policy';
 import './account-workflows.css';
 
 export function AccountTransfer({ account, onSaved }: { account: TradingAccount | null; onSaved: () => Promise<void> }) {
@@ -17,6 +18,11 @@ export function AccountTransfer({ account, onSaved }: { account: TradingAccount 
   const [showHistory, setShowHistory] = useState(false);
   const [walletView, setWalletView] = useState<DemoWalletView | null>(null);
   const [loading, setLoading] = useState(false);
+  const [pendingQuote, setPendingQuote] = useState<TransferQuote | null>(null);
+  const submitting = useRef(false);
+  const requestId = useRef<string | null>(null);
+  const currentAccountId = useRef(account?.id);
+  currentAccountId.current = account?.id;
 
   const to = from === 'futures' ? 'perpetual' : 'futures';
   const label = (type: string) => type === 'futures' ? t('الرصيد المتاح للسحب (العقود الآجلة)', 'Available for Withdrawal (Futures)') : t('رصيد العقود الدائمة (للتداول فقط - غير قابل للسحب)', 'Permanent Contracts (Trading Only - Non-Withdrawable)');
@@ -24,6 +30,11 @@ export function AccountTransfer({ account, onSaved }: { account: TradingAccount 
   // Load live wallet pockets and history on mount and when account changes
   useEffect(() => {
     let mounted = true;
+    setPendingQuote(null);
+    setWalletView(null);
+    setDone(null);
+    setAmount('');
+    requestId.current = null;
     if (!account?.id) {
       setWalletView(null);
       return;
@@ -46,40 +57,73 @@ export function AccountTransfer({ account, onSaved }: { account: TradingAccount 
   const perpBal = (walletView?.wallet?.perpetualCents ?? 0) / 100;
   const availableBal = from === 'futures' ? futuresBal : perpBal;
   const maxAmount = availableBal > 0 ? availableBal.toFixed(2) : '0';
+  const signalPolicyActive = walletView?.financialPolicy?.version === 'signal-doubling-v1';
+  const activeFeeRate = from === 'futures' || account?.type === 'demo' ? 0 : signalPolicyActive ? undefined : walletView?.challenge?.transferFeeRate;
+  const previewCents = Math.round(Number(amount) * 100);
+  const preview = pendingQuote ?? (Number.isSafeInteger(previewCents) && previewCents > 0 && activeFeeRate !== undefined
+    ? transferAmounts(previewCents, activeFeeRate) : null);
+
+  function cancelReview() {
+    setPendingQuote(null);
+    requestId.current = null;
+  }
 
   async function submit() {
+    if (submitting.current) return;
     if (!account?.id) {
       toast.error(t('يرجى اختيار حساب تداول أولاً.', 'Please select a trading account first.'));
       return;
     }
-    const val = Number(amount);
-    if (!Number.isFinite(val) || val <= 0) {
+    let amountCents: number;
+    try {
+      if (account.type === 'demo') amountCents = parseUsdAmount(amount);
+      else {
+        const text = amount.trim().replace(/[٠-٩]/g, c => String('٠١٢٣٤٥٦٧٨٩'.indexOf(c))).replace('٫', '.');
+        if (!/^\d+(\.\d{1,2})?$/.test(text)) throw new Error('Invalid cents');
+        const [whole, fraction = ''] = text.split('.');
+        amountCents = Number(whole) * 100 + Number(fraction.padEnd(2, '0'));
+        if (!Number.isSafeInteger(amountCents)) throw new Error('Invalid cents');
+      }
+    } catch {
       toast.error(t('أدخل مبلغ تحويل صالحًا.', 'Enter a valid transfer amount.'));
       return;
     }
-    if (val > availableBal) {
+    if (amountCents <= 0 || amountCents > Math.round(availableBal * 100)) {
       toast.error(t('الرصيد المتاح غير كافٍ للتحويل.', 'Insufficient available balance.'));
       return;
     }
 
+    submitting.current = true;
     setBusy(true);
+    const accountId = account.id;
     try {
-      const amountCents = Math.round(val * 100);
-      const reqId = 'TR-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).slice(2, 6).toUpperCase();
-      const updated = await demoWalletRequest(account.id, {
+      requestId.current ??= 'TR-' + crypto.randomUUID();
+      const reqId = requestId.current;
+      const updated = await demoWalletRequest(accountId, {
         requestId: reqId,
-        kind: 'transfer',
+        kind: pendingQuote ? 'transfer' : 'quote',
         amountCents,
-        from
+        from,
+        ...(pendingQuote ? { confirmedQuote: pendingQuote } : {})
       });
+      if (currentAccountId.current !== accountId) return;
       setWalletView(updated);
+      if (!pendingQuote) {
+        if (!updated.transferQuote) throw new Error(t('تعذر جلب تفاصيل التحويل. حاول مجددًا.', 'Unable to quote this transfer. Please retry.'));
+        setPendingQuote(updated.transferQuote);
+        return;
+      }
       setDone(reqId);
+      setPendingQuote(null);
+      requestId.current = null;
       setAmount('');
       toast.success(t('تم التحويل بنجاح بين العقود!', 'Transfer completed successfully!'));
       await onSaved();
     } catch (e: any) {
+      if (e.status === 409) setPendingQuote(null);
       toast.error(e.message || t('تعذر إتمام التحويل.', 'Failed to complete transfer.'));
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
   }
@@ -143,7 +187,8 @@ export function AccountTransfer({ account, onSaved }: { account: TradingAccount 
         {/* Swap Direction Button */}
         <button
           type="button"
-          onClick={() => setFrom(to)}
+          disabled={busy}
+          onClick={() => { cancelReview(); setFrom(to); }}
           aria-label={t('عكس اتجاه التحويل', 'Swap direction')}
           style={{ position: 'absolute', insetInlineStart: '16px', top: '50%', transform: 'translateY(-50%)', width: '40px', height: '40px', borderRadius: '50%', background: '#fff', border: '1.5px solid #dbe4f2', display: 'grid', placeItems: 'center', color: '#0788ff', cursor: 'pointer', boxShadow: '0 4px 12px rgba(7,136,255,0.15)', zIndex: 2 }}
         >
@@ -199,14 +244,16 @@ export function AccountTransfer({ account, onSaved }: { account: TradingAccount 
             dir="ltr"
             placeholder={t('أدخل المبلغ', 'Enter amount')}
             value={amount}
-            onChange={e => setAmount(e.target.value)}
+            disabled={busy}
+            onChange={e => { cancelReview(); setAmount(e.target.value); }}
             style={{ flex: 1, minWidth: 0, border: 0, background: 'transparent', outline: 'none', padding: '0 14px', fontSize: '16px', color: 'var(--orin-ink)' }}
           />
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0 12px', background: '#eef4fc', height: '100%', borderInlineStart: '1px solid #dbe4f2', flexShrink: 0 }}>
             <span style={{ fontSize: '13px', fontWeight: 700, color: '#4a5d7f' }}>USDT</span>
             <button
               type="button"
-              onClick={() => setAmount(maxAmount)}
+              disabled={busy}
+              onClick={() => { cancelReview(); setAmount(maxAmount); }}
               style={{ border: 0, background: '#0788ff', color: '#fff', padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
             >
               {t('الكل', 'All')}
@@ -215,21 +262,23 @@ export function AccountTransfer({ account, onSaved }: { account: TradingAccount 
         </div>
       </div>
 
-      {/* 20% Early Exit Calculation when transferring from Perpetual to Futures */}
-      {from === 'perpetual' && Number(amount) > 0 && (
+      {/* Integer-cent preview; confirmation uses the server's current quote. */}
+      {preview && (from === 'perpetual' || pendingQuote) && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '14px 16px', borderRadius: '16px', background: '#fffbeb', border: '1px solid #fde68a', fontSize: '13px', width: '100%', boxSizing: 'border-box' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ color: '#92400e', fontWeight: 600 }}>{t('المبلغ المحوّل من العقود الدائمة:', 'Transfer Amount from Perpetual:')}</span>
-            <b dir="ltr" style={{ color: '#0f172a' }}>{Number(amount).toFixed(2)} USDT</b>
+            <span style={{ color: '#92400e', fontWeight: 600 }}>{t('مبلغ التحويل:', 'Transfer amount:')}</span>
+            <b dir="ltr" style={{ color: '#0f172a' }}>{(preview.amountCents / 100).toFixed(2)} USDT</b>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ color: '#92400e', fontWeight: 600 }}>{t('رسوم الانسحاب المبكر (20% قبل 29 يوماً):', 'Early Exit Fee (20% before 29 days):')}</span>
-            <b dir="ltr" style={{ color: '#dc2626', fontWeight: 700 }}>-{(Number(amount) * 0.20).toFixed(2)} USDT</b>
+            <span style={{ color: '#92400e', fontWeight: 600 }}>{t('رسوم التحويل:', 'Transfer fee:')}{!signalPolicyActive && ` (${Math.round(preview.feeRate * 100)}%)`}</span>
+            <b dir="ltr" style={{ color: '#dc2626', fontWeight: 700 }}>-{(preview.feeCents / 100).toFixed(2)} USDT</b>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed #fcd34d', paddingTop: '8px' }}>
-            <span style={{ color: '#92400e', fontWeight: 800, fontSize: '13.5px' }}>{t('الصافي الواصل لمحفظة السحب (العقود الآجلة):', 'Net Credited to Withdrawable Futures:')}</span>
-            <b dir="ltr" style={{ color: '#0788ff', fontSize: '15px', fontWeight: 800 }}>{(Number(amount) * 0.80).toFixed(2)} USDT</b>
+            <span style={{ color: '#92400e', fontWeight: 800, fontSize: '13.5px' }}>{t('الصافي الواصل للمحفظة المستلمة:', 'Net credited to receiving wallet:')}</span>
+            <b dir="ltr" style={{ color: '#0788ff', fontSize: '15px', fontWeight: 800 }}>{(preview.netAmountCents / 100).toFixed(2)} USDT</b>
           </div>
+          {pendingQuote && signalPolicyActive && Number(pendingQuote.legacyAmountCents) > 0 && <small>{t('يتضمن العرض رصيدًا قديمًا؛ حُسبت رسومه وفق شروطه الأصلية، وليس وفق شرط الإيداعات الجديدة.', 'This quote includes grandfathered funds; their fee follows the original terms, not the new-deposit condition.')}</small>}
+          {pendingQuote && signalPolicyActive && from === 'perpetual' && !pendingQuote.permanentlyExempt && Number(pendingQuote.policyAmountCents) > 0 && <small>{t('تُجمع كسور سنت رسوم 20% حتى تكتمل؛ قد يتضمن هذا العرض كسرًا متبقيًا من تحويل سابق. الرسم والصافي أعلاه هما المبلغان الفعليان.', 'Fractional cents of the 20% fee carry forward until a full cent accrues. This quote may include a fraction from an earlier transfer. The fee and net above are the actual amounts.')}</small>}
         </div>
       )}
 
@@ -239,10 +288,16 @@ export function AccountTransfer({ account, onSaved }: { account: TradingAccount 
           <Info size={19} style={{ color: '#d97706', flexShrink: 0, marginTop: '2px' }} />
           <div style={{ minWidth: 0 }}>
             <b style={{ display: 'block', fontSize: '14px', marginBottom: '3px' }}>
-              {t('سياسة الانسحاب المبكر (20% قبل 29 يوماً)', 'Early Exit Policy (20% before 29 days)')}
+              {t('راجع رسوم التحويل قبل التأكيد', 'Review transfer fees before confirming')}
             </b>
             <span>
-              {t('العقود الدائمة مخصصة للتداول حصراً وغير قابلة للسحب مباشرة. عند نقل الرصيد إلى محفظة السحب (العقود الآجلة) قبل استيفاء مدة الـ 29 يوماً، تُفرض رسوم انسحاب مبكر بنسبة 20% وفق سياسة إدارة رأس المال المعتمدة.', 'Permanent Contracts are for trading only and not directly withdrawable. Transferring to Withdrawable Futures before 29 days incurs a 20% early exit fee per capital management policy.')}
+              {account?.type === 'demo'
+                ? t('التحويل التجريبي مجاني ولا يمثل أموالًا قابلة للسحب.', 'Demo transfers are free and do not represent withdrawable money.')
+                : signalPolicyActive
+                  ? walletView?.signalPolicy?.permanentlyExemptAt != null
+                    ? t('حسابك معفى نهائيًا من رسوم التحويل المبكر، ويشمل الإعفاء الإيداعات اللاحقة. رسوم السحب الخارجي 5% تبقى منفصلة.', 'Your account is permanently exempt from early-transfer fees, including later deposits. The separate 5% external withdrawal fee still applies.')
+                    : t('رسوم نقل الإيداعات الجديدة من التداول إلى المحفظة الفورية 20% حتى يساوي صافي الربح المحقق من الإشارات مجموع الإيداعات الجديدة. عند تحقق الشرط يُعفى الحساب نهائيًا، حتى للإيداعات اللاحقة. رسوم السحب الخارجي 5% منفصلة. راجع العرض الفعلي قبل التأكيد.', 'Transferring new-deposit funds from trading to spot costs 20% until net realized signal profit equals aggregate new deposits. Qualification permanently waives that fee, including future deposits. External withdrawal has a separate 5% fee. Review the actual quote before confirming.')
+                  : t('السياسة الحالية: رسوم 20% قبل مرور 29 يومًا من أول إيداع مؤكد، ثم 0%. يعرض التأكيد الرسوم الفعلية والصافي. رسوم السحب الخارجي 5% منفصلة.', 'Current policy: 20% before 29 days from the first confirmed deposit, then 0%. Confirmation shows the actual fee and net amount. External withdrawal has a separate 5% fee.')}
             </span>
           </div>
         </div>
@@ -268,8 +323,9 @@ export function AccountTransfer({ account, onSaved }: { account: TradingAccount 
         onClick={submit}
         style={{ width: '100%', height: '52px', borderRadius: '16px', background: (availableBal <= 0) ? '#94a3b8' : 'linear-gradient(180deg,#1c8cff 0%,#0064f4 100%)', color: '#fff', border: 0, fontSize: '16px', fontWeight: 700, cursor: (busy || availableBal <= 0) ? 'not-allowed' : 'pointer', opacity: (busy || availableBal <= 0) ? 0.65 : 1, boxShadow: (availableBal <= 0) ? 'none' : '0 10px 22px rgba(10,108,255,0.25)', boxSizing: 'border-box' }}
       >
-        {busy ? t('جار التحويل…', 'Transferring…') : availableBal <= 0 ? t('الرصيد غير كافٍ للتحويل', 'Insufficient Balance') : t('متابعة التحويل', 'Continue Transfer')}
+        {busy ? t('جار المعالجة…', 'Processing…') : availableBal <= 0 ? t('الرصيد غير كافٍ للتحويل', 'Insufficient Balance') : pendingQuote ? t('تأكيد التحويل بالرسوم الموضحة', 'Confirm transfer with shown fees') : t('متابعة التحويل', 'Continue Transfer')}
       </button>
+      {pendingQuote && <button type="button" className="btn-outline" disabled={busy} onClick={cancelReview}>{t('إلغاء', 'Cancel')}</button>}
 
       <p style={{ textAlign: 'center', fontSize: '12px', color: 'var(--orin-muted)', margin: 0 }}>
         {t('راجع التفاصيل قبل التأكيد', 'Review details before confirmation')}

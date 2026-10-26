@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { withTx } from './db.ts';
 import { requireVerifiedKyc } from './kyc.ts';
 import {
@@ -9,6 +9,8 @@ import {
   notifyWithdrawalRejected
 } from './notifications.ts';
 import { loadContractWallet, saveContractWallet, readBalanceCents } from './wallet-ledger.ts';
+import { readPolicyRuntime, policyLedger, cohortAmount, savePolicyEvidence, type PolicyClient } from './financial-policy.ts';
+import { LEGACY_FINANCIAL_POLICY } from '../../lib/financial-policy';
 
 export class WithdrawalError extends Error {
   constructor(message: string, public status = 400, public code = 'withdrawal_error') {
@@ -17,6 +19,7 @@ export class WithdrawalError extends Error {
 }
 
 export interface WithdrawalRequestInput {
+  requestId?: string;
   accountId?: string;
   amountCents: number;
   coin?: string;
@@ -30,6 +33,9 @@ export async function requestWithdrawal(
   input: WithdrawalRequestInput
 ) {
   const amountCents = Number(input.amountCents);
+  if (input.requestId !== undefined && (typeof input.requestId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(input.requestId))) {
+    throw new WithdrawalError('Invalid withdrawal request ID', 400);
+  }
   if (!Number.isSafeInteger(amountCents) || amountCents <= 0) {
     throw new WithdrawalError('المبلغ غير صالح.', 400);
   }
@@ -48,19 +54,6 @@ export async function requestWithdrawal(
       throw new WithdrawalError('الوصول إلى الحساب غير متاح.', 403);
     }
 
-    // Verify OTP proof bound to sha256(userId|amountCents|coin|address) if provided or strictly required
-    const proofId = (input as any).proofId || (input as any).otpProofId;
-    if (proofId) {
-      const { computeWithdrawalBoundHash, consumeOtpProof } = await import('./otp.js');
-      const boundHash = computeWithdrawalBoundHash(user.id, amountCents, coin, address);
-      const proofConsumed = await consumeOtpProof(proofId, user.id, 'withdrawal', boundHash, client);
-      if (!proofConsumed) {
-        throw new WithdrawalError('رمز تأكيد السحب غير صالح أو مستخدم مسبقًا / Invalid or consumed OTP proof', 403, 'otp_required');
-      }
-    } else if (process.env.ORIN_STRICT_WITHDRAWAL_OTP === 'true') {
-      throw new WithdrawalError('رمز التأكيد للبريد الإلكتروني مطلوب للسحب / OTP proof required', 403, 'otp_required');
-    }
-
     // Verify account belongs to user
     let accountId = input.accountId;
     if (!accountId) {
@@ -75,7 +68,7 @@ export async function requestWithdrawal(
     }
 
     const accRes = await client.query(
-      'SELECT id, balance_cents, reserved_cents FROM accounts WHERE id = $1 AND user_id = $2 FOR UPDATE',
+      'SELECT id, type, currency, balance_cents, reserved_cents FROM accounts WHERE id = $1 AND user_id = $2 FOR UPDATE',
       [accountId, user.id]
     );
     if (accRes.rowCount === 0) {
@@ -83,6 +76,32 @@ export async function requestWithdrawal(
     }
 
     const account = accRes.rows[0];
+    if (account.type !== 'real' || account.currency !== 'USD' || currency !== 'USD') {
+      throw new WithdrawalError('السحب متاح من الحساب الحقيقي بالدولار فقط. / Withdrawals require a real USD account.', 403);
+    }
+
+    const commandId = input.requestId ? createHash('sha256').update(accountId + ':' + input.requestId).digest('hex') : null;
+    const fingerprint = JSON.stringify({ accountId, amountCents, coin, currency, address });
+    if (commandId) {
+      const previous = await client.query("SELECT data FROM docs WHERE collection = 'withdrawal_commands' AND id = $1", [commandId]);
+      if (previous.rows[0]) {
+        if (previous.rows[0].data.fingerprint !== fingerprint) throw new WithdrawalError('Withdrawal request details changed', 409);
+        return previous.rows[0].data.response;
+      }
+    }
+
+    // Verify OTP proof bound to sha256(userId|amountCents|coin|address) if provided or strictly required
+    const proofId = (input as any).proofId || (input as any).otpProofId;
+    if (proofId) {
+      const { computeWithdrawalBoundHash, consumeOtpProof } = await import('./otp.js');
+      const boundHash = computeWithdrawalBoundHash(user.id, amountCents, coin, address);
+      const proofConsumed = await consumeOtpProof(proofId, user.id, 'withdrawal', boundHash, client);
+      if (!proofConsumed) {
+        throw new WithdrawalError('رمز تأكيد السحب غير صالح أو مستخدم مسبقًا / Invalid or consumed OTP proof', 403, 'otp_required');
+      }
+    } else if (process.env.ORIN_STRICT_WITHDRAWAL_OTP === 'true') {
+      throw new WithdrawalError('رمز التأكيد للبريد الإلكتروني مطلوب للسحب / OTP proof required', 403, 'otp_required');
+    }
 
     // Check sum of pending/approved withdrawals that have not yet been paid
     const pendingRes = await client.query(
@@ -97,6 +116,7 @@ export async function requestWithdrawal(
     // perpetualCents = Permanent Futures (trading only, CANNOT be withdrawn!)
     // futuresCents = Withdrawable Futures (withdrawable)
     const { state: wState } = await loadContractWallet(client, accountId, user.id, account.balance_cents, true);
+    const policy = policyLedger(wState, await readPolicyRuntime(client));
     const curFutures = wState.wallet.futuresCents;
     if (curFutures < amountCents) {
       throw new WithdrawalError(
@@ -106,13 +126,14 @@ export async function requestWithdrawal(
     }
 
     // 5% standard withdrawal fee
-    const feeCents = Math.round(amountCents * 0.05);
+    const feeCents = Math.round(amountCents * LEGACY_FINANCIAL_POLICY.externalWithdrawalFeeRate);
     const netAmountCents = amountCents - feeCents;
+    const policySpotCents = cohortAmount(amountCents, wState, policy, 'spot');
 
     const wdId = 'wd-' + randomUUID();
-    await client.query(
+    const inserted = await client.query(
       `INSERT INTO withdrawal_requests (id, user_id, account_id, amount_cents, fee_cents, net_amount_cents, currency, coin, address, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'requested')`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'requested') RETURNING created_at`,
       [wdId, user.id, accountId, amountCents, feeCents, netAmountCents, currency, coin, address]
     );
 
@@ -134,6 +155,10 @@ export async function requestWithdrawal(
     // perpetualCents (Permanent Futures / Trading) is completely protected and CAN NEVER BE WITHDRAWN!
     const balanceAfter = await readBalanceCents(client, accountId);
     wState.wallet.futuresCents = Math.max(0, balanceAfter - wState.wallet.perpetualCents);
+    if (policy) {
+      policy.policySpotCents -= policySpotCents;
+      await savePolicyEvidence(client, 'financial_policy_withdrawals', wdId, user.id, { accountId, policySpotCents });
+    }
 
     if (Array.isArray(wState.operations)) {
       wState.operations.unshift({
@@ -174,7 +199,7 @@ export async function requestWithdrawal(
     });
 
 
-    return {
+    const response = {
       ok: true,
       id: wdId,
       amountCents,
@@ -184,9 +209,13 @@ export async function requestWithdrawal(
       coin,
       currency,
       address,
+      accountId,
+      createdAt: new Date(inserted.rows[0].created_at).getTime(),
       status: 'requested',
       message: 'تم استلام طلب السحب وخصم الرصيد بنجاح. سيتم مراجعته وتحويله من قِبل الإدارة.'
     };
+    if (commandId) await savePolicyEvidence(client, 'withdrawal_commands', commandId, user.id, { fingerprint, response });
+    return response;
   });
 }
 
@@ -230,11 +259,12 @@ export async function proposeWithdrawalApproval(
 
 export async function approveWithdrawal(
   admin2: { id: string },
-  input: { approvalId: string; reason?: string }
+  input: { approvalId: string; reason?: string },
+  transactionClient?: PolicyClient
 ) {
   const apprId = input.approvalId;
-  return await withTx(async (client) => {
-    const apprRes = await client.query('SELECT * FROM approvals WHERE id = $1', [apprId]);
+  const run = async (client: PolicyClient) => {
+    const apprRes = await client.query('SELECT * FROM approvals WHERE id = $1 FOR UPDATE', [apprId]);
     if (apprRes.rowCount === 0) {
       throw new WithdrawalError('طلب الموافقة غير موجود.', 404);
     }
@@ -247,6 +277,10 @@ export async function approveWithdrawal(
     if (appr.requested_by === admin2.id) {
       throw new WithdrawalError('موافقة المشرف الثاني مطلوبة (لا يمكن اعتماد طلبك بنفسك).', 403);
     }
+    const wdRes = await client.query('SELECT * FROM withdrawal_requests WHERE id = $1 FOR UPDATE', [appr.reference]);
+    const wd = wdRes.rows[0];
+    if (!wd || wd.status !== 'requested') throw new WithdrawalError('طلب السحب ليس قيد المراجعة.', 409);
+    await ensureWithdrawalDebited(client, wd);
 
     await client.query(
       `UPDATE approvals
@@ -263,9 +297,7 @@ export async function approveWithdrawal(
     );
 
     // Notify the user of withdrawal approval with rich details
-    const wdRes = await client.query('SELECT * FROM withdrawal_requests WHERE id = $1', [appr.reference]);
-    if (wdRes.rowCount > 0) {
-      const wd = wdRes.rows[0];
+    if (wdRes.rows.length > 0) {
       await notifyWithdrawalApproved(client, {
         userId: wd.user_id,
         wdId: wd.id,
@@ -282,6 +314,48 @@ export async function approveWithdrawal(
       withdrawalId: appr.reference,
       status: 'approved'
     };
+  };
+  return transactionClient ? run(transactionClient) : withTx(run);
+}
+
+/** Shared by both admin entry points; never debits trading or loses cohort data. */
+async function ensureWithdrawalDebited(client: PolicyClient, wd: any) {
+  const account = await client.query('SELECT * FROM accounts WHERE id = $1 FOR UPDATE', [wd.account_id]);
+  const existing = await client.query("SELECT id FROM journals WHERE reference = $1 AND kind = 'withdrawal'", [wd.id]);
+  if (existing.rows[0]) return existing.rows[0].id as string;
+  if (!account.rows[0] || account.rows[0].type !== 'real') throw new WithdrawalError('الحساب غير متاح للسحب.', 409);
+  const amountCents = Number(wd.amount_cents);
+  const { state } = await loadContractWallet(client, wd.account_id, wd.user_id, account.rows[0].balance_cents, true);
+  const policy = policyLedger(state, await readPolicyRuntime(client));
+  if (state.wallet.futuresCents < amountCents) throw new WithdrawalError('الرصيد المتاح للسحب غير كافٍ.', 409);
+  const policySpotCents = cohortAmount(amountCents, state, policy, 'spot');
+  const journalId = 'jnl-wd-' + randomUUID();
+  await client.query("INSERT INTO journals (id, kind, reference, created_at) VALUES ($1, 'withdrawal', $2, NOW())", [journalId, wd.id]);
+  await client.query(`INSERT INTO journal_entries (journal_id, user_id, account_id, bucket, amount_cents) VALUES
+    ($1, $2, $3, 'cash', $4), ($1, NULL, NULL, 'system:payout-clearing', $5)`,
+    [journalId, wd.user_id, wd.account_id, -amountCents, amountCents]);
+  state.wallet.futuresCents = (await readBalanceCents(client, wd.account_id)) - state.wallet.perpetualCents;
+  if (policy) {
+    policy.policySpotCents -= policySpotCents;
+    await savePolicyEvidence(client, 'financial_policy_withdrawals', wd.id, wd.user_id, { accountId: wd.account_id, policySpotCents });
+  }
+  await saveContractWallet(client, wd.account_id, wd.user_id, state);
+  return journalId;
+}
+
+/** Existing direct administrator approval route; access control stays upstream. */
+export async function approveWithdrawalById(admin: { id: string }, input: { withdrawalId: string }) {
+  return withTx(async client => {
+    const result = await client.query('SELECT * FROM withdrawal_requests WHERE id = $1 FOR UPDATE', [input.withdrawalId]);
+    const wd = result.rows[0];
+    if (!wd) throw new WithdrawalError('طلب السحب غير موجود.', 404);
+    if (wd.status === 'approved') return { ok: true, status: 'approved', withdrawalId: wd.id };
+    if (wd.status !== 'requested') throw new WithdrawalError('طلب السحب ليس قيد المراجعة.', 409);
+    await ensureWithdrawalDebited(client, wd);
+    await client.query("UPDATE withdrawal_requests SET status = 'approved', updated_at = NOW() WHERE id = $1", [wd.id]);
+    await client.query("UPDATE approvals SET status = 'approved', approved_by = $1, approved_at = NOW() WHERE reference = $2 AND status = 'pending'", [admin.id, wd.id]);
+    await notifyWithdrawalApproved(client, { userId: wd.user_id, wdId: wd.id, amountCents: Number(wd.amount_cents), netAmountCents: Number(wd.net_amount_cents), coin: wd.coin, address: wd.address });
+    return { ok: true, status: 'approved', withdrawalId: wd.id };
   });
 }
 
@@ -305,30 +379,7 @@ export async function markWithdrawalPaid(
       throw new WithdrawalError(`طلب السحب غير معتمد (${wd.status}).`, 409);
     }
 
-    const amountCents = Number(wd.amount_cents);
-
-    // Check if journal & journal_entries already exist (debited on request)
-    const jRes = await client.query("SELECT id FROM journals WHERE reference = $1 AND kind = 'withdrawal'", [wdId]);
-    let journalId = jRes.rows[0]?.id;
-
-    if (!journalId) {
-      // Legacy fallback: debit now
-      journalId = 'jnl-wd-' + randomUUID();
-      await client.query(
-        `INSERT INTO journals (id, kind, reference, created_at) VALUES ($1, 'withdrawal', $2, NOW())`,
-        [journalId, wdId]
-      );
-      await client.query(
-        `INSERT INTO journal_entries (journal_id, user_id, account_id, bucket, amount_cents) VALUES
-         ($1, $2, $3, 'cash', $4),
-         ($1, NULL, NULL, 'system:payout-clearing', $5)`,
-        [journalId, wd.user_id, wd.account_id, -amountCents, amountCents]
-      );
-
-      const balanceAfter = await readBalanceCents(client, wd.account_id);
-      const { state: wState } = await loadContractWallet(client, wd.account_id, wd.user_id, balanceAfter, true);
-      await saveContractWallet(client, wd.account_id, wd.user_id, wState);
-    }
+    const journalId = await ensureWithdrawalDebited(client, wd);
 
     await client.query(
       `UPDATE withdrawal_requests
@@ -359,12 +410,13 @@ export async function markWithdrawalPaid(
 
 export async function rejectWithdrawal(
   admin: { id: string },
-  input: { withdrawalId: string; reason?: string }
+  input: { withdrawalId: string; reason?: string },
+  transactionClient?: PolicyClient
 ) {
   const wdId = input.withdrawalId;
   const reason = input.reason || 'تم رفض السحب من قِبل الإدارة';
 
-  return await withTx(async (client) => {
+  const run = async (client: PolicyClient) => {
     const wdRes = await client.query('SELECT * FROM withdrawal_requests WHERE id = $1 FOR UPDATE', [wdId]);
     if (wdRes.rowCount === 0) {
       throw new WithdrawalError('طلب السحب غير موجود.', 404);
@@ -373,15 +425,22 @@ export async function rejectWithdrawal(
     if (wd.status === 'rejected') {
       return { ok: true, withdrawalId: wdId, status: 'rejected', message: 'طلب السحب مرفوض مسبقًا.' };
     }
+    if (!['requested', 'approved'].includes(wd.status)) {
+      throw new WithdrawalError('لا يمكن رفض عملية سحب مدفوعة أو نهائية. / A paid or final withdrawal cannot be rejected.', 409);
+    }
 
     const amountCents = Number(wd.amount_cents);
+    const accountBefore = await client.query('SELECT * FROM accounts WHERE id = $1 FOR UPDATE', [wd.account_id]);
+    const { state: refundWallet } = await loadContractWallet(client, wd.account_id, wd.user_id, accountBefore.rows[0].balance_cents, true);
+    const policy = policyLedger(refundWallet, await readPolicyRuntime(client));
+    const debitCheck = await client.query("SELECT id FROM journals WHERE reference = $1 AND kind = 'withdrawal'", [wdId]);
 
     // Refund the balance if it was deducted upon submission or approval
     const refCheck = await client.query(
       "SELECT id FROM journals WHERE reference = $1 AND kind = 'adjustment'",
       [wdId]
     );
-    if (refCheck.rowCount === 0) {
+    if (refCheck.rowCount === 0 && debitCheck.rows.length > 0) {
       const refundJournalId = 'jnl-ref-' + randomUUID();
       await client.query(
         `INSERT INTO journals (id, kind, reference, created_at)
@@ -397,8 +456,14 @@ export async function rejectWithdrawal(
 
       // Restore contract_wallets futuresCents (withdrawable futures)
       const balanceAfter = await readBalanceCents(client, wd.account_id);
-      const { state: wState } = await loadContractWallet(client, wd.account_id, wd.user_id, balanceAfter, true);
-      await saveContractWallet(client, wd.account_id, wd.user_id, wState);
+      refundWallet.wallet.futuresCents = balanceAfter - refundWallet.wallet.perpetualCents;
+      if (policy) {
+        const original = await client.query("SELECT data FROM docs WHERE collection = 'financial_policy_withdrawals' AND id = $1", [wdId]);
+        const restored = Number(original.rows[0]?.data?.policySpotCents ?? 0);
+        if (!Number.isSafeInteger(restored) || restored < 0 || restored > amountCents) throw new WithdrawalError('Withdrawal cohort requires reconciliation', 409);
+        policy.policySpotCents += restored;
+      }
+      await saveContractWallet(client, wd.account_id, wd.user_id, refundWallet);
     }
 
     await client.query(
@@ -429,7 +494,8 @@ export async function rejectWithdrawal(
       status: 'rejected',
       message: 'تم رفض طلب السحب وإعادة الرصيد إلى حساب العميل بنجاح.'
     };
-  });
+  };
+  return transactionClient ? run(transactionClient) : withTx(run);
 }
 
 export async function getUserWithdrawals(user: { id: string }) {

@@ -8,6 +8,7 @@ import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 import { authMiddleware } from './auth-middleware.ts';
+import { registerIntegrationRoutes } from './integration-http.ts';
 import { paymentsHandle } from './payments-http.ts';
 import { securityHandle } from './account-security-http.ts';
 import { programSummary, programAction, adminPrograms, accountActivity, getReferralsSummary } from './programs.ts';
@@ -699,6 +700,10 @@ app.get(['/orin.mobileconfig', '/app.mobileconfig', '/downloads/orin.mobileconfi
   }
   res.status(404).type('text/plain').send('iOS configuration profile not found.');
 });
+
+// Integration routes use their own verified, read-only identity boundary.
+// Mount after JSON/prefix middleware but before legacy auth that may provision accounts.
+registerIntegrationRoutes(app);
 
 // 4. Authenticated routes under /api
 const api = express.Router();

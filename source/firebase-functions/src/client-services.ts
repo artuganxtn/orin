@@ -1,7 +1,23 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { withTx } from './db.ts';
 import { notifyTransferCompleted } from './notifications.ts';
 import { loadContractWallet, saveContractWallet, challengeInfo, readBalanceCents } from './wallet-ledger.ts';
+import { readPolicyRuntime, policyDescription, policyLedger, cohortAmount, savePolicyEvidence } from './financial-policy.ts';
+import { transferAmounts, newPolicyTransferFee } from '../../lib/financial-policy';
+import type { TransferQuote, WalletPocket } from '../../lib/demo-wallet';
+
+function makeTransferQuote(accountId: string, from: WalletPocket, amountCents: number, walletVersion: number, feeRate: number, policyVersion: string): TransferQuote {
+  return { accountId, from, to: from === 'futures' ? 'perpetual' : 'futures',
+    walletVersion, policyVersion, ...transferAmounts(amountCents, feeRate) };
+}
+
+function verifyTransferConfirmation(confirmed: TransferQuote | undefined, actual: TransferQuote) {
+  // Older clients remain compatible. The new review/confirm UI always supplies
+  // this snapshot; a changed rate or wallet requires a fresh review, not a debit.
+  if (confirmed && (Object.keys(actual) as (keyof TransferQuote)[]).some(key => confirmed[key] !== actual[key])) {
+    throw new ClientError('تغيّرت تفاصيل التحويل. راجع المبلغ والرسوم مجددًا قبل التأكيد. / Transfer details changed. Review the amount and fees again.', 409);
+  }
+}
 
 export class ClientError extends Error {
   constructor(message: string, public status = 400) {
@@ -143,7 +159,7 @@ export async function selectTradingAccount(user: { id: string }, input: { id?: s
 export async function getDemoWallet(user: { id: string }, accountId: string) {
   return await withTx(async (client) => {
     const accRes = await client.query(
-      `SELECT id, user_id, type, balance_cents FROM accounts WHERE id = $1 AND user_id = $2`,
+      `SELECT id, user_id, type, balance_cents FROM accounts WHERE id = $1 AND user_id = $2 FOR UPDATE`,
       [accountId, user.id]
     );
     if (accRes.rowCount === 0) {
@@ -156,7 +172,9 @@ export async function getDemoWallet(user: { id: string }, accountId: string) {
     if (isReal) {
       const { state } = await loadContractWallet(client, accountId, user.id, acc.balance_cents, false);
       const challenge = await challengeInfo(client, user.id);
-      return { ...state, challenge };
+      const runtime = await readPolicyRuntime(client);
+      policyLedger(state, runtime);
+      return { ...state, challenge, financialPolicy: policyDescription(runtime) };
     }
 
     // Demo Account wallet
@@ -182,15 +200,18 @@ export async function getDemoWallet(user: { id: string }, accountId: string) {
 
 export async function operateDemoWallet(
   user: { id: string },
-  input: { accountId: string; requestId: string; kind: 'reset' | 'transfer'; amountCents?: number; from?: string }
+  input: { accountId: string; requestId: string; kind: 'reset' | 'transfer' | 'quote'; amountCents?: number; from?: string; confirmedQuote?: TransferQuote }
 ) {
   const accountId = input.accountId;
   const requestId = input.requestId;
   const kind = input.kind;
   const amountCents = Number(input.amountCents || 0);
 
-  if (!accountId || !requestId || !['reset', 'transfer'].includes(kind)) {
+  if (!accountId || typeof requestId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(requestId) || !['reset', 'transfer', 'quote'].includes(kind)) {
     throw new ClientError('بيانات العملية غير صالحة. / Invalid transfer operation request.', 400);
+  }
+  if (kind !== 'reset' && (!Number.isSafeInteger(amountCents) || amountCents <= 0 || !['futures', 'perpetual'].includes(input.from || ''))) {
+    throw new ClientError('المبلغ أو اتجاه التحويل غير صالح. / Invalid transfer amount or direction.', 400);
   }
 
   return await withTx(async (client) => {
@@ -211,11 +232,20 @@ export async function operateDemoWallet(
 
     if (isReal) {
       const { state } = await loadContractWallet(client, accountId, user.id, acc.balance_cents, true);
+      const runtime = await readPolicyRuntime(client);
+      const policy = policyLedger(state, runtime);
+      const financialPolicy = policyDescription(runtime);
+      const commandId = createHash('sha256').update(accountId + ':' + requestId).digest('hex');
+      const command = await client.query("SELECT data FROM docs WHERE collection = 'wallet_transfer_commands' AND id = $1", [commandId]);
+      const durableOp = command.rows[0]?.data?.operation;
 
-      const existingOp = state.operations.find((o: any) => o.id === requestId);
-      if (existingOp) {
+      const existingOp = durableOp ?? state.operations.find((o: any) => o.id === requestId);
+      if (existingOp && kind === 'transfer') {
+        if (existingOp.amountCents !== amountCents || existingOp.from !== input.from) {
+          throw new ClientError('تغيّرت تفاصيل العملية السابقة. / Transfer request conflict.', 409);
+        }
         const challenge = await challengeInfo(client, user.id);
-        return { ...state, challenge };
+        return { ...state, challenge, financialPolicy };
       }
 
       if (amountCents <= 0) {
@@ -224,6 +254,34 @@ export async function operateDemoWallet(
 
       const curFutures = state.wallet.futuresCents;
       const curPerp = state.wallet.perpetualCents;
+      const challenge = await challengeInfo(client, user.id);
+      if ((input.from === 'futures' ? curFutures : curPerp) < amountCents) {
+        throw new ClientError('الرصيد المتاح غير كافٍ للتحويل. / Insufficient available balance.', 400);
+      }
+      const policyAmountCents = cohortAmount(amountCents, state, policy, input.from === 'futures' ? 'spot' : 'trading');
+      const legacyAmountCents = amountCents - policyAmountCents;
+      const exempt = policy?.permanentlyExemptAt != null;
+      const policyFeeRemainderBefore = policy?.earlyFeeRemainderUnits ?? 0;
+      const newFee = input.from === 'perpetual' && !exempt
+        ? newPolicyTransferFee(policyAmountCents, policyFeeRemainderBefore)
+        : { feeCents: 0, remainderUnits: policyFeeRemainderBefore };
+      const policyFeeCents = newFee.feeCents;
+      const legacyFeeCents = input.from === 'perpetual' && !exempt ? Math.round(legacyAmountCents * challenge.transferFeeRate) : 0;
+      const quotedFee = policyFeeCents + legacyFeeCents;
+      const transferQuote: TransferQuote = {
+        ...makeTransferQuote(accountId, input.from as WalletPocket, amountCents, state.wallet.version, 0, financialPolicy.version),
+        feeCents: quotedFee, netAmountCents: amountCents - quotedFee, feeRate: quotedFee / amountCents,
+        policyAmountCents, legacyAmountCents, policyFeeCents, legacyFeeCents, permanentlyExempt: exempt,
+        policyFeeRemainderBefore, policyFeeRemainderAfter: newFee.remainderUnits,
+      };
+      // Quote is read-only: no wallet save, journal, notification or fee debit.
+      if (kind === 'quote') return { ...state, challenge, financialPolicy, transferQuote };
+      // Preserve old-only client operations on grandfathered money; never apply
+      // new-cohort terms to a legacy client without a reviewed quote.
+      if (policy && policyAmountCents > 0 && !input.confirmedQuote) {
+        throw new ClientError('راجع عرض التحويل والرسوم ثم أكد العملية. / Review the transfer quote and fees before confirming.', 409);
+      }
+      verifyTransferConfirmation(input.confirmedQuote, transferQuote);
       let feeCents = 0;
       let feeRate = 0;
       let netAmountCents = amountCents;
@@ -238,22 +296,19 @@ export async function operateDemoWallet(
         netAmountCents = amountCents;
         state.wallet.perpetualCents = curPerp + amountCents;
         state.wallet.futuresCents = curFutures - amountCents;
+        if (policy) {
+          policy.policySpotCents -= policyAmountCents;
+          policy.policyTradingCents += policyAmountCents;
+        }
       } else {
         if (curPerp < amountCents) {
           throw new ClientError('الرصيد المتاح في العقود الدائمة غير كافٍ للتحويل. / Insufficient available balance in perpetual.', 400);
         }
 
-        // Early transfer from Perpetual Trading to Withdrawable Futures (20% fee if before 29 days)
-        const challenge = await challengeInfo(client, user.id);
-        if (challenge.isBefore29Days) {
-          feeRate = 0.20;
-          feeCents = Math.round(amountCents * 0.20);
-          netAmountCents = amountCents - feeCents;
-        } else {
-          feeRate = 0;
-          feeCents = 0;
-          netAmountCents = amountCents;
-        }
+        // The server quote combines new-policy and grandfathered cohort fees.
+        feeRate = transferQuote.feeRate;
+        feeCents = transferQuote.feeCents;
+        netAmountCents = transferQuote.netAmountCents;
 
         // Deduct early exit fee from accounts cash ledger so total wallet cents match account balance cents
         if (feeCents > 0) {
@@ -274,6 +329,12 @@ export async function operateDemoWallet(
         const balanceAfter = await readBalanceCents(client, accountId);
         state.wallet.perpetualCents = curPerp - amountCents;
         state.wallet.futuresCents = Math.max(0, balanceAfter - state.wallet.perpetualCents);
+        if (policy) {
+          policy.policyTradingCents -= policyAmountCents;
+          policy.policySpotCents += policyAmountCents - policyFeeCents;
+          policy.earlyFeeRemainderUnits = newFee.remainderUnits;
+          // Early exits never reduce aggregate eligible principal or erase losses.
+        }
       }
 
       const newOp = {
@@ -283,6 +344,10 @@ export async function operateDemoWallet(
         feeCents,
         feeRate,
         netAmountCents,
+        policyAmountCents,
+        legacyAmountCents,
+        policyFeeCents,
+        legacyFeeCents,
         from: input.from,
         to: input.from === 'futures' ? 'perpetual' : 'futures',
         afterFuturesCents: state.wallet.futuresCents,
@@ -291,6 +356,10 @@ export async function operateDemoWallet(
       };
       state.operations.unshift(newOp);
       await saveContractWallet(client, accountId, user.id, state);
+      // Durable replay protection is not truncated with the 50-item UI history.
+      await savePolicyEvidence(client, 'wallet_transfer_commands', commandId, user.id, {
+        accountId, requestId, operation: newOp, confirmedQuote: input.confirmedQuote ?? null,
+      });
 
       await notifyTransferCompleted(client, {
         userId: user.id,
@@ -302,7 +371,7 @@ export async function operateDemoWallet(
       });
 
       const updatedChallenge = await challengeInfo(client, user.id);
-      return { ...state, challenge: updatedChallenge };
+      return { ...state, challenge: updatedChallenge, financialPolicy };
     }
 
     // Demo account logic
@@ -325,7 +394,21 @@ export async function operateDemoWallet(
     };
 
     const existingOp = state.operations.find((o: any) => o.id === requestId);
-    if (existingOp) return state;
+    if (existingOp && kind !== 'quote') {
+      if (kind === 'transfer' && (existingOp.amountCents !== amountCents || existingOp.from !== input.from)) {
+        throw new ClientError('تغيّرت تفاصيل العملية السابقة. / Transfer request conflict.', 409);
+      }
+      return state;
+    }
+
+    if (kind !== 'reset') {
+      const transferQuote = makeTransferQuote(accountId, input.from as WalletPocket, amountCents, state.wallet.version, 0, 'demo-v1');
+      if (state.wallet[input.from === 'futures' ? 'futuresCents' : 'perpetualCents'] < amountCents) {
+        throw new ClientError('الرصيد غير كافٍ. / Insufficient balance.', 400);
+      }
+      if (kind === 'quote') return { ...state, transferQuote };
+      verifyTransferConfirmation(input.confirmedQuote, transferQuote);
+    }
 
     if (kind === 'reset') {
       state.wallet.futuresCents = 1000000;

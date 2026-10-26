@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="360" viewBox="0 0 360 360" fill="none">
+ <defs>
+  <linearGradient id="edge" x1="124" y1="28" x2="254" y2="332" gradientUnits="userSpaceOnUse"><stop stop-color="#36c2ff"/><stop offset=".45" stop-color="#087bff"/><stop offset="1" stop-color="#2364e6"/></linearGradient>
+  <linearGradient id="glass" x1="104" y1="29" x2="239" y2="321" gradientUnits="userSpaceOnUse"><stop stop-color="#fff"/><stop offset="1" stop-color="#d9eaff"/></linearGradient>
+  <linearGradient id="screen" x1="112" y1="88" x2="232" y2="281" gradientUnits="userSpaceOnUse"><stop stop-color="#f9fcff"/><stop offset="1" stop-color="#d7eaff"/></linearGradient>
+  <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#70d7ff"/><stop offset=".45" stop-color="#16a4ff"/><stop offset="1" stop-color="#0664f2"/></linearGradient>
+  <linearGradient id="tile" x1="30" y1="93" x2="112" y2="185" gradientUnits="userSpaceOnUse"><stop stop-color="#fff"/><stop offset="1" stop-color="#e3f0ff"/></linearGradient>
+  <radialGradient id="halo"><stop stop-color="#b2dcff" stop-opacity=".65"/><stop offset="1" stop-color="#e8f4ff" stop-opacity="0"/></radialGradient>
+ </defs>
+ <ellipse cx="182" cy="204" rx="174" ry="150" fill="url(#halo)"/>
+ <ellipse cx="180" cy="316" rx="109" ry="22" fill="#88baff" opacity=".14"/>
+ <ellipse cx="186" cy="269" rx="151" ry="51" transform="rotate(-25 186 269)" stroke="#fff" stroke-opacity=".85"/>
+ <g transform="rotate(-5 180 180)">
+  <rect x="111" y="34" width="151" height="290" rx="29" fill="url(#edge)"/>
+  <rect x="103" y="32" width="151" height="290" rx="29" fill="url(#glass)" stroke="#229cff" stroke-width="1.6"/>
+  <rect x="108" y="36" width="141" height="282" rx="25" stroke="#fff" stroke-width="2"/>
+  <path d="M143 33h73l-5 7a6 6 0 0 1-5 2h-53a7 7 0 0 1-6-3l-4-6Z" fill="#128cff"/>
+  <rect x="154" y="52" width="48" height="6" rx="3" fill="#dceaff"/>
+  <circle cx="122" cy="55" r="3" fill="#74bdff"/>
+  <rect x="113" y="81" width="131" height="204" rx="8" fill="url(#screen)"/>
+  <path d="M119 119h119M119 158h119M119 197h119M119 236h119M145 91v185M178 91v185M211 91v185" stroke="#bcdcff" stroke-opacity=".45"/>
+  <g stroke="#128aff" stroke-width="1.4">
+   <path d="M132 204v52M153 178v57M174 152v71M195 163v53M216 123v66M234 137v48"/>
+  </g>
+  <g fill="url(#blue)">
+   <rect x="126" y="214" width="12" height="29" rx="3"/>
+   <rect x="147" y="192" width="12" height="31" rx="3"/>
+   <rect x="168" y="167" width="12" height="40" rx="3"/>
+   <rect x="189" y="175" width="12" height="30" rx="3"/>
+   <rect x="210" y="137" width="12" height="39" rx="3"/>
+   <rect x="228" y="147" width="12" height="25" rx="3"/>
+  </g>
+  <rect x="157" y="301" width="44" height="5" rx="2.5" fill="#bfd9f9"/>
+ </g>
+ <rect x="29" y="100" width="81" height="86" rx="18" fill="#badbff" opacity=".36"/>
+ <rect x="23" y="95" width="81" height="86" rx="18" fill="url(#tile)" stroke="#fff" stroke-width="2"/>
+ <g fill="url(#blue)"><rect x="40" y="131" width="10" height="31" rx="4"/><rect x="57" y="121" width="10" height="41" rx="4"/><rect x="74" y="109" width="10" height="53" rx="4"/></g>
+ <path d="M244 182c34-2 38-53 80-53" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+ <rect x="266" y="217" width="73" height="79" rx="17" fill="#a9d2ff" opacity=".42"/>
+ <rect x="260" y="211" width="73" height="79" rx="17" fill="url(#glass)" stroke="#fff" stroke-width="2"/>
+ <path d="m281 266 30-31m-24 0h24v24" stroke="url(#blue)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

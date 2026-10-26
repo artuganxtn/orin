@@ -62,6 +62,56 @@ var init_db = __esm({
   }
 });
 
+// src/wallet-ledger.ts
+async function loadContractWallet(client, accountId, ownerId, balanceCents, lock = true) {
+  const res = await client.query(
+    `SELECT data FROM docs WHERE collection = 'contract_wallets' AND id = $1${lock ? " FOR UPDATE" : ""}`,
+    [accountId]
+  );
+  const raw = res.rows[0]?.data;
+  const existed = !!raw?.wallet;
+  const state = existed ? { ...raw, operations: Array.isArray(raw.operations) ? raw.operations : [] } : {
+    wallet: {
+      ownerId,
+      accountId,
+      currency: "USD",
+      futuresCents: 0,
+      perpetualCents: 0,
+      version: 1,
+      updatedAt: Date.now()
+    },
+    operations: []
+  };
+  normalizeWallet(state, balanceCents);
+  return { state, existed };
+}
+function normalizeWallet(state, balanceCents) {
+  const total = Math.max(0, Number(balanceCents) || 0);
+  const perp = Math.min(total, Math.max(0, Math.trunc(Number(state.wallet.perpetualCents) || 0)));
+  state.wallet.perpetualCents = perp;
+  state.wallet.futuresCents = total - perp;
+  return state;
+}
+async function saveContractWallet(client, accountId, ownerId, state) {
+  state.wallet.version = (Number(state.wallet.version) || 1) + 1;
+  state.wallet.updatedAt = Date.now();
+  if (state.operations.length > 50) state.operations.length = 50;
+  await client.query(
+    `INSERT INTO docs (collection, id, owner_id, data, updated_at)
+     VALUES ('contract_wallets', $1, $2, $3, NOW())
+     ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+    [accountId, ownerId, JSON.stringify(state)]
+  );
+}
+async function readBalanceCents(client, accountId) {
+  const r = await client.query("SELECT balance_cents FROM accounts WHERE id = $1", [accountId]);
+  return Number(r.rows[0]?.balance_cents || 0);
+}
+var init_wallet_ledger = __esm({
+  "src/wallet-ledger.ts"() {
+  }
+});
+
 // src/otp.ts
 var otp_exports = {};
 __export(otp_exports, {
@@ -208,7 +258,7 @@ var init_otp = __esm({
 
 // src/withdrawals.ts
 init_db();
-import { randomUUID as randomUUID2 } from "node:crypto";
+import { randomUUID as randomUUID2, createHash as createHash2 } from "node:crypto";
 
 // src/notifications.ts
 init_db();
@@ -346,50 +396,100 @@ async function notifyWithdrawalRejected(client, p) {
   });
 }
 
-// src/wallet-ledger.ts
-async function loadContractWallet(client, accountId, ownerId, balanceCents, lock = true) {
-  const res = await client.query(
-    `SELECT data FROM docs WHERE collection = 'contract_wallets' AND id = $1${lock ? " FOR UPDATE" : ""}`,
-    [accountId]
-  );
-  const raw = res.rows[0]?.data;
-  const existed = !!raw?.wallet;
-  const state = existed ? { ...raw, operations: Array.isArray(raw.operations) ? raw.operations : [] } : {
-    wallet: {
-      ownerId,
-      accountId,
-      currency: "USD",
-      futuresCents: 0,
-      perpetualCents: 0,
-      version: 1,
-      updatedAt: Date.now()
-    },
-    operations: []
+// src/withdrawals.ts
+init_wallet_ledger();
+
+// ../lib/financial-policy.ts
+var DEPOSIT_MIN_CENTS = 1e4;
+var DEPOSIT_MAX_CENTS = 15e5;
+var LEGACY_FINANCIAL_POLICY = {
+  version: "legacy-29-day-v1",
+  depositMinCents: DEPOSIT_MIN_CENTS,
+  depositMaxCents: DEPOSIT_MAX_CENTS,
+  depositCreditPocket: "futures",
+  tradingPocket: "perpetual",
+  withdrawablePocket: "futures",
+  spotToTradingFeeRate: 0,
+  tradingToSpot: { basis: "elapsed_days", days: 29, beforeFeeRate: 0.2, afterFeeRate: 0 },
+  externalWithdrawalFeeRate: 0.05,
+  activatedAt: null,
+  automaticSpotFundingForTrades: true
+};
+var SIGNAL_FINANCIAL_POLICY = {
+  ...LEGACY_FINANCIAL_POLICY,
+  version: "signal-doubling-v1",
+  depositCreditPocket: "perpetual",
+  automaticSpotFundingForTrades: false,
+  tradingToSpot: { basis: "actual_capital_doubling", beforeFeeRate: 0.2, afterFeeRate: 0 },
+  doublingScope: "account_aggregate_new_confirmed_deposits",
+  qualifyingProfit: "account_net_realized_nonbonus_official_signal_profit_after_first_eligible_deposit",
+  exemption: "permanent_account_including_future_deposits",
+  existingFundsTreatment: "grandfathered_original_fee_rule_until_account_exemption",
+  legacyTradingToSpot: LEGACY_FINANCIAL_POLICY.tradingToSpot
+};
+function proportionalCents(amountCents, cohortCents, totalCents) {
+  if (![amountCents, cohortCents, totalCents].every(Number.isSafeInteger) || cohortCents < 0 || totalCents < 0 || cohortCents > totalCents) throw new Error("Invalid cohort allocation");
+  if (!totalCents) {
+    if (amountCents !== 0) throw new Error("Cannot allocate from an empty wallet");
+    return 0;
+  }
+  return Number(BigInt(amountCents) * BigInt(cohortCents) / BigInt(totalCents));
+}
+
+// src/financial-policy.ts
+async function readPolicyRuntime(client) {
+  const r = await client.query("SELECT data FROM docs WHERE collection = 'financial_policy_configuration' AND id = 'current'");
+  const config = r.rows[0]?.data;
+  if (!config) return { activatedAt: null };
+  if (config.status === "staged" && config.activatedAt === null) return { activatedAt: null, staged: true };
+  if (config.version !== "signal-doubling-v1" || config.doublingScope !== "account_aggregate" || config.existingFundsTreatment !== "grandfathered" || config.status !== "active" || config.clientReleaseConfirmed !== true || !Number.isSafeInteger(config.activatedAt) || config.activatedAt <= 0) {
+    throw new Error("Financial policy configuration requires operator review");
+  }
+  return { activatedAt: config.activatedAt };
+}
+function policyLedger(state, runtime) {
+  const old = state.signalPolicy;
+  if (runtime.activatedAt === null) {
+    if (old) throw new Error("Cannot deactivate a funded financial policy without reconciliation");
+    return null;
+  }
+  if (old && (old.version !== "signal-doubling-v1" || old.activatedAt !== runtime.activatedAt)) throw new Error("Financial policy cutover mismatch");
+  const data = old ? { ...old, earlyFeeRemainderUnits: old.earlyFeeRemainderUnits ?? 0 } : {
+    version: "signal-doubling-v1",
+    activatedAt: runtime.activatedAt,
+    eligiblePrincipalCents: 0,
+    netSignalProfitCents: 0,
+    firstEligibleDepositAt: null,
+    permanentlyExemptAt: null,
+    policyTradingCents: 0,
+    policySpotCents: 0,
+    policyReservedCents: 0,
+    earlyFeeRemainderUnits: 0
   };
-  normalizeWallet(state, balanceCents);
-  return { state, existed };
+  for (const key of ["eligiblePrincipalCents", "policyTradingCents", "policySpotCents", "policyReservedCents"]) {
+    if (!Number.isSafeInteger(data[key]) || data[key] < 0) throw new Error("Financial policy amounts require reconciliation");
+  }
+  if (!Number.isInteger(data.earlyFeeRemainderUnits) || data.earlyFeeRemainderUnits < 0 || data.earlyFeeRemainderUnits > 4) throw new Error("Invalid early-transfer fee remainder");
+  if (!Number.isSafeInteger(data.netSignalProfitCents) || data.policyTradingCents > state.wallet.perpetualCents || data.policySpotCents > state.wallet.futuresCents) {
+    throw new Error("Wallet cohort mismatch requires reconciliation");
+  }
+  for (const timestamp of [data.firstEligibleDepositAt, data.permanentlyExemptAt]) {
+    if (timestamp !== null && (!Number.isSafeInteger(timestamp) || timestamp < runtime.activatedAt)) throw new Error("Invalid financial policy event time");
+  }
+  if (data.eligiblePrincipalCents > 0 && data.firstEligibleDepositAt === null || data.permanentlyExemptAt !== null && (data.firstEligibleDepositAt === null || data.permanentlyExemptAt < data.firstEligibleDepositAt)) {
+    throw new Error("Financial policy eligibility history requires reconciliation");
+  }
+  state.signalPolicy = data;
+  return data;
 }
-function normalizeWallet(state, balanceCents) {
-  const total = Math.max(0, Number(balanceCents) || 0);
-  const perp = Math.min(total, Math.max(0, Math.trunc(Number(state.wallet.perpetualCents) || 0)));
-  state.wallet.perpetualCents = perp;
-  state.wallet.futuresCents = total - perp;
-  return state;
+function cohortAmount(amountCents, state, policy, pocket) {
+  const total = pocket === "trading" ? state.wallet.perpetualCents : state.wallet.futuresCents;
+  const cohort = policy ? pocket === "trading" ? policy.policyTradingCents : policy.policySpotCents : 0;
+  return proportionalCents(amountCents, cohort, total);
 }
-async function saveContractWallet(client, accountId, ownerId, state) {
-  state.wallet.version = (Number(state.wallet.version) || 1) + 1;
-  state.wallet.updatedAt = Date.now();
-  if (state.operations.length > 50) state.operations.length = 50;
-  await client.query(
-    `INSERT INTO docs (collection, id, owner_id, data, updated_at)
-     VALUES ('contract_wallets', $1, $2, $3, NOW())
-     ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
-    [accountId, ownerId, JSON.stringify(state)]
-  );
-}
-async function readBalanceCents(client, accountId) {
-  const r = await client.query("SELECT balance_cents FROM accounts WHERE id = $1", [accountId]);
-  return Number(r.rows[0]?.balance_cents || 0);
+async function savePolicyEvidence(client, collection, id, ownerId, data) {
+  await client.query(`INSERT INTO docs (collection, id, owner_id, data, updated_at)
+    VALUES ($1, $2, $3, $4::jsonb, NOW())`, [collection, id, ownerId, JSON.stringify(data)]);
 }
 
 // src/withdrawals.ts
@@ -402,6 +502,9 @@ var WithdrawalError = class extends Error {
 };
 async function requestWithdrawal(user, input) {
   const amountCents = Number(input.amountCents);
+  if (input.requestId !== void 0 && (typeof input.requestId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(input.requestId))) {
+    throw new WithdrawalError("Invalid withdrawal request ID", 400);
+  }
   if (!Number.isSafeInteger(amountCents) || amountCents <= 0) {
     throw new WithdrawalError("\u0627\u0644\u0645\u0628\u0644\u063A \u063A\u064A\u0631 \u0635\u0627\u0644\u062D.", 400);
   }
@@ -417,17 +520,6 @@ async function requestWithdrawal(user, input) {
     if (pRes.rowCount === 0 || pRes.rows[0].disabled) {
       throw new WithdrawalError("\u0627\u0644\u0648\u0635\u0648\u0644 \u0625\u0644\u0649 \u0627\u0644\u062D\u0633\u0627\u0628 \u063A\u064A\u0631 \u0645\u062A\u0627\u062D.", 403);
     }
-    const proofId = input.proofId || input.otpProofId;
-    if (proofId) {
-      const { computeWithdrawalBoundHash: computeWithdrawalBoundHash2, consumeOtpProof: consumeOtpProof2 } = await Promise.resolve().then(() => (init_otp(), otp_exports));
-      const boundHash = computeWithdrawalBoundHash2(user.id, amountCents, coin, address);
-      const proofConsumed = await consumeOtpProof2(proofId, user.id, "withdrawal", boundHash, client);
-      if (!proofConsumed) {
-        throw new WithdrawalError("\u0631\u0645\u0632 \u062A\u0623\u0643\u064A\u062F \u0627\u0644\u0633\u062D\u0628 \u063A\u064A\u0631 \u0635\u0627\u0644\u062D \u0623\u0648 \u0645\u0633\u062A\u062E\u062F\u0645 \u0645\u0633\u0628\u0642\u064B\u0627 / Invalid or consumed OTP proof", 403, "otp_required");
-      }
-    } else if (process.env.ORIN_STRICT_WITHDRAWAL_OTP === "true") {
-      throw new WithdrawalError("\u0631\u0645\u0632 \u0627\u0644\u062A\u0623\u0643\u064A\u062F \u0644\u0644\u0628\u0631\u064A\u062F \u0627\u0644\u0625\u0644\u0643\u062A\u0631\u0648\u0646\u064A \u0645\u0637\u0644\u0648\u0628 \u0644\u0644\u0633\u062D\u0628 / OTP proof required", 403, "otp_required");
-    }
     let accountId = input.accountId;
     if (!accountId) {
       const accRes2 = await client.query(
@@ -440,13 +532,36 @@ async function requestWithdrawal(user, input) {
       accountId = accRes2.rows[0].id;
     }
     const accRes = await client.query(
-      "SELECT id, balance_cents, reserved_cents FROM accounts WHERE id = $1 AND user_id = $2 FOR UPDATE",
+      "SELECT id, type, currency, balance_cents, reserved_cents FROM accounts WHERE id = $1 AND user_id = $2 FOR UPDATE",
       [accountId, user.id]
     );
     if (accRes.rowCount === 0) {
       throw new WithdrawalError("\u0627\u0644\u062D\u0633\u0627\u0628 \u063A\u064A\u0631 \u0645\u0648\u062C\u0648\u062F.", 404);
     }
     const account = accRes.rows[0];
+    if (account.type !== "real" || account.currency !== "USD" || currency !== "USD") {
+      throw new WithdrawalError("\u0627\u0644\u0633\u062D\u0628 \u0645\u062A\u0627\u062D \u0645\u0646 \u0627\u0644\u062D\u0633\u0627\u0628 \u0627\u0644\u062D\u0642\u064A\u0642\u064A \u0628\u0627\u0644\u062F\u0648\u0644\u0627\u0631 \u0641\u0642\u0637. / Withdrawals require a real USD account.", 403);
+    }
+    const commandId = input.requestId ? createHash2("sha256").update(accountId + ":" + input.requestId).digest("hex") : null;
+    const fingerprint = JSON.stringify({ accountId, amountCents, coin, currency, address });
+    if (commandId) {
+      const previous = await client.query("SELECT data FROM docs WHERE collection = 'withdrawal_commands' AND id = $1", [commandId]);
+      if (previous.rows[0]) {
+        if (previous.rows[0].data.fingerprint !== fingerprint) throw new WithdrawalError("Withdrawal request details changed", 409);
+        return previous.rows[0].data.response;
+      }
+    }
+    const proofId = input.proofId || input.otpProofId;
+    if (proofId) {
+      const { computeWithdrawalBoundHash: computeWithdrawalBoundHash2, consumeOtpProof: consumeOtpProof2 } = await Promise.resolve().then(() => (init_otp(), otp_exports));
+      const boundHash = computeWithdrawalBoundHash2(user.id, amountCents, coin, address);
+      const proofConsumed = await consumeOtpProof2(proofId, user.id, "withdrawal", boundHash, client);
+      if (!proofConsumed) {
+        throw new WithdrawalError("\u0631\u0645\u0632 \u062A\u0623\u0643\u064A\u062F \u0627\u0644\u0633\u062D\u0628 \u063A\u064A\u0631 \u0635\u0627\u0644\u062D \u0623\u0648 \u0645\u0633\u062A\u062E\u062F\u0645 \u0645\u0633\u0628\u0642\u064B\u0627 / Invalid or consumed OTP proof", 403, "otp_required");
+      }
+    } else if (process.env.ORIN_STRICT_WITHDRAWAL_OTP === "true") {
+      throw new WithdrawalError("\u0631\u0645\u0632 \u0627\u0644\u062A\u0623\u0643\u064A\u062F \u0644\u0644\u0628\u0631\u064A\u062F \u0627\u0644\u0625\u0644\u0643\u062A\u0631\u0648\u0646\u064A \u0645\u0637\u0644\u0648\u0628 \u0644\u0644\u0633\u062D\u0628 / OTP proof required", 403, "otp_required");
+    }
     const pendingRes = await client.query(
       `SELECT COALESCE(SUM(amount_cents), 0) AS total_pending
        FROM withdrawal_requests
@@ -455,6 +570,7 @@ async function requestWithdrawal(user, input) {
     );
     const pendingCents = BigInt(pendingRes.rows[0]?.total_pending || 0);
     const { state: wState } = await loadContractWallet(client, accountId, user.id, account.balance_cents, true);
+    const policy = policyLedger(wState, await readPolicyRuntime(client));
     const curFutures = wState.wallet.futuresCents;
     if (curFutures < amountCents) {
       throw new WithdrawalError(
@@ -462,12 +578,13 @@ async function requestWithdrawal(user, input) {
         409
       );
     }
-    const feeCents = Math.round(amountCents * 0.05);
+    const feeCents = Math.round(amountCents * LEGACY_FINANCIAL_POLICY.externalWithdrawalFeeRate);
     const netAmountCents = amountCents - feeCents;
+    const policySpotCents = cohortAmount(amountCents, wState, policy, "spot");
     const wdId = "wd-" + randomUUID2();
-    await client.query(
+    const inserted = await client.query(
       `INSERT INTO withdrawal_requests (id, user_id, account_id, amount_cents, fee_cents, net_amount_cents, currency, coin, address, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'requested')`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'requested') RETURNING created_at`,
       [wdId, user.id, accountId, amountCents, feeCents, netAmountCents, currency, coin, address]
     );
     const journalId = "jnl-" + wdId;
@@ -483,6 +600,10 @@ async function requestWithdrawal(user, input) {
     );
     const balanceAfter = await readBalanceCents(client, accountId);
     wState.wallet.futuresCents = Math.max(0, balanceAfter - wState.wallet.perpetualCents);
+    if (policy) {
+      policy.policySpotCents -= policySpotCents;
+      await savePolicyEvidence(client, "financial_policy_withdrawals", wdId, user.id, { accountId, policySpotCents });
+    }
     if (Array.isArray(wState.operations)) {
       wState.operations.unshift({
         id: "wd-op-" + wdId,
@@ -514,7 +635,7 @@ async function requestWithdrawal(user, input) {
       address,
       userEmail
     });
-    return {
+    const response = {
       ok: true,
       id: wdId,
       amountCents,
@@ -524,9 +645,13 @@ async function requestWithdrawal(user, input) {
       coin,
       currency,
       address,
+      accountId,
+      createdAt: new Date(inserted.rows[0].created_at).getTime(),
       status: "requested",
       message: "\u062A\u0645 \u0627\u0633\u062A\u0644\u0627\u0645 \u0637\u0644\u0628 \u0627\u0644\u0633\u062D\u0628 \u0648\u062E\u0635\u0645 \u0627\u0644\u0631\u0635\u064A\u062F \u0628\u0646\u062C\u0627\u062D. \u0633\u064A\u062A\u0645 \u0645\u0631\u0627\u062C\u0639\u062A\u0647 \u0648\u062A\u062D\u0648\u064A\u0644\u0647 \u0645\u0646 \u0642\u0650\u0628\u0644 \u0627\u0644\u0625\u062F\u0627\u0631\u0629."
     };
+    if (commandId) await savePolicyEvidence(client, "withdrawal_commands", commandId, user.id, { fingerprint, response });
+    return response;
   });
 }
 async function proposeWithdrawalApproval(admin1, input) {
@@ -559,10 +684,10 @@ async function proposeWithdrawalApproval(admin1, input) {
     };
   });
 }
-async function approveWithdrawal(admin2, input) {
+async function approveWithdrawal(admin2, input, transactionClient) {
   const apprId = input.approvalId;
-  return await withTx(async (client) => {
-    const apprRes = await client.query("SELECT * FROM approvals WHERE id = $1", [apprId]);
+  const run = async (client) => {
+    const apprRes = await client.query("SELECT * FROM approvals WHERE id = $1 FOR UPDATE", [apprId]);
     if (apprRes.rowCount === 0) {
       throw new WithdrawalError("\u0637\u0644\u0628 \u0627\u0644\u0645\u0648\u0627\u0641\u0642\u0629 \u063A\u064A\u0631 \u0645\u0648\u062C\u0648\u062F.", 404);
     }
@@ -573,6 +698,10 @@ async function approveWithdrawal(admin2, input) {
     if (appr.requested_by === admin2.id) {
       throw new WithdrawalError("\u0645\u0648\u0627\u0641\u0642\u0629 \u0627\u0644\u0645\u0634\u0631\u0641 \u0627\u0644\u062B\u0627\u0646\u064A \u0645\u0637\u0644\u0648\u0628\u0629 (\u0644\u0627 \u064A\u0645\u0643\u0646 \u0627\u0639\u062A\u0645\u0627\u062F \u0637\u0644\u0628\u0643 \u0628\u0646\u0641\u0633\u0643).", 403);
     }
+    const wdRes = await client.query("SELECT * FROM withdrawal_requests WHERE id = $1 FOR UPDATE", [appr.reference]);
+    const wd = wdRes.rows[0];
+    if (!wd || wd.status !== "requested") throw new WithdrawalError("\u0637\u0644\u0628 \u0627\u0644\u0633\u062D\u0628 \u0644\u064A\u0633 \u0642\u064A\u062F \u0627\u0644\u0645\u0631\u0627\u062C\u0639\u0629.", 409);
+    await ensureWithdrawalDebited(client, wd);
     await client.query(
       `UPDATE approvals
        SET status = 'approved', approved_by = $1, approved_at = NOW()
@@ -585,9 +714,7 @@ async function approveWithdrawal(admin2, input) {
        WHERE id = $2`,
       [apprId, appr.reference]
     );
-    const wdRes = await client.query("SELECT * FROM withdrawal_requests WHERE id = $1", [appr.reference]);
-    if (wdRes.rowCount > 0) {
-      const wd = wdRes.rows[0];
+    if (wdRes.rows.length > 0) {
       await notifyWithdrawalApproved(client, {
         userId: wd.user_id,
         wdId: wd.id,
@@ -603,6 +730,46 @@ async function approveWithdrawal(admin2, input) {
       withdrawalId: appr.reference,
       status: "approved"
     };
+  };
+  return transactionClient ? run(transactionClient) : withTx(run);
+}
+async function ensureWithdrawalDebited(client, wd) {
+  const account = await client.query("SELECT * FROM accounts WHERE id = $1 FOR UPDATE", [wd.account_id]);
+  const existing = await client.query("SELECT id FROM journals WHERE reference = $1 AND kind = 'withdrawal'", [wd.id]);
+  if (existing.rows[0]) return existing.rows[0].id;
+  if (!account.rows[0] || account.rows[0].type !== "real") throw new WithdrawalError("\u0627\u0644\u062D\u0633\u0627\u0628 \u063A\u064A\u0631 \u0645\u062A\u0627\u062D \u0644\u0644\u0633\u062D\u0628.", 409);
+  const amountCents = Number(wd.amount_cents);
+  const { state } = await loadContractWallet(client, wd.account_id, wd.user_id, account.rows[0].balance_cents, true);
+  const policy = policyLedger(state, await readPolicyRuntime(client));
+  if (state.wallet.futuresCents < amountCents) throw new WithdrawalError("\u0627\u0644\u0631\u0635\u064A\u062F \u0627\u0644\u0645\u062A\u0627\u062D \u0644\u0644\u0633\u062D\u0628 \u063A\u064A\u0631 \u0643\u0627\u0641\u064D.", 409);
+  const policySpotCents = cohortAmount(amountCents, state, policy, "spot");
+  const journalId = "jnl-wd-" + randomUUID2();
+  await client.query("INSERT INTO journals (id, kind, reference, created_at) VALUES ($1, 'withdrawal', $2, NOW())", [journalId, wd.id]);
+  await client.query(
+    `INSERT INTO journal_entries (journal_id, user_id, account_id, bucket, amount_cents) VALUES
+    ($1, $2, $3, 'cash', $4), ($1, NULL, NULL, 'system:payout-clearing', $5)`,
+    [journalId, wd.user_id, wd.account_id, -amountCents, amountCents]
+  );
+  state.wallet.futuresCents = await readBalanceCents(client, wd.account_id) - state.wallet.perpetualCents;
+  if (policy) {
+    policy.policySpotCents -= policySpotCents;
+    await savePolicyEvidence(client, "financial_policy_withdrawals", wd.id, wd.user_id, { accountId: wd.account_id, policySpotCents });
+  }
+  await saveContractWallet(client, wd.account_id, wd.user_id, state);
+  return journalId;
+}
+async function approveWithdrawalById(admin, input) {
+  return withTx(async (client) => {
+    const result = await client.query("SELECT * FROM withdrawal_requests WHERE id = $1 FOR UPDATE", [input.withdrawalId]);
+    const wd = result.rows[0];
+    if (!wd) throw new WithdrawalError("\u0637\u0644\u0628 \u0627\u0644\u0633\u062D\u0628 \u063A\u064A\u0631 \u0645\u0648\u062C\u0648\u062F.", 404);
+    if (wd.status === "approved") return { ok: true, status: "approved", withdrawalId: wd.id };
+    if (wd.status !== "requested") throw new WithdrawalError("\u0637\u0644\u0628 \u0627\u0644\u0633\u062D\u0628 \u0644\u064A\u0633 \u0642\u064A\u062F \u0627\u0644\u0645\u0631\u0627\u062C\u0639\u0629.", 409);
+    await ensureWithdrawalDebited(client, wd);
+    await client.query("UPDATE withdrawal_requests SET status = 'approved', updated_at = NOW() WHERE id = $1", [wd.id]);
+    await client.query("UPDATE approvals SET status = 'approved', approved_by = $1, approved_at = NOW() WHERE reference = $2 AND status = 'pending'", [admin.id, wd.id]);
+    await notifyWithdrawalApproved(client, { userId: wd.user_id, wdId: wd.id, amountCents: Number(wd.amount_cents), netAmountCents: Number(wd.net_amount_cents), coin: wd.coin, address: wd.address });
+    return { ok: true, status: "approved", withdrawalId: wd.id };
   });
 }
 async function markWithdrawalPaid(admin, input) {
@@ -620,25 +787,7 @@ async function markWithdrawalPaid(admin, input) {
     if (wd.status !== "approved") {
       throw new WithdrawalError(`\u0637\u0644\u0628 \u0627\u0644\u0633\u062D\u0628 \u063A\u064A\u0631 \u0645\u0639\u062A\u0645\u062F (${wd.status}).`, 409);
     }
-    const amountCents = Number(wd.amount_cents);
-    const jRes = await client.query("SELECT id FROM journals WHERE reference = $1 AND kind = 'withdrawal'", [wdId]);
-    let journalId = jRes.rows[0]?.id;
-    if (!journalId) {
-      journalId = "jnl-wd-" + randomUUID2();
-      await client.query(
-        `INSERT INTO journals (id, kind, reference, created_at) VALUES ($1, 'withdrawal', $2, NOW())`,
-        [journalId, wdId]
-      );
-      await client.query(
-        `INSERT INTO journal_entries (journal_id, user_id, account_id, bucket, amount_cents) VALUES
-         ($1, $2, $3, 'cash', $4),
-         ($1, NULL, NULL, 'system:payout-clearing', $5)`,
-        [journalId, wd.user_id, wd.account_id, -amountCents, amountCents]
-      );
-      const balanceAfter = await readBalanceCents(client, wd.account_id);
-      const { state: wState } = await loadContractWallet(client, wd.account_id, wd.user_id, balanceAfter, true);
-      await saveContractWallet(client, wd.account_id, wd.user_id, wState);
-    }
+    const journalId = await ensureWithdrawalDebited(client, wd);
     await client.query(
       `UPDATE withdrawal_requests
        SET status = 'paid', tx_hash = $1, updated_at = NOW()
@@ -663,10 +812,10 @@ async function markWithdrawalPaid(admin, input) {
     };
   });
 }
-async function rejectWithdrawal(admin, input) {
+async function rejectWithdrawal(admin, input, transactionClient) {
   const wdId = input.withdrawalId;
   const reason = input.reason || "\u062A\u0645 \u0631\u0641\u0636 \u0627\u0644\u0633\u062D\u0628 \u0645\u0646 \u0642\u0650\u0628\u0644 \u0627\u0644\u0625\u062F\u0627\u0631\u0629";
-  return await withTx(async (client) => {
+  const run = async (client) => {
     const wdRes = await client.query("SELECT * FROM withdrawal_requests WHERE id = $1 FOR UPDATE", [wdId]);
     if (wdRes.rowCount === 0) {
       throw new WithdrawalError("\u0637\u0644\u0628 \u0627\u0644\u0633\u062D\u0628 \u063A\u064A\u0631 \u0645\u0648\u062C\u0648\u062F.", 404);
@@ -675,12 +824,19 @@ async function rejectWithdrawal(admin, input) {
     if (wd.status === "rejected") {
       return { ok: true, withdrawalId: wdId, status: "rejected", message: "\u0637\u0644\u0628 \u0627\u0644\u0633\u062D\u0628 \u0645\u0631\u0641\u0648\u0636 \u0645\u0633\u0628\u0642\u064B\u0627." };
     }
+    if (!["requested", "approved"].includes(wd.status)) {
+      throw new WithdrawalError("\u0644\u0627 \u064A\u0645\u0643\u0646 \u0631\u0641\u0636 \u0639\u0645\u0644\u064A\u0629 \u0633\u062D\u0628 \u0645\u062F\u0641\u0648\u0639\u0629 \u0623\u0648 \u0646\u0647\u0627\u0626\u064A\u0629. / A paid or final withdrawal cannot be rejected.", 409);
+    }
     const amountCents = Number(wd.amount_cents);
+    const accountBefore = await client.query("SELECT * FROM accounts WHERE id = $1 FOR UPDATE", [wd.account_id]);
+    const { state: refundWallet } = await loadContractWallet(client, wd.account_id, wd.user_id, accountBefore.rows[0].balance_cents, true);
+    const policy = policyLedger(refundWallet, await readPolicyRuntime(client));
+    const debitCheck = await client.query("SELECT id FROM journals WHERE reference = $1 AND kind = 'withdrawal'", [wdId]);
     const refCheck = await client.query(
       "SELECT id FROM journals WHERE reference = $1 AND kind = 'adjustment'",
       [wdId]
     );
-    if (refCheck.rowCount === 0) {
+    if (refCheck.rowCount === 0 && debitCheck.rows.length > 0) {
       const refundJournalId = "jnl-ref-" + randomUUID2();
       await client.query(
         `INSERT INTO journals (id, kind, reference, created_at)
@@ -694,8 +850,14 @@ async function rejectWithdrawal(admin, input) {
         [refundJournalId, wd.user_id, wd.account_id, amountCents, -amountCents]
       );
       const balanceAfter = await readBalanceCents(client, wd.account_id);
-      const { state: wState } = await loadContractWallet(client, wd.account_id, wd.user_id, balanceAfter, true);
-      await saveContractWallet(client, wd.account_id, wd.user_id, wState);
+      refundWallet.wallet.futuresCents = balanceAfter - refundWallet.wallet.perpetualCents;
+      if (policy) {
+        const original = await client.query("SELECT data FROM docs WHERE collection = 'financial_policy_withdrawals' AND id = $1", [wdId]);
+        const restored = Number(original.rows[0]?.data?.policySpotCents ?? 0);
+        if (!Number.isSafeInteger(restored) || restored < 0 || restored > amountCents) throw new WithdrawalError("Withdrawal cohort requires reconciliation", 409);
+        policy.policySpotCents += restored;
+      }
+      await saveContractWallet(client, wd.account_id, wd.user_id, refundWallet);
     }
     await client.query(
       `UPDATE withdrawal_requests
@@ -722,7 +884,8 @@ async function rejectWithdrawal(admin, input) {
       status: "rejected",
       message: "\u062A\u0645 \u0631\u0641\u0636 \u0637\u0644\u0628 \u0627\u0644\u0633\u062D\u0628 \u0648\u0625\u0639\u0627\u062F\u0629 \u0627\u0644\u0631\u0635\u064A\u062F \u0625\u0644\u0649 \u062D\u0633\u0627\u0628 \u0627\u0644\u0639\u0645\u064A\u0644 \u0628\u0646\u062C\u0627\u062D."
     };
-  });
+  };
+  return transactionClient ? run(transactionClient) : withTx(run);
 }
 async function getUserWithdrawals(user) {
   return await withTx(async (client) => {
@@ -747,6 +910,7 @@ async function getWithdrawalById(user, id) {
 export {
   WithdrawalError,
   approveWithdrawal,
+  approveWithdrawalById,
   getUserWithdrawals,
   getWithdrawalById,
   markWithdrawalPaid,

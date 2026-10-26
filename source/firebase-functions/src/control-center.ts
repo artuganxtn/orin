@@ -2,7 +2,9 @@ import { randomUUID, createHash, randomBytes } from 'node:crypto';
 import { withTx } from './db.ts';
 import { ApiError, type Identity, type Data } from './store.ts';
 import { computeCustomerKey, verifyKycCustomer, idLast4, getKycFilesKey, decryptAesGcm } from './kyc.ts';
-import { proposeWithdrawalApproval, approveWithdrawal, markWithdrawalPaid } from './withdrawals.ts';
+import { proposeWithdrawalApproval, approveWithdrawal, approveWithdrawalById, markWithdrawalPaid, rejectWithdrawal } from './withdrawals.ts';
+import { recordConfirmedDeposit } from './program-ingestion.ts';
+import { prepareCashAdjustment, getActiveFinancialPolicy } from './financial-policy.ts';
 import {
   notifyWithdrawalApproved,
   notifyWithdrawalPaid,
@@ -248,6 +250,10 @@ export async function controlRead(u: Identity, module: string, q: Data = {}) {
         { id: 'pending_kyc', label: 'طلبات توثيق هوية KYC قيد المراجعة', count: pendingKyc, module: 'kyc' },
         { id: 'open_tickets', label: 'تذاكر دعم العملاء المفتوحة', count: openTickets, module: 'tickets' }
       ];
+      const financialPolicy = await getActiveFinancialPolicy(client);
+      if (financialPolicy.rolloutStatus === 'staged') {
+        queues.unshift({ id: 'financial_policy_staged', label: 'سياسة الإيداعات الجديدة جاهزة وتنتظر تفعيل النشر المنسق', count: 1, module: 'configuration' });
+      }
 
       const activity = recAudit.rows.map((r: any) => ({
         id: r.id,
@@ -262,6 +268,7 @@ export async function controlRead(u: Identity, module: string, q: Data = {}) {
         stats,
         queues,
         activity,
+        financialPolicy,
         rows: [{
           id: 'dashboard-summary',
           usersCount,
@@ -775,6 +782,7 @@ export async function controlAction(u: Identity, input: Data) {
       // Super admin adjustments execute double-entry journal immediately
       const isSuperAdmin = u.role === 'admin';
       if (isSuperAdmin && action !== 'finance.propose') {
+        await prepareCashAdjustment(client, acc, deltaCents);
         const journalId = 'jnl-' + randomUUID();
         const sysBucket = 'system:adjustment';
 
@@ -1338,6 +1346,10 @@ export async function controlAction(u: Identity, input: Data) {
       const uid = appr.user_id;
       const accountId = appr.account_id;
       const kind = appr.kind;
+      if (kind === 'withdrawal') return approveWithdrawal(u, { approvalId, reason }, client);
+      const adjustedAccount = await client.query('SELECT * FROM accounts WHERE id = $1 FOR UPDATE', [accountId]);
+      if (!adjustedAccount.rows[0]) throw new ApiError('Account not found', 404);
+      await prepareCashAdjustment(client, adjustedAccount.rows[0], deltaCents);
       const journalId = 'jnl-' + randomUUID();
       const sysBucket = kind === 'adjustment' ? 'system:adjustment' : 'system:referral_rewards';
 
@@ -1369,6 +1381,11 @@ export async function controlAction(u: Identity, input: Data) {
   if (action === 'finance.reject' || action === 'reward.reject') {
     const approvalId = target || payload.approvalId;
     return await withTx(async (client) => {
+      const approval = await client.query('SELECT * FROM approvals WHERE id = $1 FOR UPDATE', [approvalId]);
+      if (approval.rows[0]?.kind === 'withdrawal') {
+        if (approval.rows[0].status !== 'pending') throw new ApiError('Pending approval not found', 404);
+        return rejectWithdrawal(u, { withdrawalId: approval.rows[0].reference, reason }, client);
+      }
       const res = await client.query(
         `UPDATE approvals
          SET status = 'rejected', approved_by = $1, approved_at = NOW()
@@ -1385,9 +1402,10 @@ export async function controlAction(u: Identity, input: Data) {
   if (action === 'payment.review' || action === 'deposit.resolve') {
     const depositId = target || payload.depositId;
     const decision = payload.decision || (action === 'deposit.resolve' ? 'approve' : 'reject');
+    if (!['approve', 'reject'].includes(decision)) throw new ApiError('Invalid deposit review decision', 400);
 
     return await withTx(async (client) => {
-      const depRes = await client.query('SELECT * FROM deposits WHERE id = $1 FOR UPDATE', [depositId]);
+      const depRes = await client.query('SELECT * FROM deposits WHERE id = $1', [depositId]);
       if (depRes.rowCount === 0) throw new ApiError('Deposit not found', 404);
       const dep = depRes.rows[0];
 
@@ -1400,33 +1418,24 @@ export async function controlAction(u: Identity, input: Data) {
       );
 
       if (decision === 'approve' && !dep.credited) {
-        const amount = Number(dep.amount_cents);
-        const journalId = 'jnl-dep-resolve-' + randomUUID();
-
-        await client.query(
-          `INSERT INTO journals (id, kind, reference, created_at)
-           VALUES ($1, 'deposit', $2, NOW())`,
-          [journalId, `review-resolve-${depositId}`]
-        );
-
-        await client.query(
-          `INSERT INTO journal_entries (journal_id, user_id, account_id, bucket, amount_cents)
-           VALUES ($1, $2, $3, 'cash', $4),
-                  ($1, NULL, NULL, 'system:deposits', $5)`,
-          [journalId, dep.user_id, dep.account_id, amount, -amount]
-        );
-
-        await client.query(
-          `UPDATE deposits
-           SET status = 'confirmed', credited = TRUE, credited_cents = $1, updated_at = NOW()
-           WHERE id = $2`,
-          [amount, depositId]
-        );
+        // An authenticated, authorized administrator explicitly confirms actual
+        // receipt. Use the same atomic order claim as provider reconciliation.
+        const amount = payload.receivedCents === undefined ? Number(dep.amount_cents) : Number(payload.receivedCents);
+        if (!Number.isSafeInteger(amount) || amount <= 0 || amount > Number(dep.amount_cents)) {
+          throw new ApiError('Confirmed received amount is invalid', 400);
+        }
+        await recordConfirmedDeposit({
+          eventId: 'manual-review-' + hash(depositId), uid: dep.user_id,
+          accountId: dep.account_id, currency: 'USD', cents: amount, eligible: false,
+          depositId, source: 'manual_review', actorId: u.id,
+          receiptReference: String(payload.receiptReference || payload.reference || requestId),
+        }, client);
       } else if (decision === 'reject') {
+        if (dep.credited) throw new ApiError('Credited deposits require a separate audited reconciliation, not rejection', 409);
         await client.query(
           `UPDATE deposits
            SET status = 'failed', review_reason = $1, updated_at = NOW()
-           WHERE id = $2`,
+           WHERE id = $2 AND credited = FALSE`,
           [reason, depositId]
         );
       }
@@ -1806,200 +1815,18 @@ export async function controlAction(u: Identity, input: Data) {
     return await proposeWithdrawalApproval(u, payload);
   }
   if (action === 'withdrawal.approve') {
-    const wdId = String(target || payload.withdrawalId || payload.id || '').trim();
-    return await withTx(async (client) => {
-      const wRes = await client.query('SELECT * FROM withdrawal_requests WHERE id = $1 FOR UPDATE', [wdId]);
-      if (wRes.rowCount === 0) throw new ApiError('طلب السحب غير موجود / Withdrawal request not found', 404);
-      const wd = wRes.rows[0];
-
-      // If legacy withdrawal that had not been debited on submit, debit now
-      const jRes = await client.query("SELECT id FROM journals WHERE reference = $1 AND kind = 'withdrawal'", [wdId]);
-      if (jRes.rowCount === 0) {
-        const journalId = 'jnl-wd-' + randomUUID();
-        await client.query(
-          `INSERT INTO journals (id, kind, reference, created_at)
-           VALUES ($1, 'withdrawal', $2, NOW())`,
-          [journalId, wdId]
-        );
-        await client.query(
-          `INSERT INTO journal_entries (journal_id, user_id, account_id, bucket, amount_cents)
-           VALUES ($1, $2, $3, 'cash', $4),
-                  ($1, NULL, NULL, 'system:payout-clearing', $5)`,
-          [journalId, wd.user_id, wd.account_id, -Number(wd.amount_cents), Number(wd.amount_cents)]
-        );
-
-        const docRes = await client.query(
-          `SELECT data FROM docs WHERE collection = 'contract_wallets' AND id = $1 FOR UPDATE`,
-          [wd.account_id]
-        );
-        if (docRes.rows[0]?.data) {
-          const wState = docRes.rows[0].data;
-          if (wState.wallet) {
-            wState.wallet.futuresCents = Math.max(0, (Number(wState.wallet.futuresCents) || 0) - Number(wd.amount_cents));
-            wState.wallet.version = (wState.wallet.version || 1) + 1;
-            wState.wallet.updatedAt = Date.now();
-            await client.query(
-              `UPDATE docs SET data = $1, updated_at = NOW() WHERE collection = 'contract_wallets' AND id = $2`,
-              [JSON.stringify(wState), wd.account_id]
-            );
-          }
-        }
-      }
-
-      await client.query("UPDATE withdrawal_requests SET status = 'approved', updated_at = NOW() WHERE id = $1", [wdId]);
-      await client.query("UPDATE approvals SET status = 'approved', approved_by = $1, approved_at = NOW() WHERE reference = $2 AND status = 'pending'", [u.id, wdId]);
-
-      // Enhanced notification for user on approval
-      await notifyWithdrawalApproved(client, {
-        userId: wd.user_id,
-        wdId,
-        amountCents: Number(wd.amount_cents),
-        netAmountCents: Number(wd.net_amount_cents),
-        coin: wd.coin,
-        address: wd.address
-      });
-
-      return { ok: true, status: 'approved', withdrawalId: wdId, message: 'تم اعتماد وموافقة طلب السحب بنجاح.' };
-    });
+    const withdrawalId = String(target || payload.withdrawalId || payload.id || '').trim();
+    return approveWithdrawalById(u, { withdrawalId });
   }
   if (action === 'withdrawal.pay') {
-    const wdId = String(target || payload.withdrawalId || payload.id || '').trim();
-    const txHash = String(payload.txHash || payload.tx_hash || payload.reference || '0x' + randomBytes(16).toString('hex')).trim();
-    return await withTx(async (client) => {
-      const wRes = await client.query('SELECT * FROM withdrawal_requests WHERE id = $1 FOR UPDATE', [wdId]);
-      if (wRes.rowCount === 0) throw new ApiError('طلب السحب غير موجود / Withdrawal request not found', 404);
-      const wd = wRes.rows[0];
-      if (wd.status === 'paid') throw new ApiError('طلب السحب مدفوع مسبقًا.', 409);
-
-      const amountCents = Number(wd.amount_cents);
-
-      // Check if debited already; if not, debit now (legacy fallback)
-      const jRes = await client.query("SELECT id FROM journals WHERE reference = $1 AND kind = 'withdrawal'", [wdId]);
-      if (jRes.rowCount === 0) {
-        const journalId = 'jnl-wd-' + randomUUID();
-        await client.query(
-          `INSERT INTO journals (id, kind, reference, created_at)
-           VALUES ($1, 'withdrawal', $2, NOW())`,
-          [journalId, wdId]
-        );
-        await client.query(
-          `INSERT INTO journal_entries (journal_id, user_id, account_id, bucket, amount_cents)
-           VALUES ($1, $2, $3, 'cash', $4),
-                  ($1, NULL, NULL, 'system:payout-clearing', $5)`,
-          [journalId, wd.user_id, wd.account_id, -amountCents, amountCents]
-        );
-
-        const docRes = await client.query(
-          `SELECT data FROM docs WHERE collection = 'contract_wallets' AND id = $1 FOR UPDATE`,
-          [wd.account_id]
-        );
-        if (docRes.rows[0]?.data) {
-          const wState = docRes.rows[0].data;
-          if (wState.wallet) {
-            wState.wallet.futuresCents = Math.max(0, (Number(wState.wallet.futuresCents) || 0) - amountCents);
-            wState.wallet.version = (wState.wallet.version || 1) + 1;
-            wState.wallet.updatedAt = Date.now();
-            await client.query(
-              `UPDATE docs SET data = $1, updated_at = NOW() WHERE collection = 'contract_wallets' AND id = $2`,
-              [JSON.stringify(wState), wd.account_id]
-            );
-          }
-        }
-      }
-
-      await client.query(
-        `UPDATE withdrawal_requests
-         SET status = 'paid', tx_hash = $1, updated_at = NOW()
-         WHERE id = $2`,
-        [txHash, wdId]
-      );
-
-      await client.query(
-        `UPDATE approvals
-         SET status = 'approved', approved_by = $1, approved_at = NOW()
-         WHERE reference = $2`,
-        [u.id, wdId]
-      );
-
-      // Enhanced notification for user on payout
-      await notifyWithdrawalPaid(client, {
-        userId: wd.user_id,
-        wdId,
-        amountCents: Number(wd.amount_cents),
-        netAmountCents: Number(wd.net_amount_cents),
-        coin: wd.coin,
-        address: wd.address,
-        txHash
-      });
-
-      return { ok: true, status: 'paid', withdrawalId: wdId, txHash, message: `تم تأكيد دفع السحب وإدخال TxID (${txHash}) بنجاح.` };
-    });
+    const withdrawalId = String(target || payload.withdrawalId || payload.id || '').trim();
+    // A payout proof must be supplied by the authorized operator; never fabricate it.
+    const txHash = String(payload.txHash || payload.tx_hash || '').trim();
+    return markWithdrawalPaid(u, { withdrawalId, txHash });
   }
   if (action === 'withdrawal.reject') {
-    const wdId = String(target || payload.withdrawalId || payload.id || '').trim();
-    const rejectReason = String(reason || payload.reason || 'تم رفض السحب من قِبل الإدارة').trim();
-    return await withTx(async (client) => {
-      const wRes = await client.query('SELECT * FROM withdrawal_requests WHERE id = $1 FOR UPDATE', [wdId]);
-      if (wRes.rowCount === 0) throw new ApiError('طلب السحب غير موجود / Withdrawal request not found', 404);
-      const wd = wRes.rows[0];
-      if (wd.status === 'rejected') {
-        return { ok: true, status: 'rejected', withdrawalId: wdId, message: 'طلب السحب مرفوض مسبقًا.' };
-      }
-
-      const amountCents = Number(wd.amount_cents);
-
-      // Refund the balance if it was deducted upon submission or approval
-      const refCheck = await client.query(
-        "SELECT id FROM journals WHERE reference = $1 AND kind = 'adjustment'",
-        [wdId]
-      );
-      if (refCheck.rowCount === 0) {
-        const refundJournalId = 'jnl-ref-' + randomUUID();
-        await client.query(
-          `INSERT INTO journals (id, kind, reference, created_at)
-           VALUES ($1, 'adjustment', $2, NOW())`,
-          [refundJournalId, wdId]
-        );
-        await client.query(
-          `INSERT INTO journal_entries (journal_id, user_id, account_id, bucket, amount_cents)
-           VALUES ($1, $2, $3, 'cash', $4),
-                  ($1, NULL, NULL, 'system:payout-clearing', $5)`,
-          [refundJournalId, wd.user_id, wd.account_id, amountCents, -amountCents]
-        );
-
-        // Restore contract_wallets futuresCents (withdrawable futures)
-        const docRes = await client.query(
-          `SELECT data FROM docs WHERE collection = 'contract_wallets' AND id = $1 FOR UPDATE`,
-          [wd.account_id]
-        );
-        if (docRes.rows[0]?.data) {
-          const wState = docRes.rows[0].data;
-          if (wState.wallet) {
-            wState.wallet.futuresCents = (Number(wState.wallet.futuresCents) || 0) + amountCents;
-            wState.wallet.version = (wState.wallet.version || 1) + 1;
-            wState.wallet.updatedAt = Date.now();
-            await client.query(
-              `UPDATE docs SET data = $1, updated_at = NOW() WHERE collection = 'contract_wallets' AND id = $2`,
-              [JSON.stringify(wState), wd.account_id]
-            );
-          }
-        }
-      }
-
-      await client.query("UPDATE withdrawal_requests SET status = 'rejected', updated_at = NOW() WHERE id = $1", [wdId]);
-      await client.query("UPDATE approvals SET status = 'rejected', approved_by = $1, reason = $2, approved_at = NOW() WHERE reference = $3", [u.id, rejectReason, wdId]);
-
-      // Enhanced notification for user on rejection
-      await notifyWithdrawalRejected(client, {
-        userId: wd.user_id,
-        wdId,
-        amountCents: Number(wd.amount_cents),
-        coin: wd.coin,
-        reason: rejectReason
-      });
-
-      return { ok: true, status: 'rejected', withdrawalId: wdId, message: 'تم رفض طلب السحب وإعادة الرصيد إلى حساب العميل بنجاح.' };
-    });
+    const withdrawalId = String(target || payload.withdrawalId || payload.id || '').trim();
+    return rejectWithdrawal(u, { withdrawalId, reason: String(reason || payload.reason || '').trim() || undefined });
   }
 
   // 21. Welcome Bonus Grant / Update

@@ -95,3 +95,52 @@ html[data-theme=dark] .quote-sparkline-history .sparkline-change{background:#1c4
 .live-home-card .quote-feed-status{min-height:15px;padding:0;font-size:8px;line-height:1.5}
 @media(min-width:500px){.live-home-card .home-market-header.home-quote-heading{grid-template-columns:34px minmax(135px,1fr) minmax(170px,1.35fr);gap:10px}.home-quote-heading .quote-sparkline-history{gap:10px}.home-market-header.home-quote-heading .sparkline-change{font-size:13px!important;padding:9px}}
 @media(max-width:350px){.live-home-card .home-market-header.home-quote-heading{grid-template-columns:27px minmax(90px,1fr) minmax(98px,1.1fr);gap:4px}.home-market-header.home-quote-heading .coin-logo{width:24px;height:24px;font-size:18px}.home-market-header.home-quote-heading .sparkline-change{font-size:9px!important;padding:6px 4px}.home-quote-heading .quote-sparkline-history{gap:3px}}
+
+/* Compact settings only. Existing application identity and home styles above are unchanged. */
+.settings-compact{--settings-ink:var(--orin-ink,#112347);--settings-muted:var(--orin-muted,#74869f);--settings-border:var(--orin-line,#e2ecf6);--settings-card:var(--orin-surface,#fff);--settings-soft:var(--orin-surface-soft,#f5f8fc)}
+.settings-compact.settings-refresh{max-width:620px;padding:10px 4px 24px}
+.settings-compact .settings-heading{padding:3px 0 8px;margin:0;text-align:center}
+.settings-compact .settings-heading h1{font-size:calc(21px * var(--ui-font-scale,1));line-height:1.7;font-weight:650;letter-spacing:0}
+.settings-compact .settings-section-label{margin:18px 5px 8px;font-size:calc(13px * var(--ui-font-scale,1));font-weight:500;line-height:1.6}
+.settings-compact .settings-group{border-radius:15px;box-shadow:none;background:var(--settings-card);border-color:var(--settings-border)}
+.settings-compact .settings-group+.settings-group{margin-top:14px}
+.settings-compact .settings-row{min-height:49px;gap:12px;padding:11px 14px;background:transparent;border-color:var(--settings-border);box-shadow:none}
+.settings-compact .setting-icon{width:24px;height:26px;border-radius:0;background:transparent;color:var(--settings-ink)}
+.settings-compact .setting-icon svg{width:22px;height:22px;stroke-width:1.55}
+.settings-compact .setting-copy{gap:2px}
+.settings-compact .setting-copy b{font-size:calc(13px * var(--ui-font-scale,1));font-weight:500;line-height:1.65}
+.settings-compact .setting-copy small{font-size:calc(10px * var(--ui-font-scale,1));line-height:1.6}
+.settings-compact .setting-chevron{width:17px;height:17px;stroke-width:1.6;color:var(--settings-muted)}
+.settings-compact .settings-sync{min-height:24px;margin:12px 0 0;padding:0;font-size:calc(10px * var(--ui-font-scale,1))}
+.settings-compact .settings-sync button{border:0;background:transparent;color:inherit;min-width:36px;min-height:36px;display:grid;place-items:center}
+.settings-compact .settings-panel-status{margin:2px 0 0;text-align:center;font-size:calc(10px * var(--ui-font-scale,1));line-height:1.6;color:var(--settings-muted)}
+.settings-compact .settings-signout{margin:14px 0 0;min-height:48px;border:1px solid #ef44444d;border-radius:14px;color:#ef4444;background:#ef444403;gap:10px;text-decoration:none}
+.settings-compact .settings-signout strong{font-size:calc(13px * var(--ui-font-scale,1));font-weight:500}
+.settings-compact .settings-signout svg{width:21px;height:21px;stroke-width:1.6}
+.settings-compact.orin-settings-screen,.settings-compact.orin-settings-screen .orin-page-inner{background:var(--orin-bg,var(--settings-soft))}
+.settings-compact.orin-settings-screen .orin-page-inner{max-width:620px}
+.settings-compact.orin-settings-screen .orin-page-nav{display:grid;grid-template-columns:40px minmax(0,1fr) 40px;gap:8px;min-height:64px;padding:10px 16px;padding-top:calc(10px + env(safe-area-inset-top));border-bottom:0;background:var(--orin-bg,var(--settings-soft))}
+.settings-compact.orin-settings-screen .orin-page-nav>button{width:40px;height:40px;border:0;border-radius:0;box-shadow:none;background:transparent;color:var(--settings-ink)}
+.settings-compact.orin-settings-screen .orin-page-nav>strong{font-size:calc(17px * var(--ui-font-scale,1));font-weight:600;text-align:center;color:var(--settings-ink);overflow-wrap:anywhere}
+.settings-compact.orin-settings-screen .orin-page-content{padding:14px 16px 32px;gap:16px}
+.settings-compact.orin-settings-screen .settings-section-label{margin:2px 4px -8px}
+.settings-compact .settings-native-select{min-height:34px;border-radius:9px;padding:6px 8px;background:transparent}
+.settings-compact .settings-choice{display:block;flex:none;box-sizing:border-box;width:21px;height:21px;border-radius:50%;border:1.5px solid var(--settings-muted);padding:4px;background:transparent}
+.settings-compact .settings-choice.is-selected{border-color:#0788ff;background:#0788ff;background-clip:content-box}
+.settings-compact .settings-appearance-options .settings-row{min-height:56px}
+.settings-compact button:disabled{cursor:not-allowed}
+.settings-compact .settings-row:disabled{opacity:.55}
+.settings-compact .language-intro,.settings-compact .language-monogram{display:none}
+.settings-compact .orin-language-options{display:grid;grid-template-columns:1fr;gap:0;border:1px solid var(--settings-border);border-radius:15px;overflow:hidden;background:var(--settings-card)}
+.settings-compact .orin-language-options>label{position:relative;display:flex;align-items:center;gap:12px;min-height:54px;margin:0;padding:12px 16px;border:0;border-bottom:1px solid var(--settings-border);border-radius:0;box-shadow:none;background:transparent;color:var(--settings-ink);cursor:pointer}
+.settings-compact .orin-language-options>label:last-child{border-bottom:0}
+.settings-compact .orin-language-options input{position:absolute;width:1px;height:1px;opacity:0}
+.settings-compact .orin-language-options>label:has(input:focus-visible){outline:2px solid #0788ff;outline-offset:-3px}
+.settings-compact .orin-language-options>label:has(input:disabled){opacity:.55;cursor:not-allowed}
+.settings-compact .language-name{flex:1;min-width:0}
+.settings-compact .language-name strong{display:block;text-align:start;font-size:calc(14px * var(--ui-font-scale,1));font-weight:500;color:var(--settings-ink)}
+.settings-compact .language-name small{display:none}
+.settings-compact .language-check{display:grid;place-items:center;flex:none;border-radius:50%;width:21px;height:21px;border:1.5px solid var(--settings-muted);background:transparent}
+.settings-compact .orin-language-options>.is-selected .language-check{box-sizing:border-box;border-color:#0788ff;background:#0788ff;background-clip:content-box;padding:4px}
+.settings-compact .language-check svg{display:none}
+@media(max-width:370px){.settings-compact .settings-row{gap:10px;padding-inline:11px}.settings-compact .setting-icon{width:22px}.settings-compact.orin-settings-screen .orin-page-content{padding-inline:12px}.settings-compact .setting-copy b{font-size:calc(12px * var(--ui-font-scale,1))}}

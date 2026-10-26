@@ -1,4 +1,23 @@
+import type { ActiveFinancialPolicy, AccountPolicyProgress } from './financial-policy';
 export type WalletPocket='futures'|'perpetual';
+export type TransferQuote = {
+  accountId: string;
+  from: WalletPocket;
+  to: WalletPocket;
+  amountCents: number;
+  feeCents: number;
+  feeRate: number;
+  netAmountCents: number;
+  walletVersion: number;
+  policyVersion: string;
+  policyAmountCents?: number;
+  legacyAmountCents?: number;
+  policyFeeCents?: number;
+  legacyFeeCents?: number;
+  permanentlyExempt?: boolean;
+  policyFeeRemainderBefore?: number;
+  policyFeeRemainderAfter?: number;
+};
 export type DemoWallet={ownerId:string;accountId:string;currency:'USD';futuresCents:number;perpetualCents:number;version:number;lastOperationId:string;updatedAt:number};
 export type DemoChallengeInfo = {
   earliestDepositAt: number | null;
@@ -31,6 +50,9 @@ export type DemoWalletView = {
   wallet: DemoWallet | null;
   operations: DemoOperation[];
   challenge?: DemoChallengeInfo;
+  financialPolicy?: ActiveFinancialPolicy;
+  signalPolicy?: AccountPolicyProgress;
+  transferQuote?: TransferQuote;
 };
 export const DEMO_LIMIT_CENTS=100_000_000;
 export function parseUsdAmount(value:string){

@@ -9,8 +9,26 @@ export const LANGUAGES: {code:AppLocale;native:string;english:string;region:stri
 ];
 export const isLocale = (v:unknown):v is AppLocale => typeof v==='string' && APP_LOCALES.includes(v as AppLocale);
 export const localeDirection=(v:AppLocale)=>v==='ar'?'rtl':'ltr';
+/** First-use preference only; an existing valid saved locale takes precedence. */
+export function preferredBrowserLocale():AppLocale {
+ try {
+  if(typeof navigator==='undefined')return 'en';
+  const candidates=[...(navigator.languages??[]),navigator.language];
+  for(const candidate of candidates){
+   const base=typeof candidate==='string'?candidate.trim().toLowerCase().split(/[-_]/)[0]:'';
+   if(isLocale(base))return base;
+  }
+ }catch{/* Browser language access is optional. */}
+ return 'en';
+}
 /** One catalog for sign-in, settings and the customer application. English is the explicit fallback. */
 export const CATALOG:Record<string,[string,string]> = {
+"Trade with perspective":["Bilinçli işlem yapın", "Mit Überblick handeln"],
+"Follow markets and charts, and review the details before you decide.":["Piyasaları ve grafikleri takip edin; karar vermeden önce ayrıntıları inceleyin.", "Verfolgen Sie Märkte und Charts und prüfen Sie die Details, bevor Sie entscheiden."],
+"Your account, your control":["Hesabınız sizin kontrolünüzde", "Ihr Konto, Ihre Kontrolle"],
+"Review your security and privacy settings, and manage your account in one place.":["Güvenlik ve gizlilik ayarlarınızı inceleyin, hesabınızı tek yerden yönetin.", "Prüfen Sie Ihre Sicherheits- und Datenschutzeinstellungen und verwalten Sie Ihr Konto an einem Ort."],
+"A world of markets":["Piyasaların dünyası", "Eine Welt voller Märkte"],
+"Explore currencies, metals and available assets, in your language and in one place.":["Dövizleri, metalleri ve mevcut varlıkları kendi dilinizde, tek bir yerde keşfedin.", "Entdecken Sie Währungen, Metalle und verfügbare Anlagen in Ihrer Sprache und an einem Ort."],
 "Your account & privacy":["Hesabınız ve gizliliğiniz", "Ihr Konto und Datenschutz"],
 "Personal details and contact information":["Kişisel bilgiler ve iletişim", "Persönliche Daten und Kontakt"],
 "Your ORIN experience":["ORIN deneyiminiz", "Ihr ORIN-Erlebnis"],

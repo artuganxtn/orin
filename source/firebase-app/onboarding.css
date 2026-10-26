@@ -1,0 +1,48 @@
+/* Reference-inspired introduction only. All authenticated app styles stay intact. */
+.orin-intro{position:relative;isolation:isolate;display:flex;flex-direction:column;width:100%;max-width:480px;min-height:100vh;min-height:100svh;margin:0 auto;padding:calc(22px + env(safe-area-inset-top,0px)) 24px calc(24px + env(safe-area-inset-bottom,0px));overflow:hidden;background:#fbfdff;color:#0b184a;font-family:inherit;box-sizing:border-box}
+.orin-intro::before{content:'';position:absolute;inset:0;z-index:-2;pointer-events:none;background:radial-gradient(ellipse at 92% 33%,#dfedff 0,transparent 46%),linear-gradient(130deg,#fff 20%,#f8fbff 75%,#fff)}
+.orin-intro-decoration{position:absolute;inset:0;overflow:hidden;z-index:-1;pointer-events:none}
+.orin-intro-decoration::before,.orin-intro-decoration::after{content:'';position:absolute;display:block;width:250px;height:250px;border-radius:50%;background:linear-gradient(145deg,#a5d6ff77,#dceeff11);box-shadow:0 0 0 40px #d6eaff38,0 0 0 80px #e5f1ff38}
+.orin-intro-decoration::before{right:-220px;top:13%}
+.orin-intro-decoration::after{left:-190px;bottom:-150px;background:linear-gradient(145deg,#8ecbff99,#e8f4ff30)}
+.orin-intro .orin-intro-header{position:relative;display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:44px;z-index:6;direction:ltr}
+.orin-intro .orin-entry-language-options{left:0;right:auto}
+.orin-intro-header-actions{display:flex;align-items:center;gap:8px;flex:none}
+.orin-intro .orin-intro-back{display:grid;place-items:center;width:42px;height:42px;border:0;border-radius:50%;background:#edf4ff;color:#10204e;padding:0}
+.orin-intro .orin-intro-skip{min-height:44px;padding:8px 4px;border:0;background:transparent;color:#5e7399;font-size:13px}
+.orin-intro .orin-intro-scene{position:relative;display:flex;flex:1;flex-direction:column;justify-content:center;min-width:0;padding:14px 0 18px;animation:orin-entry-appear .28s ease-out}
+.orin-intro-brand{display:flex;flex:1;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:38px 0 28px}
+.orin-intro .orin-intro-brand>img{display:block;width:clamp(140px,42vw,180px);height:auto;object-fit:contain;margin-bottom:12px}
+.orin-intro .orin-intro-brand>h1{font-family:Arial,sans-serif;font-size:clamp(59px,18vw,78px);font-weight:750;line-height:1.05;letter-spacing:-2px;margin:0;color:#07143c}
+.orin-intro .orin-intro-brand>p{white-space:pre-line;font-size:18px;line-height:1.55;letter-spacing:.5px;margin:18px 0 15px;color:#283e6d}
+.orin-intro[dir=ltr] .orin-intro-brand>p{letter-spacing:2px}
+.orin-intro-tagline{display:flex;flex-direction:column;gap:3px;margin:16px 0 14px;color:#283e6d;font-size:17px;font-weight:500;letter-spacing:0.4px;line-height:1.4}
+.orin-intro-line{display:block;width:44px;height:3px;border-radius:3px;background:#087bfa;margin:0 auto}
+.orin-intro-brand>span{width:48px;height:2px;border-radius:2px;background:#0783ff}
+.orin-intro .orin-intro-art{display:flex;justify-content:center;align-items:center;flex:none;min-width:0;width:100%;height:clamp(230px,42vh,360px);height:clamp(230px,42svh,360px);margin:8px 0 12px;direction:ltr}
+.orin-intro .orin-intro-art>img{display:block;object-fit:contain;width:100%;height:100%;max-width:370px;user-select:none}
+.orin-intro .orin-intro-copy{text-align:center;min-width:0}
+.orin-intro .orin-intro-copy>h1{color:#0b184a;font-size:clamp(25px,6.8vw,32px);font-weight:600;line-height:1.45;letter-spacing:-.3px;overflow-wrap:anywhere;margin:0 0 14px}
+.orin-intro .orin-intro-copy>p{max-width:350px;margin:0 auto;color:#647ca9;font-size:16px;line-height:1.9;overflow-wrap:anywhere}
+.orin-intro .orin-intro-footer{position:relative;flex:none;margin-top:auto;padding:0;text-align:center}
+.orin-intro .orin-intro-dots{display:flex;justify-content:center;gap:0;margin:0 0 15px}
+.orin-intro .orin-intro-dots>button{display:grid;place-items:center;width:44px;height:44px;min-height:44px;padding:0;border:0;background:transparent;border-radius:12px}
+.orin-intro-dots>button>span{display:block;width:12px;height:12px;border-radius:50%;background:#d4e2f6;transition:background .15s}
+.orin-intro-dots>button[aria-current=step]>span{background:#087bfa}
+.orin-intro-next-row{display:flex;justify-content:flex-end;min-height:64px}
+.orin-intro .orin-intro-next{display:grid;place-items:center;width:64px;height:64px;padding:0;border:0;border-radius:50%;background:#087bfa;color:#fff;box-shadow:0 8px 22px #087bfa1f}
+.orin-intro-account-actions{display:grid;gap:13px}
+.orin-intro .orin-intro-create,.orin-intro .orin-intro-signin{width:100%;min-height:56px;padding:12px 22px;border:0;border-radius:30px;font-size:17px;font-weight:500;line-height:1.7}
+.orin-intro .orin-intro-create{background:#087bfa;color:#fff;box-shadow:0 8px 22px #087bfa12}
+.orin-intro .orin-intro-signin{background:#ecf3ff;color:#101e4c}
+.orin-intro button{touch-action:manipulation}
+.orin-intro button:focus-visible{outline:3px solid #0a61d4;outline-offset:3px}
+.orin-intro button:active{filter:brightness(.96)}
+@keyframes orin-entry-appear{from{opacity:.35;transform:translateY(6px)}to{opacity:1;transform:none}}
+@media(min-width:600px){.orin-intro{border-inline:1px solid #e3edf9}}
+@media(max-width:360px){.orin-intro{padding-inline:18px}.orin-intro .orin-intro-copy>p{font-size:15px}.orin-intro .orin-intro-copy>h1{font-size:25px}.orin-intro-header-actions{gap:4px}.orin-intro .orin-entry-language>summary{padding-inline:4px;gap:7px}}
+@media(max-height:740px){.orin-intro{padding-top:calc(14px + env(safe-area-inset-top,0px));padding-bottom:calc(18px + env(safe-area-inset-bottom,0px))}.orin-intro .orin-intro-scene{padding-block:6px 12px}.orin-intro .orin-intro-art{height:clamp(180px,34vh,270px);height:clamp(180px,34svh,270px);margin:4px 0 8px}.orin-intro .orin-intro-copy>h1{margin-bottom:10px;font-size:26px}.orin-intro .orin-intro-copy>p{font-size:15px;line-height:1.8}.orin-intro .orin-intro-dots{margin-bottom:8px}.orin-intro .orin-intro-next{width:56px;height:56px}.orin-intro-next-row{min-height:56px}.orin-intro .orin-intro-brand>img{width:145px}.orin-intro .orin-intro-brand>h1{font-size:64px}.orin-intro .orin-intro-brand>p{font-size:16px}.orin-intro-brand{padding-block:25px}}
+@media(max-height:560px){.orin-intro .orin-intro-art{height:180px}.orin-intro .orin-intro-brand>img{width:120px}.orin-intro .orin-intro-brand>h1{font-size:54px}}
+@media(prefers-reduced-motion:reduce){.orin-intro .orin-intro-scene{animation:none}.orin-intro .orin-intro-dots>button>span{transition:none}}
+[data-reduce-motion=true] .orin-intro .orin-intro-scene{animation:none}
+[data-reduce-motion=true] .orin-intro .orin-intro-dots>button>span{transition:none}

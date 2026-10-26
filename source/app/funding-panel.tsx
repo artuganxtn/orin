@@ -8,6 +8,7 @@ import { PAYMENT_COINS, type PaymentCoin, type PaymentReadiness, type DepositVie
 import type { TradingAccount } from '@/lib/trading-accounts';
 import { demoWalletRequest } from '@/lib/demo-wallet-client';
 import type { DemoWalletView } from '@/lib/demo-wallet';
+import { isNewDepositAmount } from '@/lib/financial-policy';
 import { useOrin } from './orin-settings';
 import { useNavigation } from './orin-navigation';
 import { WithdrawalReceiptView } from './withdrawal-receipt';
@@ -77,6 +78,8 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
   const [withdrawals, setWithdrawals] = useState<any[]>([]);
   const [walletView, setWalletView] = useState<DemoWalletView | null>(null);
   const requestId = useRef<string | null>(null), mounted = useRef(true), submitting = useRef(false);
+  const depositIntent = useRef('');
+  const withdrawalIntent = useRef<{ fingerprint: string; id: string } | null>(null);
 
   const load = useCallback(async () => {
     if (account?.type !== 'real') return;
@@ -113,11 +116,13 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
 
   async function submit() {
     if (!account || !ready?.deposits || submitting.current) return;
-    if (!/^\d{1,6}(\.\d{1,2})?$/.test(amount) || Number(amount) < 1000 || Number(amount) > 100000) {
-      setError(t('الحد الأدنى للإيداع هو 1,000 دولار أمريكي. أدخل مبلغًا صالحًا.', 'Minimum deposit is $1,000 USD. Enter a valid amount.'));
+    if (!/^\d{1,6}(\.\d{1,2})?$/.test(amount) || !isNewDepositAmount(Math.round(Number(amount) * 100))) {
+      setError(t('مبلغ الإيداع يجب أن يكون بين 100 و15,000 دولار أمريكي.', 'Deposits must be between $100 and $15,000 USD.'));
       return;
     }
     submitting.current = true; setBusy(true); setError('');
+    const fingerprint = JSON.stringify([account.id, amount, coin]);
+    if (depositIntent.current !== fingerprint) { requestId.current = null; depositIntent.current = fingerprint; }
     requestId.current ??= crypto.randomUUID();
     try {
       const item = await createDeposit({ accountId: account.id, amountCents: Math.round(Number(amount) * 100), coin, requestId: requestId.current });
@@ -197,11 +202,6 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
     );
   }
 
-  const finishedDeposits = items.filter(x => x.status === 'finished' || x.credited);
-  const latestDeposit = finishedDeposits[0];
-  const elapsedDays = latestDeposit ? Math.floor((Date.now() - latestDeposit.createdAt) / 86400000) : 0;
-  const lockRemainingDays = latestDeposit ? Math.max(0, 29 - elapsedDays) : 29;
-
   const loading = !ready && (
     <div className="fp-card fp-empty">
       <span className="orin-loader" />
@@ -219,6 +219,7 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
     const maxWithdraw = totalAvailable > 0 ? totalAvailable.toFixed(2) : '0';
 
     const requestWithdrawal = async () => {
+      if (submitting.current) return;
       setError(''); setWNotice(null);
       const val = Number(wAmount);
       if (!/^\d{1,7}(\.\d{1,2})?$/.test(wAmount) || val <= 0) {
@@ -237,16 +238,16 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
         return;
       }
 
-      // 5% standard withdrawal fee
-      const fee = Math.round(val * 0.05 * 100) / 100;
-      const netAmount = Math.max(0, Math.round((val - fee) * 100) / 100);
-
       try {
+        submitting.current = true;
         setBusy(true);
+        const fingerprint = JSON.stringify([account.id, Math.round(val * 100), wAddress.trim(), wNet]);
+        if (withdrawalIntent.current?.fingerprint !== fingerprint) withdrawalIntent.current = { fingerprint, id: crypto.randomUUID() };
         const res = await apiFetch('/api/withdrawals', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            requestId: withdrawalIntent.current.id,
             accountId: account?.id,
             amountCents: Math.round(val * 100),
             address: wAddress.trim(),
@@ -258,21 +259,21 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
         if (!res.ok) {
           throw new Error(data.error || 'تعذر إرسال طلب السحب');
         }
-        const nowObj = new Date();
-        const dateCode = nowObj.getFullYear() + String(nowObj.getMonth() + 1).padStart(2, '0') + String(nowObj.getDate()).padStart(2, '0');
-        const formattedId = data.id || `wd-${dateCode}-${Math.floor(1000 + Math.random() * 9000)}`;
-
+        if (!data.id || !Number.isSafeInteger(data.amountCents)) throw new Error(t('وصل رد غير مكتمل. راجع سجل السحب قبل إعادة المحاولة.', 'The response was incomplete. Check withdrawal history before retrying.'));
         setWNotice({
-          id: formattedId,
-          amount: val,
-          fee: fee,
-          netAmount: netAmount,
-          address: wAddress.trim(),
-          coin: wNet,
-          network: net.network,
-          createdAt: Date.now(),
-          status: 'requested'
+          id: data.id,
+          accountId: data.accountId,
+          amount: data.amountCents / 100,
+          fee: Number.isSafeInteger(data.feeCents) ? data.feeCents / 100 : undefined,
+          netAmount: Number.isSafeInteger(data.netAmountCents) ? data.netAmountCents / 100 : undefined,
+          address: data.address,
+          coin: data.coin,
+          currency: data.currency,
+          createdAt: data.createdAt,
+          status: data.status,
+          txHash: data.txHash
         });
+        withdrawalIntent.current = null;
         setWAmount('');
         setWalletView(old => {
           if (!old?.wallet) return old;
@@ -290,6 +291,7 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
       } catch (err: any) {
         setError(err.message || 'تعذر إرسال طلب السحب.');
       } finally {
+        submitting.current = false;
         setBusy(false);
       }
     };
@@ -508,15 +510,15 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
   }
 
   /* ───────────── DEPOSIT VIEW (Screenshot 1 & 2) ───────────── */
-  const selectedCoinObj = PAYMENT_COINS.find(x => x.id === (selected?.coin ?? coin))!;
+  const selectedCoinObj = PAYMENT_COINS.find(x => x.id === (selected?.coin ?? coin));
 
   // Screenshot 1 — Deposit Details View (Step 2)
   if (step === 2 || (selected && selected.address)) {
-    const payAmountStr = selected?.payAmount ?? (amount ? `${amount}.00` : '—');
+    const payAmountStr = selected?.payAmount ?? '—';
 
     return (
       <section className="fp">
-        <Header title={t('إيداع USDT', 'Deposit USDT')} sub={t('تفاصيل التحويل', 'Transfer Details')} />
+        <Header title={t('إيداع ', 'Deposit ') + (selectedCoinObj?.label ?? '')} sub={t('تفاصيل التحويل', 'Transfer Details')} />
 
         {/* Blue Gradient Hero Card */}
         <div style={{ position: 'relative', overflow: 'hidden', borderRadius: '22px', padding: '20px', color: '#fff', background: 'radial-gradient(110% 140% at 85% 0%,#1c53d9 0%,transparent 60%),linear-gradient(135deg,#071842 0%,#0a2873 100%)', boxShadow: '0 14px 30px rgba(11,42,107,0.22)' }}>
@@ -524,25 +526,25 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
             <div>
               <small style={{ fontSize: '13px', color: '#b9cdf5' }}>{t('المبلغ المطلوب', 'Amount to send')}</small>
               <strong style={{ display: 'block', fontSize: '32px', fontWeight: 800, marginTop: '4px', fontFamily: 'Arial, sans-serif' }} dir="ltr">
-                — USDT
+                {payAmountStr} {selectedCoinObj?.label ?? ''}
               </strong>
             </div>
 
             <span style={{ background: 'rgba(255,232,184,0.15)', color: '#ffd27a', border: '1px solid rgba(255,201,93,0.4)', padding: '6px 14px', borderRadius: '99px', fontSize: '13px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
               <Clock3 size={15} />
-              {t('بانتظار التحويل', 'Awaiting Transfer')}
+              {selected ? t(...statuses[selected.status]) : t('تفاصيل الدفع غير متاحة', 'Payment details unavailable')}
             </span>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid rgba(255,255,255,0.18)', marginTop: '16px', paddingTop: '14px' }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Mark kind="usdt" size={28} />
-              <b style={{ fontSize: '16px', fontFamily: 'Arial, sans-serif' }}>USDT</b>
+              <Mark kind={selectedCoinObj?.id ?? ''} size={28} />
+              <b style={{ fontSize: '16px', fontFamily: 'Arial, sans-serif' }}>{selectedCoinObj?.label ?? '—'}</b>
             </span>
 
             <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Mark kind="usdttrc20" size={28} />
-              <span className="fp-chip" style={{ background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.25)', color: '#fff', fontSize: '12px' }} dir="ltr">TRON · TRC20</span>
+              <Mark kind={selectedCoinObj?.id ?? ''} size={28} />
+              <span className="fp-chip" style={{ background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.25)', color: '#fff', fontSize: '12px' }} dir="ltr">{selectedCoinObj?.network ?? '—'}</span>
             </span>
           </div>
         </div>
@@ -550,32 +552,33 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
         {/* Deposit QR & Address Main Card */}
         <div className="fp-card" style={{ background: '#fff', border: '1px solid var(--fp-line)', borderRadius: '22px', padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '12px' }}>
           <h2 style={{ fontSize: '18px', fontWeight: 700, margin: 0, color: 'var(--fp-ink)' }}>{t('رمز الإيداع', 'Deposit Code')}</h2>
-          <p style={{ margin: '-6px 0 0', fontSize: '13px', color: 'var(--fp-muted)' }} dir="ltr">شبكة TRON · TRC20</p>
+          <p style={{ margin: '-6px 0 0', fontSize: '13px', color: 'var(--fp-muted)' }} dir="ltr">{selectedCoinObj?.network ?? '—'}</p>
 
           <div className="fp-qr" style={{ position: 'relative', width: '200px', height: '200px', display: 'grid', placeItems: 'center', margin: '8px 0', padding: '14px' }}>
             <span className="c tl" />
             <span className="c tr" />
             <span className="c bl" />
             <span className="c br" />
-            {qr ? <img src={qr} alt="Deposit Address QR" style={{ width: '100%', height: '100%', borderRadius: '12px', background: '#fff' }} /> : <span className="orin-loader" />}
+            {qr && selected?.address ? <img src={qr} alt="Deposit Address QR" style={{ width: '100%', height: '100%', borderRadius: '12px', background: '#fff' }} /> : <span>{t('عنوان الدفع غير متاح بعد', 'Payment address not yet available')}</span>}
           </div>
 
-          <p style={{ margin: 0, fontSize: '12.5px', color: 'var(--fp-muted)' }}>{t('رمز QR توضيحي', 'Illustration QR Code')}</p>
+          <p style={{ margin: 0, fontSize: '12.5px', color: 'var(--fp-muted)' }}>{t('رمز QR لعنوان هذا الطلب فقط', 'QR code for this payment order only')}</p>
 
           <hr style={{ border: 0, borderTop: '1px solid var(--fp-line)', width: '100%', margin: '4px 0' }} />
 
           <label className="fp-label" style={{ alignSelf: 'flex-start', fontSize: '13px', color: 'var(--fp-muted)' }}>{t('عنوان الإيداع', 'Deposit Address')}</label>
           <div className="fp-address" style={{ width: '100%', background: 'var(--fp-soft)', border: '1px solid #dbe4f2', borderRadius: '14px', padding: '14px', fontFamily: 'monospace', fontSize: '14.5px', wordBreak: 'break-all', color: 'var(--fp-ink)' }} dir="ltr">
-            {selected?.address || 'TAb9uNeXzJeSWuAkiVv6d95oyZ2Jk8Qgas'}
+            {selected?.address || t('لم يصدر عنوان من مزود الدفع بعد.', 'The provider has not issued an address yet.')}
           </div>
 
-          <button type="button" className="fp-btn primary" onClick={() => copy(selected?.address || 'TAb9uNeXzJeSWuAkiVv6d95oyZ2Jk8Qgas', 'depAddr')} style={{ width: '100%', height: '50px', borderRadius: '14px', background: 'linear-gradient(180deg,#1c8cff 0%,#0064f4 100%)', color: '#fff', border: 0, fontSize: '15px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer' }}>
+          <button type="button" className="fp-btn primary" disabled={!selected?.address} onClick={() => { if (selected?.address) void copy(selected.address, 'depAddr'); }} style={{ width: '100%', height: '50px', borderRadius: '14px', background: 'linear-gradient(180deg,#1c8cff 0%,#0064f4 100%)', color: '#fff', border: 0, fontSize: '15px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer' }}>
             <Copy size={18} />
             {copied === 'depAddr' ? t('تم النسخ', 'Copied') : t('نسخ عنوان الإيداع', 'Copy Deposit Address')}
           </button>
         </div>
 
-        <Note kind="info">{t('أرسل USDT عبر شبكة TRC20 فقط', 'Send USDT on TRC20 network only')}</Note>
+        <Note kind="info">{t('أرسل فقط العملة والشبكة المحددتين لهذا الطلب: ', 'Send only the currency and network specified for this order: ')}{selectedCoinObj ? `${selectedCoinObj.label} · ${selectedCoinObj.network}` : '—'}</Note>
+        {selected && !selected.address && <button type="button" className="fp-btn outline" disabled={busy} onClick={() => void refresh(selected)}>{t('تحديث بيانات الدفع', 'Refresh payment details')}</button>}
 
         <button type="button" className="fp-btn outline" onClick={() => setStep(1)} style={{ width: '100%', height: '50px', borderRadius: '14px', background: '#fff', border: '1px solid #d5dfee', color: '#2c3e62', fontSize: '15px', fontWeight: 600, cursor: 'pointer' }}>
           {t('العودة إلى الإيداعات', 'Return to Deposits')}
@@ -628,12 +631,18 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
       <div style={{ borderRadius: '20px', padding: '18px 20px', color: '#fff', background: 'radial-gradient(110% 140% at 85% 0%,#1c53d9 0%,transparent 60%),linear-gradient(135deg,#071842 0%,#0a2873 100%)' }}>
         <small style={{ fontSize: '12.5px', color: '#b9cdf5' }}>{t('عملة الإيداع', 'Deposit Currency')}</small>
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginTop: '8px' }}>
-          <Mark kind="usdt" size={48} />
+          <Mark kind={coin} size={48} />
           <div>
-            <strong style={{ fontSize: '26px', fontWeight: 800, fontFamily: 'Arial, sans-serif', display: 'block', lineHeight: 1.1 }}>USDT</strong>
-            <span style={{ fontSize: '13.5px', color: '#b9cdf5' }}>Tether</span>
+            <strong style={{ fontSize: '26px', fontWeight: 800, fontFamily: 'Arial, sans-serif', display: 'block', lineHeight: 1.1 }}>{selectedCoinObj?.label ?? '—'}</strong>
+            <span style={{ fontSize: '13.5px', color: '#b9cdf5' }}>{selectedCoinObj ? COIN_NAMES[selectedCoinObj.label] : '—'}</span>
           </div>
         </div>
+      </div>
+
+      <div className="fp-card">
+        <label className="fp-label" htmlFor="deposit-usd-amount">{t('مبلغ الإيداع بالدولار (100–15,000)', 'Deposit amount in USD (100–15,000)')}</label>
+        <input id="deposit-usd-amount" inputMode="decimal" dir="ltr" value={amount} disabled={busy} onChange={e => setAmount(e.target.value)} aria-describedby="deposit-amount-limits" />
+        <small id="deposit-amount-limits">{t('يضاف الرصيد بعد تأكيد استلام الدفعة فقط.', 'Funds are credited only after payment receipt is confirmed.')}</small>
       </div>
 
       {/* Network Selection Options */}
@@ -642,11 +651,7 @@ export function FundingPanel({ account, kind, onBalanceChange }: { account: Trad
         <p style={{ margin: '-4px 0 6px', fontSize: '12.5px', color: 'var(--fp-muted)' }}>{t('اختر الشبكة المستخدمة في محفظتك', 'Choose the network used by your wallet')}</p>
 
         <div className="fp-options" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {[
-            { id: 'usdttrc20', name: 'TRON', network: 'TRC20', icon: 'usdttrc20' },
-            { id: 'usdtbsc', name: 'BNB Smart Chain', network: 'BEP20', icon: 'usdtbsc' },
-            { id: 'usdteth', name: 'Ethereum', network: 'ERC20', icon: 'eth' }
-          ].map(c => {
+          {PAYMENT_COINS.map(option => ({ id: option.id, name: option.label, network: option.network, icon: option.id })).map(c => {
             const on = coin === c.id;
             return (
               <button

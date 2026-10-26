@@ -1,0 +1,56 @@
+/* Transaction views only; does not alter the balance card or application identity. */
+.positions-recent{margin-top:24px;padding:17px 16px;border:1px solid var(--orin-line,#e1e9f4);border-radius:18px;background:var(--orin-surface,#fff);color:var(--orin-ink,#112347)}
+.positions-recent>header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+.positions-recent>header>div{min-width:0}
+.positions-recent h2{font-size:calc(16px * var(--ui-font-scale,1));font-weight:650;line-height:1.6;margin:0}
+.positions-recent>header p{font-size:calc(11px * var(--ui-font-scale,1));line-height:1.7;color:var(--orin-muted,#7d8ca4);margin:3px 0 0}
+.positions-recent>header>button{flex:none;min-height:36px;padding:6px 10px;border:1px solid var(--orin-line,#e1e9f4);border-radius:10px;background:transparent;color:#0788ff;font:inherit;font-size:12px;cursor:pointer}
+:is(.positions-recent,.orin-activity-screen) .activity-filters{display:flex;gap:7px;flex-wrap:wrap;margin:14px 0}
+:is(.positions-recent,.orin-activity-screen) .activity-filters button{min-height:36px;min-width:58px;padding:7px 14px;border:1px solid var(--orin-line,#e1e9f4);border-radius:10px;background:var(--orin-surface,#fff);color:var(--orin-muted,#7d8ca4);font:inherit;font-size:12px;cursor:pointer}
+:is(.positions-recent,.orin-activity-screen) .activity-filters button[aria-pressed=true]{border-color:#0788ff66;background:#0788ff0b;color:#0788ff}
+:is(.positions-recent,.orin-activity-screen) .activity-list{display:flex;flex-direction:column;gap:0;border:1px solid var(--orin-line,#e1e9f4);border-radius:14px;overflow:hidden;background:var(--orin-surface,#fff)}
+:is(.positions-recent,.orin-activity-screen) .transaction-row{display:flex;align-items:center;gap:11px;width:100%;min-width:0;min-height:86px;padding:13px 14px;border:0;border-bottom:1px solid var(--orin-line,#e1e9f4);border-radius:0;background:transparent;color:var(--orin-ink,#112347);font:inherit;text-align:start;cursor:pointer;box-sizing:border-box}
+:is(.positions-recent,.orin-activity-screen) .transaction-row:last-child{border-bottom:0}
+:is(.positions-recent,.orin-activity-screen) .transaction-row[aria-expanded=true]{background:var(--orin-surface-soft,#f5f8fc)}
+:is(.positions-recent,.orin-activity-screen) .transaction-icon{position:relative;display:grid;place-items:center;flex:none;width:38px;height:38px;border:0;border-radius:12px;background:var(--orin-surface-soft,#f5f8fc);color:var(--orin-ink,#112347)}
+:is(.positions-recent,.orin-activity-screen) .transaction-icon>svg{width:21px;height:21px;stroke-width:1.65}
+:is(.positions-recent,.orin-activity-screen) .transaction-icon.withdrawal{background:#0788ff0c;color:#0788ff}
+:is(.positions-recent,.orin-activity-screen) .transaction-icon .withdrawal-direction{position:absolute;top:4px;inset-inline-end:3px;width:13px;height:13px;padding:1px;border-radius:3px;background:var(--orin-surface,#fff);stroke-width:2}
+:is(.positions-recent,.orin-activity-screen) .transaction-copy{display:flex;flex:1;min-width:0;flex-direction:column;align-items:flex-start;gap:3px}
+:is(.positions-recent,.orin-activity-screen) .transaction-copy>b{font-size:calc(13px * var(--ui-font-scale,1));font-weight:600;line-height:1.6;overflow-wrap:anywhere}
+:is(.positions-recent,.orin-activity-screen) .transaction-copy>small{font-size:calc(10px * var(--ui-font-scale,1));line-height:1.5;color:var(--orin-muted,#7d8ca4)}
+:is(.positions-recent,.orin-activity-screen) .transaction-state{font-size:calc(10px * var(--ui-font-scale,1));font-style:normal;line-height:1.5;border-radius:7px;padding:2px 6px;background:var(--orin-surface-soft,#f5f8fc);color:var(--orin-muted,#7d8ca4)}
+:is(.positions-recent,.orin-activity-screen) .transaction-state.complete{background:#16a34a12;color:#15803d}
+:is(.positions-recent,.orin-activity-screen) .transaction-state.pending{background:#d9770612;color:#a8610c}
+:is(.positions-recent,.orin-activity-screen) .transaction-state.failed{background:#dc262610;color:#bc3535}
+:is(.positions-recent,.orin-activity-screen) .transaction-amount{display:flex;flex-direction:column;align-items:flex-end;gap:3px;max-width:40%;min-width:0;text-align:end;overflow-wrap:anywhere}
+:is(.positions-recent,.orin-activity-screen) .transaction-amount>b{font-size:calc(15px * var(--ui-font-scale,1));font-weight:650;line-height:1.4;color:var(--orin-ink,#112347)}
+:is(.positions-recent,.orin-activity-screen) .transaction-amount>small{font-size:10px;color:var(--orin-muted,#7d8ca4)}
+:is(.positions-recent,.orin-activity-screen) .transaction-chevron{flex:none;color:var(--orin-muted,#7d8ca4);transition:transform .15s}
+:is(.positions-recent,.orin-activity-screen) .transaction-row[aria-expanded=true] .transaction-chevron{transform:rotate(180deg)}
+:is(.positions-recent,.orin-activity-screen) .transaction-detail{margin:0;padding:15px;border:0;border-bottom:1px solid var(--orin-line,#e1e9f4);border-radius:0;background:var(--orin-surface-soft,#f5f8fc);color:var(--orin-ink,#112347)}
+:is(.positions-recent,.orin-activity-screen) .transaction-detail h3{margin:0 0 12px;font-size:14px;font-weight:600}
+:is(.positions-recent,.orin-activity-screen) .transaction-detail dl{display:grid;gap:0;margin:0}
+:is(.positions-recent,.orin-activity-screen) .transaction-detail dl>div{display:flex;align-items:flex-start;justify-content:space-between;gap:15px;padding:9px 0;border-bottom:1px solid var(--orin-line,#e1e9f4);font-size:11px;line-height:1.7}
+:is(.positions-recent,.orin-activity-screen) .transaction-detail dt{flex:1;min-width:0;color:var(--orin-muted,#7d8ca4)}
+:is(.positions-recent,.orin-activity-screen) .transaction-detail dd{max-width:64%;min-width:0;text-align:end;overflow-wrap:anywhere;margin:0;color:var(--orin-ink,#112347)}
+:is(.positions-recent,.orin-activity-screen) .transaction-detail .transaction-figures{margin:0 0 12px}
+:is(.positions-recent,.orin-activity-screen) .transaction-detail .transaction-figures dd{font-weight:650}
+:is(.positions-recent,.orin-activity-screen) .transaction-detail summary{margin:0;padding:12px 0;font-size:12px;cursor:pointer;color:#0788ff}
+:is(.positions-recent,.orin-activity-screen) .transaction-entry{display:flex;justify-content:space-between;gap:12px;font-size:11px;line-height:1.8;padding:5px 0;overflow-wrap:anywhere}
+:is(.positions-recent,.orin-activity-screen) .transaction-receipt-link{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:42px;margin-top:14px;padding:9px 12px;border:1px solid #0788ff44;border-radius:11px;background:var(--orin-surface,#fff);color:#0788ff;font:inherit;font-size:12px;cursor:pointer}
+:is(.positions-recent,.orin-activity-screen) .activity-notice{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin:10px 0;padding:10px 12px;border:1px solid var(--orin-line,#e1e9f4);border-radius:10px;background:var(--orin-surface-soft,#f5f8fc);font-size:11px;line-height:1.7;color:var(--orin-muted,#7d8ca4)}
+:is(.positions-recent,.orin-activity-screen) .activity-notice button{display:inline-flex;align-items:center;gap:5px;min-height:34px;border:0;background:transparent;color:#0788ff;font:inherit;cursor:pointer}
+.positions-recent .recent-transactions-empty{margin:0;padding:22px 16px;text-align:center;font-size:12px;line-height:1.8;color:var(--orin-muted,#7d8ca4)}
+.positions-hub .positions-activity{display:flex;align-items:center;gap:12px;width:100%;max-width:none;margin:14px 0 24px;padding:14px 15px;border:1px solid var(--orin-line,#e1e9f4);border-radius:16px;background:var(--orin-surface,#fff);color:var(--orin-ink,#112347);font:inherit;text-align:start;box-shadow:none}
+.positions-hub .positions-activity>.positions-activity-icon{display:grid;place-items:center;flex:none;width:41px;height:41px;border-radius:12px;background:#0788ff0c;color:#0788ff}
+.positions-hub .positions-activity>span:nth-child(2){display:grid;flex:1;min-width:0;gap:4px}
+.positions-hub .positions-activity strong{font-size:13px;font-weight:600;line-height:1.6}
+.positions-hub .positions-activity small{font-size:10px;line-height:1.6;color:var(--orin-muted,#7d8ca4)}
+.positions-hub .positions-activity>svg{flex:none;color:var(--orin-muted,#7d8ca4)}
+:is(.positions-recent,.orin-activity-screen) button:focus-visible,.positions-hub .positions-activity:focus-visible{outline:2px solid #0788ff;outline-offset:3px}
+html[data-theme=dark] :is(.positions-recent,.orin-activity-screen) .transaction-state.complete{color:#70d8a1}
+html[data-theme=dark] :is(.positions-recent,.orin-activity-screen) .transaction-state.pending{color:#f4c074}
+html[data-theme=dark] :is(.positions-recent,.orin-activity-screen) .transaction-state.failed{color:#ff9a9a}
+@media(max-width:370px){.positions-recent{padding:14px 10px}:is(.positions-recent,.orin-activity-screen) .transaction-row{gap:8px;padding:12px 10px}:is(.positions-recent,.orin-activity-screen) .transaction-icon{width:32px;height:34px}:is(.positions-recent,.orin-activity-screen) .transaction-amount>b{font-size:calc(13px * var(--ui-font-scale,1))}:is(.positions-recent,.orin-activity-screen) .transaction-detail{padding:12px}}
+@media(prefers-reduced-motion:reduce){:is(.positions-recent,.orin-activity-screen) .transaction-chevron{transition:none}}

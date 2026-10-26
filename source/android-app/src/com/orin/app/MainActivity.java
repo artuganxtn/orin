@@ -2,6 +2,7 @@ package com.orin.app;
 
 import android.app.Activity;
 import com.orin.app.security.NativeSecurity;
+import com.orin.app.security.AppLockController;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.ClipData;
@@ -43,6 +44,9 @@ public final class MainActivity extends Activity {
     private static final String HOME = "https://" + HOST + "/";
     private WebView web;
     private NativeSecurity nativeSecurity;
+    private AppLockController appLock;
+    private Bundle initialWebState;
+    private boolean webStarted;
     private ValueCallback<Uri[]> fileSelection;
     private byte[] pendingExport;
     private static final int PICK_IMAGE=1001, SAVE_EXPORT=1002;
@@ -88,6 +92,7 @@ public final class MainActivity extends Activity {
         CookieManager.getInstance().setAcceptThirdPartyCookies(web, false);
         web.setWebChromeClient(new WebChromeClient(){
             @Override public boolean onJsPrompt(WebView view,String url,String message,String value,JsPromptResult result){
+                if(appLock != null && appLock.blocksInteraction()){result.cancel();return true;}
                 if(nativeSecurity != null && nativeSecurity.handlePrompt(url,message,value,result))return true;
                 if(nativeSecurity != null && nativeSecurity.isLocked()){result.cancel();return true;}
                 if(message==null || !isLocal(Uri.parse(url)) || !message.startsWith("ORIN_"))return false;
@@ -118,7 +123,7 @@ public final class MainActivity extends Activity {
                 return false;
             }
             @Override public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback, FileChooserParams params){
-                if(nativeSecurity!=null&&nativeSecurity.isLocked()){callback.onReceiveValue(null);return true;}
+                if((appLock!=null&&appLock.blocksInteraction())||(nativeSecurity!=null&&nativeSecurity.isLocked())){callback.onReceiveValue(null);return true;}
                 if(fileSelection!=null)fileSelection.onReceiveValue(null);
                 fileSelection=callback;
                 Intent pick=new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("image/*");
@@ -154,6 +159,7 @@ public final class MainActivity extends Activity {
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 Uri url = request.getUrl();
                 if (!request.isForMainFrame()) return false;
+                if(appLock!=null&&appLock.blocksInteraction())return true;
                 if("data".equals(url.getScheme())){exportFile(url.toString());return true;}
                 if (isLocal(url) && !url.getPath().startsWith("/__/")) return false;
                 String scheme = url.getScheme();
@@ -165,7 +171,14 @@ public final class MainActivity extends Activity {
             }
         });
         nativeSecurity = new NativeSecurity(this, web, root);
-        if (savedInstanceState == null || web.restoreState(savedInstanceState) == null) web.loadUrl(HOME);
+        initialWebState = savedInstanceState;
+        appLock = new AppLockController(this, web, root, dark, savedInstanceState, () -> {
+            web.onResume();
+            if (webStarted) return;
+            webStarted = true;
+            if (initialWebState == null || web.restoreState(initialWebState) == null) web.loadUrl(HOME);
+            initialWebState = null;
+        });
     }
 
     private void applyAppearance(boolean dark){
@@ -178,7 +191,7 @@ public final class MainActivity extends Activity {
         return "https".equals(url.getScheme()) && HOST.equals(url.getHost()) && (url.getPort() == -1 || url.getPort() == 443);
     }
     private void exportFile(String url){
-        if((nativeSecurity!=null&&nativeSecurity.isLocked())||web.getUrl()==null||!isLocal(Uri.parse(web.getUrl()))||pendingExport!=null)return;
+        if((appLock!=null&&appLock.blocksInteraction())||(nativeSecurity!=null&&nativeSecurity.isLocked())||web.getUrl()==null||!isLocal(Uri.parse(web.getUrl()))||pendingExport!=null)return;
         String type=url.startsWith("data:application/pdf;")?"application/pdf":url.startsWith("data:application/json;")?"application/json":url.startsWith("data:text/csv;")?"text/csv":null;
         if(type==null||url.length()>11000000)return;
         try{int comma=url.indexOf(',');if(comma<0)return;boolean pdf=type.equals("application/pdf");
@@ -191,6 +204,12 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
+        if(appLock!=null&&appLock.onActivityResult(request,result))return;
+        if(appLock!=null&&appLock.requiresAuthentication()){
+            if(request==PICK_IMAGE&&fileSelection!=null){fileSelection.onReceiveValue(null);fileSelection=null;}
+            if(request==SAVE_EXPORT)pendingExport=null;
+            return;
+        }
         if(request==PICK_IMAGE&&fileSelection!=null){Uri selected=result==RESULT_OK&&data!=null?data.getData():null;if(selected!=null&&!"content".equals(selected.getScheme()))selected=null;fileSelection.onReceiveValue(selected==null?null:new Uri[]{selected});fileSelection=null;}
         if(request==SAVE_EXPORT){byte[] bytes=pendingExport;pendingExport=null;if(result==RESULT_OK&&data!=null&&data.getData()!=null&&bytes!=null){try(OutputStream out=getContentResolver().openOutputStream(data.getData())){if(out!=null)out.write(bytes);Toast.makeText(this,"تم حفظ الملف",Toast.LENGTH_SHORT).show();}catch(IOException error){Toast.makeText(this,"تعذر حفظ الملف",Toast.LENGTH_SHORT).show();}}}
     }
@@ -219,11 +238,13 @@ public final class MainActivity extends Activity {
         }
     }
     @Override public void onBackPressed() {
+        if(appLock != null && appLock.interceptBack())return;
         if(nativeSecurity != null && nativeSecurity.interceptBack())return;
         if (web.canGoBack()) web.goBack(); else super.onBackPressed();
     }
-    @Override protected void onSaveInstanceState(Bundle state) { web.saveState(state); super.onSaveInstanceState(state); }
-    @Override protected void onPause() { if(nativeSecurity!=null)nativeSecurity.onPause(); web.onPause(); CookieManager.getInstance().flush(); super.onPause(); }
-    @Override protected void onResume() { super.onResume(); if(nativeSecurity!=null)nativeSecurity.onResume(); if (web != null) web.onResume(); }
-    @Override protected void onDestroy() { if(nativeSecurity!=null)nativeSecurity.onDestroy(); if(fileSelection!=null){fileSelection.onReceiveValue(null);fileSelection=null;}pendingExport=null;web.destroy(); super.onDestroy(); }
+    @Override protected void onSaveInstanceState(Bundle state) { if(webStarted)web.saveState(state);else if(initialWebState!=null)state.putAll(initialWebState);if(appLock!=null)appLock.onSaveInstanceState(state);super.onSaveInstanceState(state); }
+    @Override protected void onPause() { if(appLock!=null)appLock.onPause();if(nativeSecurity!=null)nativeSecurity.onPause(); web.onPause(); CookieManager.getInstance().flush(); super.onPause(); }
+    @Override protected void onStop() { if(appLock!=null)appLock.onStop(isChangingConfigurations());super.onStop(); }
+    @Override protected void onResume() { super.onResume();if(nativeSecurity!=null)nativeSecurity.onResume();if(appLock!=null)appLock.onResume(); }
+    @Override protected void onDestroy() { if(appLock!=null)appLock.onDestroy();if(nativeSecurity!=null)nativeSecurity.onDestroy(); if(fileSelection!=null){fileSelection.onReceiveValue(null);fileSelection=null;}pendingExport=null;web.destroy(); super.onDestroy(); }
 }

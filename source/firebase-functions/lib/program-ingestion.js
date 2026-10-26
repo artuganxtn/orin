@@ -1,22 +1,10 @@
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __esm = (fn, res) => function __init() {
+  return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+};
+
 // src/db.ts
 import pg from "pg";
-var { Pool } = pg;
-var connectionString = process.env.DATABASE_URL;
-if (!connectionString) {
-  throw new Error("DATABASE_URL environment variable is required");
-}
-if (!connectionString.includes("client_encoding")) {
-  connectionString += (connectionString.includes("?") ? "&" : "?") + "client_encoding=UTF8";
-}
-var isLocal = connectionString.includes("localhost") || connectionString.includes("127.0.0.1");
-var pool = new Pool({
-  connectionString,
-  ssl: isLocal ? false : { rejectUnauthorized: false },
-  max: 8
-});
-pool.on("error", (err, _client) => {
-  console.error("Unexpected error on idle PostgreSQL client", err);
-});
 async function withTx(fn, maxRetries = 5) {
   let attempt = 0;
   while (true) {
@@ -43,11 +31,85 @@ async function withTx(fn, maxRetries = 5) {
     }
   }
 }
+var Pool, connectionString, isLocal, pool;
+var init_db = __esm({
+  "src/db.ts"() {
+    ({ Pool } = pg);
+    connectionString = process.env.DATABASE_URL;
+    if (!connectionString) {
+      throw new Error("DATABASE_URL environment variable is required");
+    }
+    if (!connectionString.includes("client_encoding")) {
+      connectionString += (connectionString.includes("?") ? "&" : "?") + "client_encoding=UTF8";
+    }
+    isLocal = connectionString.includes("localhost") || connectionString.includes("127.0.0.1");
+    pool = new Pool({
+      connectionString,
+      ssl: isLocal ? false : { rejectUnauthorized: false },
+      max: 8
+    });
+    pool.on("error", (err, _client) => {
+      console.error("Unexpected error on idle PostgreSQL client", err);
+    });
+  }
+});
+
+// src/wallet-ledger.ts
+async function loadContractWallet(client, accountId, ownerId, balanceCents, lock = true) {
+  const res = await client.query(
+    `SELECT data FROM docs WHERE collection = 'contract_wallets' AND id = $1${lock ? " FOR UPDATE" : ""}`,
+    [accountId]
+  );
+  const raw = res.rows[0]?.data;
+  const existed = !!raw?.wallet;
+  const state = existed ? { ...raw, operations: Array.isArray(raw.operations) ? raw.operations : [] } : {
+    wallet: {
+      ownerId,
+      accountId,
+      currency: "USD",
+      futuresCents: 0,
+      perpetualCents: 0,
+      version: 1,
+      updatedAt: Date.now()
+    },
+    operations: []
+  };
+  normalizeWallet(state, balanceCents);
+  return { state, existed };
+}
+function normalizeWallet(state, balanceCents) {
+  const total = Math.max(0, Number(balanceCents) || 0);
+  const perp = Math.min(total, Math.max(0, Math.trunc(Number(state.wallet.perpetualCents) || 0)));
+  state.wallet.perpetualCents = perp;
+  state.wallet.futuresCents = total - perp;
+  return state;
+}
+async function saveContractWallet(client, accountId, ownerId, state) {
+  state.wallet.version = (Number(state.wallet.version) || 1) + 1;
+  state.wallet.updatedAt = Date.now();
+  if (state.operations.length > 50) state.operations.length = 50;
+  await client.query(
+    `INSERT INTO docs (collection, id, owner_id, data, updated_at)
+     VALUES ('contract_wallets', $1, $2, $3, NOW())
+     ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+    [accountId, ownerId, JSON.stringify(state)]
+  );
+}
+async function readBalanceCents(client, accountId) {
+  const r = await client.query("SELECT balance_cents FROM accounts WHERE id = $1", [accountId]);
+  return Number(r.rows[0]?.balance_cents || 0);
+}
+var init_wallet_ledger = __esm({
+  "src/wallet-ledger.ts"() {
+  }
+});
 
 // src/program-ingestion.ts
+init_db();
 import { createHash } from "node:crypto";
 
 // src/notifications.ts
+init_db();
 import { randomUUID } from "node:crypto";
 async function createNotice(client, opts) {
   const noticeId = "notif-" + randomUUID();
@@ -91,6 +153,102 @@ async function notifyDepositCredited(client, p) {
       depositId: p.depositId
     }
   });
+}
+
+// src/program-ingestion.ts
+init_wallet_ledger();
+
+// ../lib/financial-policy.ts
+var DEPOSIT_MIN_CENTS = 1e4;
+var DEPOSIT_MAX_CENTS = 15e5;
+var LEGACY_FINANCIAL_POLICY = {
+  version: "legacy-29-day-v1",
+  depositMinCents: DEPOSIT_MIN_CENTS,
+  depositMaxCents: DEPOSIT_MAX_CENTS,
+  depositCreditPocket: "futures",
+  tradingPocket: "perpetual",
+  withdrawablePocket: "futures",
+  spotToTradingFeeRate: 0,
+  tradingToSpot: { basis: "elapsed_days", days: 29, beforeFeeRate: 0.2, afterFeeRate: 0 },
+  externalWithdrawalFeeRate: 0.05,
+  activatedAt: null,
+  automaticSpotFundingForTrades: true
+};
+var SIGNAL_FINANCIAL_POLICY = {
+  ...LEGACY_FINANCIAL_POLICY,
+  version: "signal-doubling-v1",
+  depositCreditPocket: "perpetual",
+  automaticSpotFundingForTrades: false,
+  tradingToSpot: { basis: "actual_capital_doubling", beforeFeeRate: 0.2, afterFeeRate: 0 },
+  doublingScope: "account_aggregate_new_confirmed_deposits",
+  qualifyingProfit: "account_net_realized_nonbonus_official_signal_profit_after_first_eligible_deposit",
+  exemption: "permanent_account_including_future_deposits",
+  existingFundsTreatment: "grandfathered_original_fee_rule_until_account_exemption",
+  legacyTradingToSpot: LEGACY_FINANCIAL_POLICY.tradingToSpot
+};
+
+// src/financial-policy.ts
+async function policyTimestamp(client) {
+  const result = await client.query("SELECT FLOOR(EXTRACT(EPOCH FROM clock_timestamp()) * 1000)::bigint AS now_ms");
+  const timestamp = Number(result.rows[0]?.now_ms);
+  if (!Number.isSafeInteger(timestamp) || timestamp <= 0) throw new Error("Financial event time unavailable");
+  return timestamp;
+}
+async function readPolicyRuntime(client) {
+  const r = await client.query("SELECT data FROM docs WHERE collection = 'financial_policy_configuration' AND id = 'current'");
+  const config = r.rows[0]?.data;
+  if (!config) return { activatedAt: null };
+  if (config.status === "staged" && config.activatedAt === null) return { activatedAt: null, staged: true };
+  if (config.version !== "signal-doubling-v1" || config.doublingScope !== "account_aggregate" || config.existingFundsTreatment !== "grandfathered" || config.status !== "active" || config.clientReleaseConfirmed !== true || !Number.isSafeInteger(config.activatedAt) || config.activatedAt <= 0) {
+    throw new Error("Financial policy configuration requires operator review");
+  }
+  return { activatedAt: config.activatedAt };
+}
+function policyLedger(state, runtime) {
+  const old = state.signalPolicy;
+  if (runtime.activatedAt === null) {
+    if (old) throw new Error("Cannot deactivate a funded financial policy without reconciliation");
+    return null;
+  }
+  if (old && (old.version !== "signal-doubling-v1" || old.activatedAt !== runtime.activatedAt)) throw new Error("Financial policy cutover mismatch");
+  const data = old ? { ...old, earlyFeeRemainderUnits: old.earlyFeeRemainderUnits ?? 0 } : {
+    version: "signal-doubling-v1",
+    activatedAt: runtime.activatedAt,
+    eligiblePrincipalCents: 0,
+    netSignalProfitCents: 0,
+    firstEligibleDepositAt: null,
+    permanentlyExemptAt: null,
+    policyTradingCents: 0,
+    policySpotCents: 0,
+    policyReservedCents: 0,
+    earlyFeeRemainderUnits: 0
+  };
+  for (const key2 of ["eligiblePrincipalCents", "policyTradingCents", "policySpotCents", "policyReservedCents"]) {
+    if (!Number.isSafeInteger(data[key2]) || data[key2] < 0) throw new Error("Financial policy amounts require reconciliation");
+  }
+  if (!Number.isInteger(data.earlyFeeRemainderUnits) || data.earlyFeeRemainderUnits < 0 || data.earlyFeeRemainderUnits > 4) throw new Error("Invalid early-transfer fee remainder");
+  if (!Number.isSafeInteger(data.netSignalProfitCents) || data.policyTradingCents > state.wallet.perpetualCents || data.policySpotCents > state.wallet.futuresCents) {
+    throw new Error("Wallet cohort mismatch requires reconciliation");
+  }
+  for (const timestamp of [data.firstEligibleDepositAt, data.permanentlyExemptAt]) {
+    if (timestamp !== null && (!Number.isSafeInteger(timestamp) || timestamp < runtime.activatedAt)) throw new Error("Invalid financial policy event time");
+  }
+  if (data.eligiblePrincipalCents > 0 && data.firstEligibleDepositAt === null || data.permanentlyExemptAt !== null && (data.firstEligibleDepositAt === null || data.permanentlyExemptAt < data.firstEligibleDepositAt)) {
+    throw new Error("Financial policy eligibility history requires reconciliation");
+  }
+  state.signalPolicy = data;
+  return data;
+}
+function recordEligibleDeposit(policy, amountCents, confirmedAt) {
+  const principal = policy.eligiblePrincipalCents + amountCents;
+  if (!Number.isSafeInteger(principal)) throw new Error("Eligible principal exceeds supported range");
+  policy.eligiblePrincipalCents = principal;
+  policy.policyTradingCents += amountCents;
+  policy.firstEligibleDepositAt ??= confirmedAt;
+}
+async function savePolicyEvidence(client, collection, id, ownerId, data) {
+  await client.query(`INSERT INTO docs (collection, id, owner_id, data, updated_at)
+    VALUES ($1, $2, $3, $4::jsonb, NOW())`, [collection, id, ownerId, JSON.stringify(data)]);
 }
 
 // src/program-ingestion.ts
@@ -169,15 +327,16 @@ async function recordVerifiedCustomer(uid, customerKey, eventId, idNumberLast4) 
     );
   });
 }
-async function recordConfirmedDeposit(e) {
+async function recordConfirmedDeposit(e, transactionClient) {
   key(e.eventId);
   key(e.uid);
   key(e.accountId);
   if (e.currency !== "USD" || !validMoney(e.cents) || e.cents === 0 || typeof e.eligible !== "boolean") {
     throw new ApiError("Invalid confirmed deposit");
   }
-  return withTx(async (client) => {
+  const run = async (client) => {
     const fingerprint = hash(JSON.stringify(e));
+    await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", ["deposit:" + e.eventId]);
     const evRes = await client.query("SELECT fingerprint FROM trusted_events WHERE event_id = $1", [e.eventId]);
     if (evRes.rows.length > 0) {
       if (evRes.rows[0].fingerprint !== fingerprint) throw new ApiError("Event conflict", 409);
@@ -185,7 +344,7 @@ async function recordConfirmedDeposit(e) {
     }
     const profRes = await client.query("SELECT disabled FROM profiles WHERE id = $1", [e.uid]);
     if (profRes.rows.length === 0 || profRes.rows[0].disabled) throw new ApiError("Funding account restricted", 409);
-    const accRes = await client.query("SELECT * FROM accounts WHERE user_id = $1 AND id = $2", [e.uid, e.accountId]);
+    const accRes = await client.query("SELECT * FROM accounts WHERE user_id = $1 AND id = $2 FOR UPDATE", [e.uid, e.accountId]);
     if (accRes.rows.length === 0) throw new ApiError("Invalid funding account", 409);
     const acc = accRes.rows[0];
     if (acc.type !== "real" || acc.currency !== "USD" || !validMoney(Number(acc.balance_cents) + e.cents)) {
@@ -196,6 +355,14 @@ async function recordConfirmedDeposit(e) {
     const cfgRes = await client.query("SELECT config FROM program_configuration WHERE key = 'current'");
     const cfg = cfgRes.rows[0]?.config ?? {};
     const firstDepositCents = Number(cfg.firstDepositCents ?? 1e5);
+    const runtime = await readPolicyRuntime(client);
+    const { state: walletState } = await loadContractWallet(client, e.accountId, e.uid, acc.balance_cents, true);
+    const policy = policyLedger(walletState, runtime);
+    const confirmedAt = await policyTimestamp(client);
+    const oldOrder = e.depositId ? await client.query("SELECT created_at, credited FROM deposits WHERE id = $1 AND account_id = $2 AND user_id = $3 FOR UPDATE", [e.depositId, e.accountId, e.uid]) : { rows: [] };
+    if (oldOrder.rows[0]?.credited) return;
+    const orderCreatedAt = oldOrder.rows[0]?.created_at ? new Date(oldOrder.rows[0].created_at).getTime() : confirmedAt;
+    const eligibleNewDeposit = !!policy && orderCreatedAt >= policy.activatedAt && confirmedAt >= policy.activatedAt;
     const journalId = "deposit-" + e.eventId;
     await client.query(
       `INSERT INTO journals (id, kind, reference)
@@ -210,43 +377,36 @@ async function recordConfirmedDeposit(e) {
          ($1, NULL, NULL, 'system:payment-clearing', $5)`,
       [journalId, e.uid, e.accountId, e.cents, -e.cents]
     );
-    const docRes = await client.query(
-      `SELECT data FROM docs WHERE collection = 'contract_wallets' AND id = $1 FOR UPDATE`,
-      [e.accountId]
-    );
-    let walletState = docRes.rows[0]?.data;
-    if (!walletState) {
-      walletState = {
-        wallet: {
-          ownerId: e.uid,
-          accountId: e.accountId,
-          currency: "USD",
-          futuresCents: e.cents,
-          perpetualCents: 0,
-          version: 1,
-          updatedAt: Date.now()
-        },
-        operations: []
-      };
-    } else {
-      walletState.wallet = walletState.wallet || {};
-      walletState.wallet.futuresCents = (Number(walletState.wallet.futuresCents) || 0) + e.cents;
-      walletState.wallet.version = (walletState.wallet.version || 1) + 1;
-      walletState.wallet.updatedAt = Date.now();
+    if (eligibleNewDeposit && policy) {
+      recordEligibleDeposit(policy, e.cents, confirmedAt);
+      walletState.wallet.perpetualCents += e.cents;
     }
-    await client.query(
-      `INSERT INTO docs (collection, id, data, updated_at)
-       VALUES ('contract_wallets', $1, $2, NOW())
-       ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
-      [e.accountId, JSON.stringify(walletState)]
-    );
+    const balanceAfter = await readBalanceCents(client, e.accountId);
+    walletState.wallet.futuresCents = balanceAfter - walletState.wallet.perpetualCents;
+    if (policy) {
+      await savePolicyEvidence(client, "financial_policy_deposits", e.eventId, e.uid, {
+        accountId: e.accountId,
+        depositId: e.depositId ?? null,
+        amountCents: e.cents,
+        confirmedAt,
+        orderCreatedAt,
+        eligibleNewDeposit,
+        activatedAt: policy.activatedAt
+      });
+    }
+    await saveContractWallet(client, e.accountId, e.uid, walletState);
+    if (oldOrder.rows.length > 0) {
+      await client.query("UPDATE deposits SET credited = TRUE, credited_cents = $1, status = 'finished', confirmed_at = NOW(), updated_at = NOW() WHERE id = $2", [e.cents, e.depositId]);
+      await savePolicyEvidence(client, "deposit_credit_references", e.depositId, e.uid, { accountId: e.accountId, journalId });
+    }
     await notifyDepositCredited(client, {
       userId: e.uid,
       amountCents: e.cents,
       coin: "USDT",
       depositId: e.depositId ?? e.eventId
     });
-    if (e.eligible) {
+    const qualifiesForPrograms = e.eligible && e.source !== "manual_review";
+    if (qualifiesForPrograms) {
       const qdRes = await client.query("SELECT amount_cents FROM qualified_deposits WHERE user_id = $1", [e.uid]);
       const prevAmount = qdRes.rows[0] ? Number(qdRes.rows[0].amount_cents) : 0;
       if (qdRes.rows.length === 0 || e.cents > prevAmount) {
@@ -298,7 +458,7 @@ async function recordConfirmedDeposit(e) {
     const rewRes = await client.query("SELECT * FROM referral_rewards WHERE referred_user_id = $1", [e.uid]);
     if (rewRes.rows.length > 0) {
       const reward = rewRes.rows[0];
-      const isReferralEligible = e.eligible && e.cents >= firstDepositCents && reward.status === "pending";
+      const isReferralEligible = qualifiesForPrograms && e.cents >= firstDepositCents && reward.status === "pending";
       if (isReferralEligible) {
         if (reward.referrer_user_id === e.uid) {
           await client.query(
@@ -358,7 +518,7 @@ async function recordConfirmedDeposit(e) {
       }
     }
     const memRes = await client.query("SELECT badges FROM program_members WHERE user_id = $1", [e.uid]);
-    if (memRes.rows.length > 0) {
+    if (memRes.rows.length > 0 && e.source !== "manual_review") {
       const badges = Array.isArray(memRes.rows[0].badges) ? memRes.rows[0].badges : JSON.parse(memRes.rows[0].badges || "[]");
       if (!badges.includes("first_deposit")) {
         badges.push("first_deposit");
@@ -374,14 +534,15 @@ async function recordConfirmedDeposit(e) {
        ON CONFLICT (event_id) DO NOTHING`,
       [e.eventId, e.uid, e.accountId, fingerprint, e.cents]
     );
-    const auditPayload = JSON.stringify({ eventId: e.eventId, cents: e.cents, accountId: e.accountId });
+    const auditPayload = JSON.stringify({ eventId: e.eventId, cents: e.cents, accountId: e.accountId, source: e.source ?? "provider", actorId: e.actorId ?? "provider", receiptReference: e.receiptReference ?? null });
     await client.query(
       `INSERT INTO audit (actor_id, action, reference, payload, payload_hash)
-       VALUES ('provider', 'DEPOSIT_CONFIRMED', $1, $2::jsonb, $3)
+       VALUES ($1, 'DEPOSIT_CONFIRMED', $2, $3::jsonb, $4)
        ON CONFLICT (action, reference) DO NOTHING`,
-      [e.uid, auditPayload, hash(auditPayload)]
+      [e.actorId ?? "provider", e.eventId, auditPayload, hash(auditPayload)]
     );
-  });
+  };
+  return transactionClient ? run(transactionClient) : withTx(run);
 }
 async function recordFinalBonusProfit(e) {
   key(e.eventId);

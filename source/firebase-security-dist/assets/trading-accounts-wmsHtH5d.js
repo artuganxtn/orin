@@ -1,1 +1,0 @@
-var e=e=>(e==null?void 0:e.accounts.find(t=>t.id===e.activeId))??null,t=e=>`•••• ${e.slice(-4)}`;export{t as n,e as t};

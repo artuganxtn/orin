@@ -4,6 +4,8 @@ import { getTradingAccounts } from './client-services.ts';
 import { requireVerifiedKyc } from './kyc.ts';
 import { notifyTradeOpened, notifyTradeSettled } from './notifications.ts';
 import { loadContractWallet, saveContractWallet, readBalanceCents } from './wallet-ledger.ts';
+import { readPolicyRuntime, policyLedger, cohortAmount, recordSignalResult, savePolicyEvidence, policyTimestamp } from './financial-policy.ts';
+import { proportionalCents } from '../../lib/financial-policy';
 
 export interface Identity {
   id: string;
@@ -168,6 +170,7 @@ export async function join(u: Identity, input: any, now = Date.now()) {
     const posId = hash(`position:${u.id}:${c.id}`);
 
     const useBonus = input.useBonus === true;
+    let policyPositionAllocation: { policyPrincipalCents: number; legacyPrincipalCents: number; activatedAt: number } | null = null;
     if (useBonus) {
       // Bonus wallet checks: claimed, expiry, and eligible assets
       const bRes = await client.query('SELECT * FROM bonus_wallets WHERE user_id = $1', [u.id]);
@@ -196,11 +199,16 @@ export async function join(u: Identity, input: any, now = Date.now()) {
       // seamlessly fund the needed deficit (100% free, 0% fee) so the trade never fails.
       if (acc.type === 'real') {
         const { state: wState } = await loadContractWallet(client, acc.id, u.id, acc.balance_cents, true);
+        const runtime = await readPolicyRuntime(client);
+        const policy = policyLedger(wState, runtime);
         const curPerp = wState.wallet.perpetualCents;
         let finalPerp = curPerp;
         let finalFutures = wState.wallet.futuresCents;
 
         if (curPerp < amount) {
+          if (policy) {
+            throw new ApiError('رصيد التداول غير كافٍ. حوّل المبلغ من المحفظة الفورية إلى محفظة التداول أولاً؛ التحويل مجاني. / Insufficient trading balance. Transfer from spot to trading first; the transfer is free.', 409);
+          }
           const deficit = amount - curPerp;
           if (finalFutures >= deficit) {
             // Auto-fund from Withdrawable Futures to Permanent Contracts
@@ -228,6 +236,12 @@ export async function join(u: Identity, input: any, now = Date.now()) {
           }
         }
 
+        if (policy) {
+          const policyPrincipalCents = cohortAmount(amount, wState, policy, 'trading');
+          policy.policyTradingCents -= policyPrincipalCents;
+          policy.policyReservedCents += policyPrincipalCents;
+          policyPositionAllocation = { policyPrincipalCents, legacyPrincipalCents: amount - policyPrincipalCents, activatedAt: policy.activatedAt };
+        }
         // Allocate trade amount from Permanent Contracts
         wState.wallet.perpetualCents = finalPerp - amount;
         wState.wallet.futuresCents = finalFutures;
@@ -245,6 +259,11 @@ export async function join(u: Identity, input: any, now = Date.now()) {
        VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', to_timestamp($8 / 1000.0), to_timestamp($9 / 1000.0))`,
       [posId, u.id, c.id, acc.id, amount, pnl, useBonus, now, endsAtMs]
     );
+    if (policyPositionAllocation) {
+      await savePolicyEvidence(client, 'financial_policy_positions', posId, u.id, {
+        accountId: acc.id, ...policyPositionAllocation,
+      });
+    }
 
     // 6. Insert Journal & Entries (Double-Entry Ledger)
     const jid = `allocate:${posId}`;
@@ -317,6 +336,21 @@ export async function settle(u: Identity, now = Date.now()) {
     for (const p of posRes.rows) {
       if (p.status !== 'active') continue;
 
+      // Serialize deposits, transfers, trades, withdrawals and the permanent
+      // exemption latch on the same account row, before touching its cash.
+      const accountRes = await client.query('SELECT * FROM accounts WHERE id = $1 FOR UPDATE', [p.account_id]);
+      const account = accountRes.rows[0];
+      if (!account) throw new ApiError('حساب التداول غير موجود.', 409);
+      const realCash = !p.is_bonus && account.type === 'real';
+      const walletBefore = realCash ? (await loadContractWallet(client, p.account_id, u.id, account.balance_cents, true)).state : null;
+      const runtime = realCash ? await readPolicyRuntime(client) : { activatedAt: null };
+      const policy = walletBefore ? policyLedger(walletBefore, runtime) : null;
+      const allocationRes = policy
+        ? await client.query("SELECT data FROM docs WHERE collection = 'financial_policy_positions' AND id = $1", [p.id])
+        : { rows: [] };
+      const policyPrincipalCents = Number(allocationRes.rows[0]?.data?.policyPrincipalCents ?? 0);
+      const settledAt = await policyTimestamp(client);
+
       const expected = resultCents(Number(p.amount_cents), p.settlement_bps);
       const jid = `settle:${p.id}`;
       const amountCents = Number(p.amount_cents);
@@ -324,7 +358,7 @@ export async function settle(u: Identity, now = Date.now()) {
       // Update position
       await client.query(
         `UPDATE positions SET status = 'settled', settled_at = to_timestamp($1 / 1000.0) WHERE id = $2`,
-        [now, p.id]
+        [settledAt, p.id]
       );
 
       // Receipt
@@ -342,7 +376,7 @@ export async function settle(u: Identity, now = Date.now()) {
         lockedSettlementBps: p.settlement_bps,
         resultCents: expected,
         returnedCents: amountCents + expected,
-        processedAt: now,
+        processedAt: settledAt,
       };
       const payloadStr = JSON.stringify(receipt);
       const receiptHash = hash(payloadStr);
@@ -403,16 +437,26 @@ export async function settle(u: Identity, now = Date.now()) {
       }
 
       // Return principal + P&L directly to Permanent Contracts (perpetualCents) — never to withdrawable futures.
-      if (!p.is_bonus) {
-        const accTypeRes = await client.query('SELECT type FROM accounts WHERE id = $1', [p.account_id]);
-        if (accTypeRes.rows[0]?.type === 'real') {
-          // Ledger entries above have already credited cash; read post-settlement balance.
-          const balanceAfter = await readBalanceCents(client, p.account_id);
-          const { state: wState } = await loadContractWallet(client, p.account_id, u.id, balanceAfter - (amountCents + expected), true);
-          wState.wallet.perpetualCents = wState.wallet.perpetualCents + Math.max(0, amountCents + expected);
-          wState.wallet.futuresCents = Math.max(0, balanceAfter - wState.wallet.perpetualCents);
-          await saveContractWallet(client, p.account_id, u.id, wState);
+      if (walletBefore) {
+        const balanceAfter = await readBalanceCents(client, p.account_id);
+        walletBefore.wallet.perpetualCents += Math.max(0, amountCents + expected);
+        walletBefore.wallet.futuresCents = balanceAfter - walletBefore.wallet.perpetualCents;
+        if (policy) {
+          if (!Number.isSafeInteger(policyPrincipalCents) || policyPrincipalCents < 0 || policyPrincipalCents > amountCents
+            || policy.policyReservedCents < policyPrincipalCents) throw new ApiError('Trade cohort requires reconciliation', 409);
+          const policyProfitCents = proportionalCents(expected, policyPrincipalCents, amountCents);
+          policy.policyReservedCents -= policyPrincipalCents;
+          policy.policyTradingCents += policyPrincipalCents + policyProfitCents;
+          // Every position here is an official contract/code signal, whether
+          // admin-published or scheduled. Bonus and generic cash income never enter.
+          const counted = policy.firstEligibleDepositAt !== null && settledAt >= policy.firstEligibleDepositAt;
+          recordSignalResult(policy, expected, settledAt);
+          await savePolicyEvidence(client, 'financial_policy_settlements', p.id, u.id, {
+            accountId: p.account_id, profitCents: expected, policyProfitCents, counted, settledAt,
+            permanentlyExemptAt: policy.permanentlyExemptAt,
+          });
         }
+        await saveContractWallet(client, p.account_id, u.id, walletBefore);
       }
 
       // Enhanced notification on trade settlement
@@ -703,7 +747,9 @@ export async function revokeContract(u: Identity, contractId: string, reason?: s
 
 export async function action(u: Identity, input: any, now = Date.now()) {
   const act = input?.action;
-  const effectiveNow = input?.now || now;
+  // The HTTP body is untrusted. Only the server/trusted caller controls time;
+  // a customer must not fast-forward signal settlement or fee qualification.
+  const effectiveNow = now;
   let result: any = { ok: true };
   if (act === 'publish') {
     result = await publish(u, input.contract || input, effectiveNow);

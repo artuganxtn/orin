@@ -6,3 +6,10 @@ source/firebase-functions/.pgdata/
 *.jks
 *.p12
 store-password.txt
+full-update-evidence/
+additional-builds/
+FULL-UPDATE-*.json
+FULL-UPDATE-*.md
+*.iml
+check_urls.py
+live_index.html

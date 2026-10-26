@@ -7,18 +7,20 @@ import {ensureAccountProfile} from '../firebase-web/account-service';
 import {firebaseConfig} from '../firebase-web/config';
 import {securityBackendConfigured,supportsPasskeys,loginWithPasskey,AccountSecurityError,ensureSecuritySession} from '../lib/account-security-client';
 import {useUi,readUi} from './ui';
+import {translate} from '../lib/locales';
+import {EntryLanguageSelector} from './language-selector';
 import {passwordStrength,EMAIL_RETURN_ORIGIN,validEmail} from '../lib/account-validation';
 import {apiFetch} from '../lib/client-api';
 import {AppDownloadCard} from '../app/app-download-card';
 
 export const app=initializeApp((import.meta.env.DEV||import.meta.env.MODE==='android-qa')&&import.meta.env.VITE_FIREBASE_EMULATORS==='true'?{...firebaseConfig,projectId:'demo-orin-auth',apiKey:'fake-api-key'}:firebaseConfig);
-export const auth=getAuth(app),db=null;auth.languageCode='ar';
+export const auth=getAuth(app),db=null;auth.languageCode=readUi().chartLocale;
 export {navigateTo as to} from '../lib/navigation';
 import {navigateTo as to} from '../lib/navigation';
 
 export const fail=(e:unknown)=>{
  const code=(e as {code?:string})?.code??'';
- const ar=readUi().chartLocale!=='en';
+ const locale=readUi().chartLocale;
  const messages:Record<string,[string,string]>={
   'auth/email-already-in-use':['هذا البريد مسجّل بالفعل. سجّل الدخول أو استعد كلمة المرور.','This email is already registered. Sign in or reset your password.'],
   'email-already-exists':['هذا البريد مسجّل بالفعل. سجّل الدخول أو استعد كلمة المرور.','This email is already registered. Sign in or reset your password.'],
@@ -37,7 +39,8 @@ export const fail=(e:unknown)=>{
   'delivery-unavailable':['تعذر إرسال رمز التحقق إلى بريدك الإلكتروني حاليًا. يرجى التواصل مع الدعم أو المحاولة لاحقًا.','Verification email could not be delivered right now. Please contact support or try again later.'],
   'service-unavailable':['خدمة التسجيل غير متاحة مؤقتًا. يرجى المحاولة بعد قليل.','Registration service is temporarily unavailable. Please try again shortly.']
  };
- return messages[code]?.[ar?0:1]??(ar?'تعذرت العملية. حاول مجددًا.':'The action could not be completed. Please retry.');
+ const message=messages[code]??['تعذرت العملية. حاول مجددًا.','The action could not be completed. Please retry.'];
+ return translate(locale,message[0],message[1]);
 };
 
 export type Profile={uid:string;email:string;displayName:string;role:'user'|'admin';disabled:boolean;createdAt?:{toDate:()=>Date};updatedAt?:unknown};
@@ -46,7 +49,8 @@ export const ensureProfile=(user:User)=>ensureAccountProfile(db,user);
 const invitation=()=>{try{return sessionStorage.getItem('orin-referral-code')||localStorage.getItem('orin-referral-code')||''}catch{return ''}};
 
 export function AuthForm({path,done}:{path:string;done:()=>void}){
- const {t}=useUi();
+ const {t,prefs}=useUi();
+ useEffect(()=>{auth.languageCode=prefs.chartLocale},[prefs.chartLocale]);
  const mode=path==='/register'?'register':path==='/forgot-password'?'reset':'login';
  const [email,setEmail]=useState(''),[password,setPassword]=useState(''),[confirmation,setConfirmation]=useState(''),[name,setName]=useState('');
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[sent,setSent]=useState(false),[show,setShow]=useState(false),[showConfirmation,setShowConfirmation]=useState(false);
@@ -258,6 +262,7 @@ export function AuthForm({path,done}:{path:string;done:()=>void}){
  const strength=passwordStrength(password),strengthLabels=[t('قصيرة جدًا','Too short'),t('ضعيفة','Weak'),t('مقبولة','Fair'),t('جيدة','Good'),t('قوية','Strong')];
 
  return <section className="auth orin-auth-card auth-release-154">
+  <div className="orin-auth-language"><EntryLanguageSelector/></div>
   <div className="auth-heading orin-auth-hero">
    <div className="auth-hero-art" aria-hidden="true"><img src="/brand/orin-mark.png" alt=""/></div>
    <span className="auth-eyebrow">ORIN</span>

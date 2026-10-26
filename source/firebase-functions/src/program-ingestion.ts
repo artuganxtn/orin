@@ -5,6 +5,8 @@
 import { withTx } from './db.ts';
 import { createHash } from 'node:crypto';
 import { notifyDepositCredited } from './notifications.ts';
+import { loadContractWallet, saveContractWallet, readBalanceCents } from './wallet-ledger.ts';
+import { readPolicyRuntime, policyLedger, recordEligibleDeposit, savePolicyEvidence, policyTimestamp, type PolicyClient } from './financial-policy.ts';
 
 export class ApiError extends Error {
   constructor(message: string, public status = 400) {
@@ -110,7 +112,10 @@ export async function recordConfirmedDeposit(e: {
   cents: number;
   eligible: boolean;
   depositId?: string;
-}) {
+  source?: 'manual_review';
+  actorId?: string;
+  receiptReference?: string;
+}, transactionClient?: PolicyClient) {
   key(e.eventId);
   key(e.uid);
   key(e.accountId);
@@ -118,8 +123,12 @@ export async function recordConfirmedDeposit(e: {
     throw new ApiError('Invalid confirmed deposit');
   }
 
-  return withTx(async (client) => {
+  const run = async (client: PolicyClient) => {
     const fingerprint = hash(JSON.stringify(e));
+
+    // Serialize identical provider events even if a conflicting payload names
+    // another account. The event claim and all money writes share this transaction.
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', ['deposit:' + e.eventId]);
 
     // 1. Idempotency check on trusted_events
     const evRes = await client.query('SELECT fingerprint FROM trusted_events WHERE event_id = $1', [e.eventId]);
@@ -132,7 +141,7 @@ export async function recordConfirmedDeposit(e: {
     const profRes = await client.query('SELECT disabled FROM profiles WHERE id = $1', [e.uid]);
     if (profRes.rows.length === 0 || profRes.rows[0].disabled) throw new ApiError('Funding account restricted', 409);
 
-    const accRes = await client.query('SELECT * FROM accounts WHERE user_id = $1 AND id = $2', [e.uid, e.accountId]);
+    const accRes = await client.query('SELECT * FROM accounts WHERE user_id = $1 AND id = $2 FOR UPDATE', [e.uid, e.accountId]);
     if (accRes.rows.length === 0) throw new ApiError('Invalid funding account', 409);
     const acc = accRes.rows[0];
     if (acc.type !== 'real' || acc.currency !== 'USD' || !validMoney(Number(acc.balance_cents) + e.cents)) {
@@ -146,6 +155,20 @@ export async function recordConfirmedDeposit(e: {
     const cfgRes = await client.query("SELECT config FROM program_configuration WHERE key = 'current'");
     const cfg = cfgRes.rows[0]?.config ?? {};
     const firstDepositCents = Number(cfg.firstDepositCents ?? 100000);
+
+    const runtime = await readPolicyRuntime(client);
+    const { state: walletState } = await loadContractWallet(client, e.accountId, e.uid, acc.balance_cents, true);
+    const policy = policyLedger(walletState, runtime);
+    const confirmedAt = await policyTimestamp(client);
+    const oldOrder = e.depositId
+      ? await client.query('SELECT created_at, credited FROM deposits WHERE id = $1 AND account_id = $2 AND user_id = $3 FOR UPDATE', [e.depositId, e.accountId, e.uid])
+      : { rows: [] };
+    // Provider confirmation and audited manual review share this one durable
+    // order claim. Different event IDs can never credit the same order twice.
+    if (oldOrder.rows[0]?.credited) return;
+    // Existing pending orders retain their agreed destination and fee cohort.
+    const orderCreatedAt = oldOrder.rows[0]?.created_at ? new Date(oldOrder.rows[0].created_at).getTime() : confirmedAt;
+    const eligibleNewDeposit = !!policy && orderCreatedAt >= policy.activatedAt && confirmedAt >= policy.activatedAt;
 
     // 4. Ledger insert for deposit (cash vs system:payment-clearing)
     const journalId = 'deposit-' + e.eventId;
@@ -164,37 +187,25 @@ export async function recordConfirmedDeposit(e: {
       [journalId, e.uid, e.accountId, e.cents, -e.cents]
     );
 
-    // 4b. Ensure deposit goes directly into Futures (العقود الآجلة)
-    const docRes = await client.query(
-      `SELECT data FROM docs WHERE collection = 'contract_wallets' AND id = $1 FOR UPDATE`,
-      [e.accountId]
-    );
-    let walletState = docRes.rows[0]?.data;
-    if (!walletState) {
-      walletState = {
-        wallet: {
-          ownerId: e.uid,
-          accountId: e.accountId,
-          currency: 'USD',
-          futuresCents: e.cents,
-          perpetualCents: 0,
-          version: 1,
-          updatedAt: Date.now()
-        },
-        operations: []
-      };
-    } else {
-      walletState.wallet = walletState.wallet || {};
-      walletState.wallet.futuresCents = (Number(walletState.wallet.futuresCents) || 0) + e.cents;
-      walletState.wallet.version = (walletState.wallet.version || 1) + 1;
-      walletState.wallet.updatedAt = Date.now();
+    // Only provider-confirmed, new post-cutover deposits fund trading. Historical
+    // storage names stay unchanged: perpetualCents = trading; futuresCents = spot.
+    if (eligibleNewDeposit && policy) {
+      recordEligibleDeposit(policy, e.cents, confirmedAt);
+      walletState.wallet.perpetualCents += e.cents;
     }
-    await client.query(
-      `INSERT INTO docs (collection, id, data, updated_at)
-       VALUES ('contract_wallets', $1, $2, NOW())
-       ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
-      [e.accountId, JSON.stringify(walletState)]
-    );
+    const balanceAfter = await readBalanceCents(client, e.accountId);
+    walletState.wallet.futuresCents = balanceAfter - walletState.wallet.perpetualCents;
+    if (policy) {
+      await savePolicyEvidence(client, 'financial_policy_deposits', e.eventId, e.uid, {
+        accountId: e.accountId, depositId: e.depositId ?? null, amountCents: e.cents,
+        confirmedAt, orderCreatedAt, eligibleNewDeposit, activatedAt: policy.activatedAt,
+      });
+    }
+    await saveContractWallet(client, e.accountId, e.uid, walletState);
+    if (oldOrder.rows.length > 0) {
+      await client.query("UPDATE deposits SET credited = TRUE, credited_cents = $1, status = 'finished', confirmed_at = NOW(), updated_at = NOW() WHERE id = $2", [e.cents, e.depositId]);
+      await savePolicyEvidence(client, 'deposit_credit_references', e.depositId!, e.uid, { accountId: e.accountId, journalId });
+    }
 
     // Enhanced notification on confirmed deposit
     await notifyDepositCredited(client, {
@@ -204,8 +215,11 @@ export async function recordConfirmedDeposit(e: {
       depositId: e.depositId ?? e.eventId
     });
 
+    // Preserve manual-review semantics: monetary policy principal is separate
+    // from program rewards/badges, which that legacy route never granted.
+    const qualifiesForPrograms = e.eligible && e.source !== 'manual_review';
     // 5. Qualified deposit & bonus profit unlock
-    if (e.eligible) {
+    if (qualifiesForPrograms) {
       const qdRes = await client.query('SELECT amount_cents FROM qualified_deposits WHERE user_id = $1', [e.uid]);
       const prevAmount = qdRes.rows[0] ? Number(qdRes.rows[0].amount_cents) : 0;
       if (qdRes.rows.length === 0 || e.cents > prevAmount) {
@@ -264,7 +278,7 @@ export async function recordConfirmedDeposit(e: {
     const rewRes = await client.query('SELECT * FROM referral_rewards WHERE referred_user_id = $1', [e.uid]);
     if (rewRes.rows.length > 0) {
       const reward = rewRes.rows[0];
-      const isReferralEligible = e.eligible && e.cents >= firstDepositCents && reward.status === 'pending';
+      const isReferralEligible = qualifiesForPrograms && e.cents >= firstDepositCents && reward.status === 'pending';
 
       if (isReferralEligible) {
         if (reward.referrer_user_id === e.uid) {
@@ -336,7 +350,7 @@ export async function recordConfirmedDeposit(e: {
 
     // 7. Update member badges
     const memRes = await client.query('SELECT badges FROM program_members WHERE user_id = $1', [e.uid]);
-    if (memRes.rows.length > 0) {
+    if (memRes.rows.length > 0 && e.source !== 'manual_review') {
       const badges: string[] = Array.isArray(memRes.rows[0].badges)
         ? memRes.rows[0].badges
         : JSON.parse(memRes.rows[0].badges || '[]');
@@ -357,14 +371,15 @@ export async function recordConfirmedDeposit(e: {
       [e.eventId, e.uid, e.accountId, fingerprint, e.cents]
     );
 
-    const auditPayload = JSON.stringify({ eventId: e.eventId, cents: e.cents, accountId: e.accountId });
+    const auditPayload = JSON.stringify({ eventId: e.eventId, cents: e.cents, accountId: e.accountId, source: e.source ?? 'provider', actorId: e.actorId ?? 'provider', receiptReference: e.receiptReference ?? null });
     await client.query(
       `INSERT INTO audit (actor_id, action, reference, payload, payload_hash)
-       VALUES ('provider', 'DEPOSIT_CONFIRMED', $1, $2::jsonb, $3)
+       VALUES ($1, 'DEPOSIT_CONFIRMED', $2, $3::jsonb, $4)
        ON CONFLICT (action, reference) DO NOTHING`,
-      [e.uid, auditPayload, hash(auditPayload)]
+      [e.actorId ?? 'provider', e.eventId, auditPayload, hash(auditPayload)]
     );
-  });
+  };
+  return transactionClient ? run(transactionClient) : withTx(run);
 }
 
 export async function recordFinalBonusProfit(e: {

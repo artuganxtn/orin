@@ -1,25 +1,10 @@
-// src/kyc.ts
-import { randomUUID, createHmac, createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __esm = (fn, res) => function __init() {
+  return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+};
 
 // src/db.ts
 import pg from "pg";
-var { Pool } = pg;
-var connectionString = process.env.DATABASE_URL;
-if (!connectionString) {
-  throw new Error("DATABASE_URL environment variable is required");
-}
-if (!connectionString.includes("client_encoding")) {
-  connectionString += (connectionString.includes("?") ? "&" : "?") + "client_encoding=UTF8";
-}
-var isLocal = connectionString.includes("localhost") || connectionString.includes("127.0.0.1");
-var pool = new Pool({
-  connectionString,
-  ssl: isLocal ? false : { rejectUnauthorized: false },
-  max: 8
-});
-pool.on("error", (err, _client) => {
-  console.error("Unexpected error on idle PostgreSQL client", err);
-});
 async function withTx(fn, maxRetries = 5) {
   let attempt = 0;
   while (true) {
@@ -46,9 +31,79 @@ async function withTx(fn, maxRetries = 5) {
     }
   }
 }
+var Pool, connectionString, isLocal, pool;
+var init_db = __esm({
+  "src/db.ts"() {
+    ({ Pool } = pg);
+    connectionString = process.env.DATABASE_URL;
+    if (!connectionString) {
+      throw new Error("DATABASE_URL environment variable is required");
+    }
+    if (!connectionString.includes("client_encoding")) {
+      connectionString += (connectionString.includes("?") ? "&" : "?") + "client_encoding=UTF8";
+    }
+    isLocal = connectionString.includes("localhost") || connectionString.includes("127.0.0.1");
+    pool = new Pool({
+      connectionString,
+      ssl: isLocal ? false : { rejectUnauthorized: false },
+      max: 8
+    });
+    pool.on("error", (err, _client) => {
+      console.error("Unexpected error on idle PostgreSQL client", err);
+    });
+  }
+});
+
+// src/wallet-ledger.ts
+var init_wallet_ledger = __esm({
+  "src/wallet-ledger.ts"() {
+  }
+});
+
+// src/kyc.ts
+init_db();
+import { randomUUID, createHmac, createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 
 // src/program-ingestion.ts
+init_db();
 import { createHash } from "node:crypto";
+
+// src/notifications.ts
+init_db();
+
+// src/program-ingestion.ts
+init_wallet_ledger();
+
+// ../lib/financial-policy.ts
+var DEPOSIT_MIN_CENTS = 1e4;
+var DEPOSIT_MAX_CENTS = 15e5;
+var LEGACY_FINANCIAL_POLICY = {
+  version: "legacy-29-day-v1",
+  depositMinCents: DEPOSIT_MIN_CENTS,
+  depositMaxCents: DEPOSIT_MAX_CENTS,
+  depositCreditPocket: "futures",
+  tradingPocket: "perpetual",
+  withdrawablePocket: "futures",
+  spotToTradingFeeRate: 0,
+  tradingToSpot: { basis: "elapsed_days", days: 29, beforeFeeRate: 0.2, afterFeeRate: 0 },
+  externalWithdrawalFeeRate: 0.05,
+  activatedAt: null,
+  automaticSpotFundingForTrades: true
+};
+var SIGNAL_FINANCIAL_POLICY = {
+  ...LEGACY_FINANCIAL_POLICY,
+  version: "signal-doubling-v1",
+  depositCreditPocket: "perpetual",
+  automaticSpotFundingForTrades: false,
+  tradingToSpot: { basis: "actual_capital_doubling", beforeFeeRate: 0.2, afterFeeRate: 0 },
+  doublingScope: "account_aggregate_new_confirmed_deposits",
+  qualifyingProfit: "account_net_realized_nonbonus_official_signal_profit_after_first_eligible_deposit",
+  exemption: "permanent_account_including_future_deposits",
+  existingFundsTreatment: "grandfathered_original_fee_rule_until_account_exemption",
+  legacyTradingToSpot: LEGACY_FINANCIAL_POLICY.tradingToSpot
+};
+
+// src/program-ingestion.ts
 var ApiError = class extends Error {
   constructor(message, status = 400) {
     super(message);

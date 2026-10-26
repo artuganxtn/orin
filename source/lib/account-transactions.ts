@@ -4,6 +4,11 @@ import {PAYMENT_COINS} from './payments';
 import {activeTradingAccount,type TradingAccount} from './trading-accounts';
 import {listDeposits,paymentHistoryConfigured} from './payment-client';
 
+function optionalCents(value: unknown): number | undefined {
+ const n = value === null || value === undefined || value === '' ? NaN : Number(value);
+ return Number.isSafeInteger(n) && n >= 0 ? n : undefined;
+}
+
 export type WithdrawalTransactionView = {
   id: string;
   accountId: string;
@@ -29,7 +34,7 @@ export type StatementSnapshot={
  ledger:LedgerRow[];paymentCoverage:'recent'|'unavailable'|'not-applicable';
 };
 export const transactionNames:Record<string,[string,string]>={deposit:['إيداع','Deposit'],withdrawal:['سحب','Withdrawal'],allocation:['حجز للتداول','Trading allocation'],settlement:['تسوية','Settlement'],initial:['رصيد افتتاحي تجريبي','Demo opening balance'],initialization:['رصيد افتتاحي تجريبي','Demo opening balance'],seed:['رصيد افتتاحي تجريبي','Demo opening balance'],referral:['مكافأة إحالة','Referral reward'],bonus_profit:['ربح المكافأة','Bonus profit'],test_funding:['رصيد افتتاحي تجريبي','Demo opening balance'],referral_reward:['مكافأة إحالة','Referral reward'],team_activity:['مكافأة نشاط الفريق','Team activity reward'],nonwithdrawable_bonus:['مكافأة تداول غير قابلة للسحب','Non-withdrawable trading bonus'],adjustment:['تسوية محاسبية','Adjustment']};
-export const transactionStatuses:Record<string,[string,string]>={recorded:['مسجّلة','Recorded'],creating:['جار إنشاء الطلب','Creating'],waiting:['بانتظار الدفع','Awaiting payment'],confirming:['بانتظار تأكيد الشبكة','Confirming'],confirmed:['أكدتها الشبكة','Network confirmed'],sending:['قيد المعالجة','Processing'],finished:['اكتملت لدى المزود','Provider completed'],credited:['أضيفت للرصيد','Credited'],partially_paid:['مدفوعة جزئيًا','Partially paid'],failed:['فشلت','Failed'],refunded:['أعيد المبلغ','Refunded'],expired:['انتهت صلاحيتها','Expired'],review:['قيد المراجعة','Under review'],requested:['قيد المراجعة','Under review'],approved:['معتمد','Approved'],paid:['مكتمل (مدفوع)','Completed (Paid)'],rejected:['مرفوض (مسترد)','Rejected (Refunded)']};
+export const transactionStatuses:Record<string,[string,string]>={recorded:['مسجّلة','Recorded'],creating:['جار إنشاء الطلب','Creating'],waiting:['بانتظار الدفع','Awaiting payment'],confirming:['بانتظار تأكيد الشبكة','Confirming'],confirmed:['أكدتها الشبكة','Network confirmed'],sending:['قيد المعالجة','Processing'],finished:['اكتملت لدى المزود','Provider completed'],credited:['أضيفت للرصيد','Credited'],partially_paid:['مدفوعة جزئيًا','Partially paid'],failed:['فشلت','Failed'],refunded:['أعيد المبلغ','Refunded'],expired:['انتهت صلاحيتها','Expired'],review:['قيد المراجعة','Under review'],requested:['قيد المراجعة','Under review'],approved:['معتمد','Approved'],paid:['مكتمل (مدفوع)','Completed (Paid)'],rejected:['مرفوض','Rejected']};
 export function transactionLabel(kind:string,ar=true){return transactionNames[kind]?.[ar?0:1]??kind;}
 export function transactionStatus(status:string,ar=true){return transactionStatuses[status]?.[ar?0:1]??status;}
 
@@ -38,44 +43,29 @@ export function accountLedger(state:LabState,account:TradingAccount){
  return (state.ledger ?? []).filter(row=>{const r=row as LedgerRow&{accountId?:string;account_id?:string};return (r.accountId??r.account_id??(account.type==='demo'?'primary':null))===account.id});
 }
 export function buildTransactions(state:LabState,account:TradingAccount,deposits:DepositView[],withdrawals:WithdrawalTransactionView[]=[]):AccountTransaction[]{
- const items:AccountTransaction[]=(deposits ?? []).filter(d=>d.accountId===account.id&&Number.isSafeInteger(d.amountCents)&&d.amountCents>0&&Number.isFinite(d.createdAt)).map(d=>({id:d.id,kind:'deposit',status:d.credited&&d.status==='finished'?'credited':d.status,amountCents:d.amountCents,currency:'USD',createdAt:d.createdAt,accountId:account.id,accountNumber:account.accountNumber,accountType:account.type,entries:[],deposit:d}));
+ const items:AccountTransaction[]=(deposits ?? []).filter(d=>d.accountId===account.id&&Number.isSafeInteger(d.amountCents)&&d.amountCents>0&&Number.isFinite(d.createdAt)).map(d=>({id:d.id,kind:'deposit',status:d.credited&&d.status==='finished'?'credited':d.status,amountCents:d.credited&&Number.isSafeInteger(d.creditedCents)&&Number(d.creditedCents)>0?Number(d.creditedCents):d.amountCents,currency:'USD',createdAt:d.createdAt,accountId:account.id,accountNumber:account.accountNumber,accountType:account.type,entries:[],deposit:d}));
 
- const wItems:AccountTransaction[]=(withdrawals ?? []).filter(w=>(w.accountId===account.id||!w.accountId)&&Number.isSafeInteger(w.amountCents)&&w.amountCents>0).map(w=>({id:w.id,kind:'withdrawal',status:w.status,amountCents:-w.amountCents,currency:w.currency||'USD',createdAt:w.createdAt,accountId:account.id,accountNumber:account.accountNumber,accountType:account.type,entries:[],withdrawal:w}));
+ const wItems:AccountTransaction[]=(withdrawals ?? []).filter(w=>w.accountId===account.id&&Number.isSafeInteger(w.amountCents)&&w.amountCents>0&&Number.isFinite(w.createdAt)).map(w=>({id:w.id,kind:'withdrawal',status:w.status,amountCents:-w.amountCents,currency:w.currency||'USD',createdAt:w.createdAt,accountId:account.id,accountNumber:account.accountNumber,accountType:account.type,entries:[],withdrawal:w}));
  items.push(...wItems);
 
  const journals=new Map<string,LedgerRow[]>();
  for(const row of accountLedger(state,account)){if(!Number.isSafeInteger(row.amount_cents)||!Number.isFinite(row.effective_at))continue;const rows=journals.get(row.journal_id)??[];if(!rows.some(r=>r.id===row.id))rows.push(row);journals.set(row.journal_id,rows)}
  for(const [id,entries] of journals){
-  const payment=items.find(t=>t.deposit?.paymentId&&id==='deposit-nowpayments-'+t.deposit.paymentId);
+  const payment=items.find(t=>t.deposit&&(t.deposit.creditJournalId===id||(t.deposit.paymentId&&id==='deposit-nowpayments-'+t.deposit.paymentId)));
   if(payment){payment.entries=entries;continue}
   const withdrawal=items.find(t=>t.withdrawal&&(
     id==='jnl-wd-'+t.withdrawal.id||
     id==='jnl-'+t.withdrawal.id||
     id==='j-wd-'+t.withdrawal.id||
     id===t.withdrawal.id||
-    (entries[0] as any)?.reference===t.withdrawal.id||
-    (t.id&&id.includes(t.id))||
-    (t.withdrawal.id&&id.includes(t.withdrawal.id.replace(/^wd-/, '')))||
-    (t.id&&t.id.includes(id.replace(/^jnl-wd-/, '').replace(/^jnl-/, '')))||
-    (entries[0]?.kind==='withdrawal'&&Math.abs(t.amountCents||0)===Math.abs(entries[0].amount_cents)&&Math.abs(entries[0].effective_at-t.createdAt)<300000)
+    (entries[0] as any)?.reference===t.withdrawal.id
   ));
-  if(withdrawal){withdrawal.entries=entries;continue}
+  if(withdrawal){withdrawal.entries.push(...entries);continue}
   // Use the customer leg, never the sum of a balanced journal or its clearing leg.
   const cash=(entries ?? []).filter(r=>r.account==='cash'||r.account===`user:${state.user.id}:cash`||r.account===`customer:${state.user.id}:${account.id}`);
   const amount=cash.length?cash.reduce((n,r)=>n+r.amount_cents,0):null;
-  const fallbackWd:WithdrawalTransactionView|undefined=entries[0]?.kind==='withdrawal'?{
-    id:id.startsWith('jnl-')?id.replace(/^jnl-/,''):id,
-    accountId:account.id,
-    amountCents:Math.abs(amount||entries[0].amount_cents),
-    feeCents:Math.round(Math.abs(amount||entries[0].amount_cents)*0.05),
-    netAmountCents:Math.round(Math.abs(amount||entries[0].amount_cents)*0.95),
-    coin:'usdtbsc',
-    currency:'USD',
-    address:'',
-    status:'requested',
-    createdAt:Math.min(...entries.map(r=>r.effective_at))
-  }:undefined;
-  items.push({id,kind:entries[0].kind,status:fallbackWd?'requested':'recorded',amountCents:amount!==null&&Number.isSafeInteger(amount)?amount:null,currency:account.currency,createdAt:Math.min(...entries.map(r=>r.effective_at)),accountId:account.id,accountNumber:account.accountNumber,accountType:account.type,entries,withdrawal:fallbackWd});
+  // A cash journal alone cannot prove payout status, network, fees or net amount.
+  items.push({id,kind:entries[0].kind,status:'recorded',amountCents:amount!==null&&Number.isSafeInteger(amount)?amount:null,currency:account.currency,createdAt:Math.min(...entries.map(r=>r.effective_at)),accountId:account.id,accountNumber:account.accountNumber,accountType:account.type,entries});
  }
  return items.sort((a,b)=>b.createdAt-a.createdAt||a.id.localeCompare(b.id));
 }
@@ -95,15 +85,15 @@ export async function statementSnapshot(state:LabState):Promise<StatementSnapsho
          id:w.id,
          accountId:w.account_id||w.accountId,
          amountCents:Number(w.amount_cents||w.amountCents||0),
-         feeCents:Number(w.fee_cents||w.feeCents||0),
-         netAmountCents:Number(w.net_amount_cents||w.netAmountCents||0),
-         coin:w.coin||'USDT',
+         feeCents:optionalCents(w.fee_cents??w.feeCents),
+         netAmountCents:optionalCents(w.net_amount_cents??w.netAmountCents),
+         coin:w.coin||'',
          currency:w.currency||'USD',
          address:w.address||'',
-         status:w.status||'requested',
+         status:w.status||'recorded',
          txHash:w.tx_hash||w.txHash||null,
-         createdAt:w.created_at?new Date(w.created_at).getTime():Date.now(),
-         updatedAt:w.updated_at?new Date(w.updated_at).getTime():Date.now(),
+         createdAt:w.created_at?new Date(w.created_at).getTime():Number(w.createdAt),
+         updatedAt:w.updated_at?new Date(w.updated_at).getTime():undefined,
        }));
      }
    }catch{/* Preserve statement even if withdrawals fetch fails */}
@@ -135,16 +125,15 @@ export function transactionDetails(row:AccountTransaction,ar=true):[string,strin
   [text('الترحيل إلى الرصيد','Balance credit'),d.credited?text('تم الترحيل','Credited'):text('لم يُرحّل بعد','Not credited')],
  );
  if(w){
-  const coinObj=PAYMENT_COINS.find(c=>c.id.toLowerCase()===w.coin.toLowerCase()||c.network.toLowerCase().includes(w.coin.toLowerCase()));
+  const coinObj=PAYMENT_COINS.find(c=>c.id.toLowerCase()===w.coin.toLowerCase());
   rows.push(
-   [text('مزود التحويل','Payout provider'),'ORIN Custody / Blockchain'],
-   [text('العملة والشبكة','Coin & Network'),coinObj?`${coinObj.label} · ${coinObj.network}`:w.coin],
+   [text('العملة والشبكة','Coin & Network'),coinObj?`${coinObj.label} · ${coinObj.network}`:w.coin||text('غير متاحة من الخدمة','Not provided by service')],
    [text('عنوان المحفظة المستلمة','Recipient address'),w.address||'—'],
    [text('مبلغ السحب المطلوب','Requested withdrawal'),`${(w.amountCents/100).toFixed(2)} USD`],
-   [text('رسوم السحب','Withdrawal fee'),text('0.00 USD (غير مطبقة - مجانًا)','0.00 USD (Not applicable - Free)')],
-   [text('صافي المبلغ المستلم','Net amount'),`${(w.amountCents/100).toFixed(2)} USD`],
-   [text('رمز المعاملة / إثبات السحب (TxID)','Transaction Hash / Proof (TxID)'),w.txHash?w.txHash:(row.status==='approved'?text('معتمد من الإدارة - جار الإرسال على الشبكة','Approved by admin - broadcasting'):row.status==='requested'?text('قيد المراجعة والتدقيق','Under review'):row.status==='rejected'?text('تم رفض الطلب واسترداد الرصيد إلى الحساب','Rejected - balance refunded'):text('بانتظار التأكيد','Awaiting confirmation'))],
-   [text('خصم الرصيد','Balance debit'),row.status==='rejected'?text('أُعيد المبلغ إلى الرصيد (مسترد)','Refunded to account balance'):text('تم خصم الرصيد من الحساب','Debited from account balance')]
+   [text('رسوم السحب','Withdrawal fee'),w.feeCents!==undefined?`${(w.feeCents/100).toFixed(2)} ${w.currency}`:text('غير متاحة من الخدمة','Not provided by service')],
+   [text('صافي المبلغ المستلم','Net amount'),w.netAmountCents!==undefined?`${(w.netAmountCents/100).toFixed(2)} ${w.currency}`:text('غير متاح من الخدمة','Not provided by service')],
+   [text('رمز المعاملة / إثبات السحب (TxID)','Transaction Hash / Proof (TxID)'),w.txHash||text('لم توفره الخدمة؛ الموافقة وحدها ليست إثبات دفع','Not provided; approval alone is not proof of payment')],
+   [text('قيود الرصيد','Balance entries'),row.entries.length?text('راجع القيود المرتبطة بهذه المعاملة','See the linked ledger entries'):text('غير متاحة في هذا العرض','Not available in this view')]
   );
  }
  return rows;

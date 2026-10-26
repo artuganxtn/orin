@@ -1,0 +1,34 @@
+.orin-withdrawal-receipt{position:fixed;inset:0;z-index:9999;background:#fff;overflow-y:auto;overscroll-behavior:contain;color:#0a2459;box-sizing:border-box;font-family:inherit}
+.orin-withdrawal-receipt *{box-sizing:border-box}
+.orin-withdrawal-receipt .wr-sheet{width:100%;max-width:480px;min-height:100%;margin:0 auto;padding:20px 22px max(22px,env(safe-area-inset-bottom));display:flex;flex-direction:column;background:#fff}
+.orin-withdrawal-receipt .wr-header{display:flex;align-items:center;justify-content:space-between;direction:ltr;min-height:42px;margin-bottom:28px}
+.orin-withdrawal-receipt .wr-brand{display:flex;align-items:center;gap:10px}
+.orin-withdrawal-receipt .wr-brand img{object-fit:contain}
+.orin-withdrawal-receipt .wr-brand strong{font-family:Arial,sans-serif;font-size:26px;letter-spacing:3px;font-weight:700;color:#0a2459}
+.orin-withdrawal-receipt button{font-family:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.orin-withdrawal-receipt button:focus-visible{outline:3px solid #80c4ff;outline-offset:3px}
+.orin-withdrawal-receipt .wr-back,.orin-withdrawal-receipt .wr-copy{border:0;background:transparent;color:#0788ff;display:inline-flex;align-items:center;justify-content:center;flex:none}
+.orin-withdrawal-receipt .wr-back{width:38px;height:38px}
+.orin-withdrawal-receipt .wr-copy{width:30px;height:32px;padding:3px}
+.orin-withdrawal-receipt .wr-hero{display:flex;flex-direction:column;align-items:center;text-align:center;margin-bottom:20px;gap:12px}
+.orin-withdrawal-receipt .wr-wallet{position:relative;display:grid;place-items:center;width:92px;height:92px;border-radius:50%;background:#eaf4ff;color:#0084ff;margin:0 0 2px}
+.orin-withdrawal-receipt .wr-wallet svg:last-child{position:absolute;top:15px;right:21px;background:#eaf4ff;stroke-width:2.6}
+.orin-withdrawal-receipt .wr-hero h1{font-size:18px;line-height:1.4;margin:0;font-weight:600}
+.orin-withdrawal-receipt .wr-amount{font-family:Arial,sans-serif;font-size:clamp(27px,8.3vw,38px);font-weight:800;line-height:1.2;max-width:100%;overflow-wrap:anywhere;letter-spacing:-1px}
+.orin-withdrawal-receipt .wr-status{display:inline-flex;gap:7px;align-items:center;justify-content:center;max-width:100%;border-radius:40px;padding:7px 16px;font-size:15px;font-weight:600;line-height:1.4}
+.orin-withdrawal-receipt .wr-status.paid{background:#e1f9e9;color:#0a9d36}
+.orin-withdrawal-receipt .wr-status.pending{background:#fff0d8;color:#bb7800}
+.orin-withdrawal-receipt .wr-status.rejected{background:#fff0ef;color:#ba3636}
+.orin-withdrawal-receipt .wr-hero p{color:#8591b1;font-size:14px;line-height:1.6;margin:0}
+.orin-withdrawal-receipt .wr-details{margin:0;display:flex;flex-direction:column}
+.orin-withdrawal-receipt .wr-details>div{display:flex;align-items:center;justify-content:space-between;gap:14px;min-height:54px;padding:12px 0;border-top:1px solid #edf0f7;font-size:14px;line-height:1.5}
+.orin-withdrawal-receipt .wr-details dt{margin:0;color:#8591b1;font-weight:500;flex:0 0 auto;max-width:44%}
+.orin-withdrawal-receipt .wr-details dd{margin:0;display:flex;align-items:center;gap:6px;min-width:0;max-width:68%;text-align:end;overflow-wrap:anywhere;font-weight:500;font-variant-numeric:tabular-nums}
+.orin-withdrawal-receipt .wr-net dd{color:#087fff;font-size:19px;font-weight:800}
+.orin-withdrawal-receipt .wr-expand{align-self:center;display:flex;align-items:center;gap:9px;border:0;background:none;color:#0788ff;font-size:14px;padding:17px 8px}
+.orin-withdrawal-receipt .wr-more dd{font-size:12px}
+.orin-withdrawal-receipt .wr-notice{color:#7e89a5;font-size:12px;line-height:1.6;text-align:center}
+.orin-withdrawal-receipt .wr-actions{margin-top:auto;padding-top:35px;display:flex;flex-direction:column;gap:13px}
+.orin-withdrawal-receipt .wr-primary{border:0;border-radius:14px;min-height:53px;padding:12px 16px;background:#0788ff;color:#fff;display:flex;align-items:center;justify-content:center;gap:12px;font-size:16px;font-weight:600}
+.orin-withdrawal-receipt .wr-help{display:flex;align-items:center;justify-content:center;gap:8px;min-height:38px;border:0;background:transparent;color:#0788ff;font-size:14px}
+@media(max-width:350px){.orin-withdrawal-receipt .wr-sheet{padding-inline:15px}.orin-withdrawal-receipt .wr-details>div{font-size:12px;gap:8px}.orin-withdrawal-receipt .wr-amount{font-size:29px}}

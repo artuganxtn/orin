@@ -4,6 +4,7 @@ import { NowPayments, providerId, units, validIpn } from './nowpayments.ts';
 import { PAYMENT_COINS, type DepositView, type DepositStatus } from '../../lib/payments';
 import { createHash } from 'node:crypto';
 import { requireVerifiedKyc } from './kyc.ts';
+import { isNewDepositAmount } from '../../lib/financial-policy';
 
 export type Data = Record<string, any>;
 export interface Identity {
@@ -37,6 +38,8 @@ const depositView = (d: Data): DepositView => ({
   payAmount: d.pay_amount ? String(d.pay_amount) : (d.payAmount ? String(d.payAmount) : null),
   extraId: d.extra_id ?? d.extraId ?? null,
   credited: !!d.credited,
+  creditedCents: Number.isSafeInteger(Number(d.credited_cents)) && d.credited_cents != null ? Number(d.credited_cents) : undefined,
+  creditJournalId: typeof d.credit_journal_id === 'string' ? d.credit_journal_id : undefined,
   createdAt: d.created_at ? new Date(d.created_at).getTime() : d.createdAt
 });
 
@@ -52,11 +55,10 @@ export function paymentService(provider: Pick<NowPayments, 'create' | 'get'>, ip
     if (
       Object.keys(input).some(k => !['accountId', 'requestId', 'amountCents', 'coin'].includes(k)) ||
       !Number.isSafeInteger(amountCents) ||
-      amountCents < 100000 ||
-      amountCents > 10000000 ||
+      amountCents <= 0 ||
       !PAYMENT_COINS.some(c => c.id === coin)
     ) {
-      throw new ApiError('الحد الأدنى للإيداع 1,000 دولار أمريكي. تحقق من المبلغ والعملة.');
+      throw new ApiError('تحقق من مبلغ الإيداع والعملة. / Check the deposit amount and currency.');
     }
 
     const id = 'np-' + hash(u.id + ':' + requestId);
@@ -86,6 +88,12 @@ export function paymentService(provider: Pick<NowPayments, 'create' | 'get'>, ip
           throw new ApiError('تغيّرت تفاصيل طلب الدفع. افتح طلبًا جديدًا.', 409);
         }
         return old;
+      }
+
+      // Prospective limit only: retries of existing orders above have kept their
+      // original terms. Provider reconciliation/confirmed credits are unchanged.
+      if (!isNewDepositAmount(amountCents)) {
+        throw new ApiError('مبلغ الإيداع الجديد يجب أن يكون بين 100 و15,000 دولار أمريكي. / New deposits must be between $100 and $15,000 USD.');
       }
 
       // 4. Rate limiting (window 30 min, max 5)
@@ -261,12 +269,8 @@ export function paymentService(provider: Pick<NowPayments, 'create' | 'get'>, ip
         depositId: safeOrderId
       });
 
-      await withTx(async (client) => {
-        await client.query(
-          "UPDATE deposits SET status = 'finished', credited = true, credited_cents = $1, confirmed_at = NOW(), updated_at = NOW() WHERE id = $2",
-          [creditedCents, safeOrderId]
-        );
-      });
+      // The authoritative credit updates the order inside its ledger transaction.
+      // Do not overwrite a prior audited manual credit with a later provider amount.
     }
   }
 
@@ -303,7 +307,9 @@ export function paymentService(provider: Pick<NowPayments, 'create' | 'get'>, ip
       if (accRes.rows.length === 0) return [];
 
       const depRes = await client.query(
-        'SELECT * FROM deposits WHERE user_id = $1 AND account_id = $2 ORDER BY created_at DESC LIMIT 20',
+        `SELECT d.*, ref.data->>'journalId' AS credit_journal_id
+         FROM deposits d LEFT JOIN docs ref ON ref.collection = 'deposit_credit_references' AND ref.id = d.id AND ref.owner_id = d.user_id
+         WHERE d.user_id = $1 AND d.account_id = $2 ORDER BY d.created_at DESC LIMIT 20`,
         [u.id, accountId]
       );
       return depRes.rows.map(depositView);

@@ -54,6 +54,176 @@ var init_db = __esm({
   }
 });
 
+// src/wallet-ledger.ts
+async function loadContractWallet(client, accountId, ownerId, balanceCents, lock = true) {
+  const res = await client.query(
+    `SELECT data FROM docs WHERE collection = 'contract_wallets' AND id = $1${lock ? " FOR UPDATE" : ""}`,
+    [accountId]
+  );
+  const raw = res.rows[0]?.data;
+  const existed = !!raw?.wallet;
+  const state2 = existed ? { ...raw, operations: Array.isArray(raw.operations) ? raw.operations : [] } : {
+    wallet: {
+      ownerId,
+      accountId,
+      currency: "USD",
+      futuresCents: 0,
+      perpetualCents: 0,
+      version: 1,
+      updatedAt: Date.now()
+    },
+    operations: []
+  };
+  normalizeWallet(state2, balanceCents);
+  return { state: state2, existed };
+}
+function normalizeWallet(state2, balanceCents) {
+  const total = Math.max(0, Number(balanceCents) || 0);
+  const perp = Math.min(total, Math.max(0, Math.trunc(Number(state2.wallet.perpetualCents) || 0)));
+  state2.wallet.perpetualCents = perp;
+  state2.wallet.futuresCents = total - perp;
+  return state2;
+}
+async function saveContractWallet(client, accountId, ownerId, state2) {
+  state2.wallet.version = (Number(state2.wallet.version) || 1) + 1;
+  state2.wallet.updatedAt = Date.now();
+  if (state2.operations.length > 50) state2.operations.length = 50;
+  await client.query(
+    `INSERT INTO docs (collection, id, owner_id, data, updated_at)
+     VALUES ('contract_wallets', $1, $2, $3, NOW())
+     ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+    [accountId, ownerId, JSON.stringify(state2)]
+  );
+}
+async function readBalanceCents(client, accountId) {
+  const r = await client.query("SELECT balance_cents FROM accounts WHERE id = $1", [accountId]);
+  return Number(r.rows[0]?.balance_cents || 0);
+}
+var init_wallet_ledger = __esm({
+  "src/wallet-ledger.ts"() {
+  }
+});
+
+// ../lib/financial-policy.ts
+function proportionalCents(amountCents, cohortCents, totalCents) {
+  if (![amountCents, cohortCents, totalCents].every(Number.isSafeInteger) || cohortCents < 0 || totalCents < 0 || cohortCents > totalCents) throw new Error("Invalid cohort allocation");
+  if (!totalCents) {
+    if (amountCents !== 0) throw new Error("Cannot allocate from an empty wallet");
+    return 0;
+  }
+  return Number(BigInt(amountCents) * BigInt(cohortCents) / BigInt(totalCents));
+}
+var DEPOSIT_MIN_CENTS, DEPOSIT_MAX_CENTS, LEGACY_FINANCIAL_POLICY, SIGNAL_FINANCIAL_POLICY;
+var init_financial_policy = __esm({
+  "../lib/financial-policy.ts"() {
+    "use strict";
+    DEPOSIT_MIN_CENTS = 1e4;
+    DEPOSIT_MAX_CENTS = 15e5;
+    LEGACY_FINANCIAL_POLICY = {
+      version: "legacy-29-day-v1",
+      depositMinCents: DEPOSIT_MIN_CENTS,
+      depositMaxCents: DEPOSIT_MAX_CENTS,
+      depositCreditPocket: "futures",
+      tradingPocket: "perpetual",
+      withdrawablePocket: "futures",
+      spotToTradingFeeRate: 0,
+      tradingToSpot: { basis: "elapsed_days", days: 29, beforeFeeRate: 0.2, afterFeeRate: 0 },
+      externalWithdrawalFeeRate: 0.05,
+      activatedAt: null,
+      automaticSpotFundingForTrades: true
+    };
+    SIGNAL_FINANCIAL_POLICY = {
+      ...LEGACY_FINANCIAL_POLICY,
+      version: "signal-doubling-v1",
+      depositCreditPocket: "perpetual",
+      automaticSpotFundingForTrades: false,
+      tradingToSpot: { basis: "actual_capital_doubling", beforeFeeRate: 0.2, afterFeeRate: 0 },
+      doublingScope: "account_aggregate_new_confirmed_deposits",
+      qualifyingProfit: "account_net_realized_nonbonus_official_signal_profit_after_first_eligible_deposit",
+      exemption: "permanent_account_including_future_deposits",
+      existingFundsTreatment: "grandfathered_original_fee_rule_until_account_exemption",
+      legacyTradingToSpot: LEGACY_FINANCIAL_POLICY.tradingToSpot
+    };
+  }
+});
+
+// src/financial-policy.ts
+async function policyTimestamp(client) {
+  const result = await client.query("SELECT FLOOR(EXTRACT(EPOCH FROM clock_timestamp()) * 1000)::bigint AS now_ms");
+  const timestamp = Number(result.rows[0]?.now_ms);
+  if (!Number.isSafeInteger(timestamp) || timestamp <= 0) throw new Error("Financial event time unavailable");
+  return timestamp;
+}
+async function readPolicyRuntime(client) {
+  const r = await client.query("SELECT data FROM docs WHERE collection = 'financial_policy_configuration' AND id = 'current'");
+  const config = r.rows[0]?.data;
+  if (!config) return { activatedAt: null };
+  if (config.status === "staged" && config.activatedAt === null) return { activatedAt: null, staged: true };
+  if (config.version !== "signal-doubling-v1" || config.doublingScope !== "account_aggregate" || config.existingFundsTreatment !== "grandfathered" || config.status !== "active" || config.clientReleaseConfirmed !== true || !Number.isSafeInteger(config.activatedAt) || config.activatedAt <= 0) {
+    throw new Error("Financial policy configuration requires operator review");
+  }
+  return { activatedAt: config.activatedAt };
+}
+function policyLedger(state2, runtime) {
+  const old = state2.signalPolicy;
+  if (runtime.activatedAt === null) {
+    if (old) throw new Error("Cannot deactivate a funded financial policy without reconciliation");
+    return null;
+  }
+  if (old && (old.version !== "signal-doubling-v1" || old.activatedAt !== runtime.activatedAt)) throw new Error("Financial policy cutover mismatch");
+  const data = old ? { ...old, earlyFeeRemainderUnits: old.earlyFeeRemainderUnits ?? 0 } : {
+    version: "signal-doubling-v1",
+    activatedAt: runtime.activatedAt,
+    eligiblePrincipalCents: 0,
+    netSignalProfitCents: 0,
+    firstEligibleDepositAt: null,
+    permanentlyExemptAt: null,
+    policyTradingCents: 0,
+    policySpotCents: 0,
+    policyReservedCents: 0,
+    earlyFeeRemainderUnits: 0
+  };
+  for (const key of ["eligiblePrincipalCents", "policyTradingCents", "policySpotCents", "policyReservedCents"]) {
+    if (!Number.isSafeInteger(data[key]) || data[key] < 0) throw new Error("Financial policy amounts require reconciliation");
+  }
+  if (!Number.isInteger(data.earlyFeeRemainderUnits) || data.earlyFeeRemainderUnits < 0 || data.earlyFeeRemainderUnits > 4) throw new Error("Invalid early-transfer fee remainder");
+  if (!Number.isSafeInteger(data.netSignalProfitCents) || data.policyTradingCents > state2.wallet.perpetualCents || data.policySpotCents > state2.wallet.futuresCents) {
+    throw new Error("Wallet cohort mismatch requires reconciliation");
+  }
+  for (const timestamp of [data.firstEligibleDepositAt, data.permanentlyExemptAt]) {
+    if (timestamp !== null && (!Number.isSafeInteger(timestamp) || timestamp < runtime.activatedAt)) throw new Error("Invalid financial policy event time");
+  }
+  if (data.eligiblePrincipalCents > 0 && data.firstEligibleDepositAt === null || data.permanentlyExemptAt !== null && (data.firstEligibleDepositAt === null || data.permanentlyExemptAt < data.firstEligibleDepositAt)) {
+    throw new Error("Financial policy eligibility history requires reconciliation");
+  }
+  state2.signalPolicy = data;
+  return data;
+}
+function cohortAmount(amountCents, state2, policy, pocket) {
+  const total = pocket === "trading" ? state2.wallet.perpetualCents : state2.wallet.futuresCents;
+  const cohort = policy ? pocket === "trading" ? policy.policyTradingCents : policy.policySpotCents : 0;
+  return proportionalCents(amountCents, cohort, total);
+}
+function recordSignalResult(policy, profitCents, settledAt) {
+  if (policy.firstEligibleDepositAt === null || settledAt < policy.firstEligibleDepositAt) return;
+  const profit = policy.netSignalProfitCents + profitCents;
+  if (!Number.isSafeInteger(profit)) throw new Error("Signal profit exceeds supported range");
+  policy.netSignalProfitCents = profit;
+  if (policy.permanentlyExemptAt === null && policy.eligiblePrincipalCents > 0 && profit >= policy.eligiblePrincipalCents) {
+    policy.permanentlyExemptAt = settledAt;
+    policy.earlyFeeRemainderUnits = 0;
+  }
+}
+async function savePolicyEvidence(client, collection, id, ownerId, data) {
+  await client.query(`INSERT INTO docs (collection, id, owner_id, data, updated_at)
+    VALUES ($1, $2, $3, $4::jsonb, NOW())`, [collection, id, ownerId, JSON.stringify(data)]);
+}
+var init_financial_policy2 = __esm({
+  "src/financial-policy.ts"() {
+    init_financial_policy();
+  }
+});
+
 // src/contracts.ts
 init_db();
 import { createHash, randomUUID as randomUUID2 } from "node:crypto";
@@ -133,53 +303,10 @@ async function notifyTradeSettled(client, p) {
   });
 }
 
-// src/wallet-ledger.ts
-async function loadContractWallet(client, accountId, ownerId, balanceCents, lock = true) {
-  const res = await client.query(
-    `SELECT data FROM docs WHERE collection = 'contract_wallets' AND id = $1${lock ? " FOR UPDATE" : ""}`,
-    [accountId]
-  );
-  const raw = res.rows[0]?.data;
-  const existed = !!raw?.wallet;
-  const state2 = existed ? { ...raw, operations: Array.isArray(raw.operations) ? raw.operations : [] } : {
-    wallet: {
-      ownerId,
-      accountId,
-      currency: "USD",
-      futuresCents: 0,
-      perpetualCents: 0,
-      version: 1,
-      updatedAt: Date.now()
-    },
-    operations: []
-  };
-  normalizeWallet(state2, balanceCents);
-  return { state: state2, existed };
-}
-function normalizeWallet(state2, balanceCents) {
-  const total = Math.max(0, Number(balanceCents) || 0);
-  const perp = Math.min(total, Math.max(0, Math.trunc(Number(state2.wallet.perpetualCents) || 0)));
-  state2.wallet.perpetualCents = perp;
-  state2.wallet.futuresCents = total - perp;
-  return state2;
-}
-async function saveContractWallet(client, accountId, ownerId, state2) {
-  state2.wallet.version = (Number(state2.wallet.version) || 1) + 1;
-  state2.wallet.updatedAt = Date.now();
-  if (state2.operations.length > 50) state2.operations.length = 50;
-  await client.query(
-    `INSERT INTO docs (collection, id, owner_id, data, updated_at)
-     VALUES ('contract_wallets', $1, $2, $3, NOW())
-     ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
-    [accountId, ownerId, JSON.stringify(state2)]
-  );
-}
-async function readBalanceCents(client, accountId) {
-  const r = await client.query("SELECT balance_cents FROM accounts WHERE id = $1", [accountId]);
-  return Number(r.rows[0]?.balance_cents || 0);
-}
-
 // src/client-services.ts
+init_wallet_ledger();
+init_financial_policy2();
+init_financial_policy();
 async function getTradingAccounts(user, dbClient) {
   const run = async (client) => {
     const accRes = await client.query(
@@ -235,6 +362,9 @@ async function getTradingAccounts(user, dbClient) {
 }
 
 // src/contracts.ts
+init_wallet_ledger();
+init_financial_policy2();
+init_financial_policy();
 function hash(data) {
   return createHash("sha256").update(data).digest("hex");
 }
@@ -365,6 +495,7 @@ async function join(u, input, now = Date.now()) {
     }
     const posId = hash(`position:${u.id}:${c.id}`);
     const useBonus = input.useBonus === true;
+    let policyPositionAllocation = null;
     if (useBonus) {
       const bRes = await client.query("SELECT * FROM bonus_wallets WHERE user_id = $1", [u.id]);
       if (bRes.rows.length === 0 || !bRes.rows[0].claimed) {
@@ -387,10 +518,15 @@ async function join(u, input, now = Date.now()) {
       }
       if (acc.type === "real") {
         const { state: wState } = await loadContractWallet(client, acc.id, u.id, acc.balance_cents, true);
+        const runtime = await readPolicyRuntime(client);
+        const policy = policyLedger(wState, runtime);
         const curPerp = wState.wallet.perpetualCents;
         let finalPerp = curPerp;
         let finalFutures = wState.wallet.futuresCents;
         if (curPerp < amount) {
+          if (policy) {
+            throw new ApiError("\u0631\u0635\u064A\u062F \u0627\u0644\u062A\u062F\u0627\u0648\u0644 \u063A\u064A\u0631 \u0643\u0627\u0641\u064D. \u062D\u0648\u0651\u0644 \u0627\u0644\u0645\u0628\u0644\u063A \u0645\u0646 \u0627\u0644\u0645\u062D\u0641\u0638\u0629 \u0627\u0644\u0641\u0648\u0631\u064A\u0629 \u0625\u0644\u0649 \u0645\u062D\u0641\u0638\u0629 \u0627\u0644\u062A\u062F\u0627\u0648\u0644 \u0623\u0648\u0644\u0627\u064B\u061B \u0627\u0644\u062A\u062D\u0648\u064A\u0644 \u0645\u062C\u0627\u0646\u064A. / Insufficient trading balance. Transfer from spot to trading first; the transfer is free.", 409);
+          }
           const deficit = amount - curPerp;
           if (finalFutures >= deficit) {
             finalPerp += deficit;
@@ -416,6 +552,12 @@ async function join(u, input, now = Date.now()) {
             );
           }
         }
+        if (policy) {
+          const policyPrincipalCents = cohortAmount(amount, wState, policy, "trading");
+          policy.policyTradingCents -= policyPrincipalCents;
+          policy.policyReservedCents += policyPrincipalCents;
+          policyPositionAllocation = { policyPrincipalCents, legacyPrincipalCents: amount - policyPrincipalCents, activatedAt: policy.activatedAt };
+        }
         wState.wallet.perpetualCents = finalPerp - amount;
         wState.wallet.futuresCents = finalFutures;
         await saveContractWallet(client, acc.id, u.id, wState);
@@ -429,6 +571,12 @@ async function join(u, input, now = Date.now()) {
        VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', to_timestamp($8 / 1000.0), to_timestamp($9 / 1000.0))`,
       [posId, u.id, c.id, acc.id, amount, pnl, useBonus, now, endsAtMs]
     );
+    if (policyPositionAllocation) {
+      await savePolicyEvidence(client, "financial_policy_positions", posId, u.id, {
+        accountId: acc.id,
+        ...policyPositionAllocation
+      });
+    }
     const jid = `allocate:${posId}`;
     const kind = useBonus ? "bonus_allocation" : "allocation";
     await client.query(
@@ -489,12 +637,22 @@ async function settle(u, now = Date.now()) {
     const settledResults = [];
     for (const p of posRes.rows) {
       if (p.status !== "active") continue;
+      const accountRes = await client.query("SELECT * FROM accounts WHERE id = $1 FOR UPDATE", [p.account_id]);
+      const account = accountRes.rows[0];
+      if (!account) throw new ApiError("\u062D\u0633\u0627\u0628 \u0627\u0644\u062A\u062F\u0627\u0648\u0644 \u063A\u064A\u0631 \u0645\u0648\u062C\u0648\u062F.", 409);
+      const realCash = !p.is_bonus && account.type === "real";
+      const walletBefore = realCash ? (await loadContractWallet(client, p.account_id, u.id, account.balance_cents, true)).state : null;
+      const runtime = realCash ? await readPolicyRuntime(client) : { activatedAt: null };
+      const policy = walletBefore ? policyLedger(walletBefore, runtime) : null;
+      const allocationRes = policy ? await client.query("SELECT data FROM docs WHERE collection = 'financial_policy_positions' AND id = $1", [p.id]) : { rows: [] };
+      const policyPrincipalCents = Number(allocationRes.rows[0]?.data?.policyPrincipalCents ?? 0);
+      const settledAt = await policyTimestamp(client);
       const expected = resultCents(Number(p.amount_cents), p.settlement_bps);
       const jid = `settle:${p.id}`;
       const amountCents = Number(p.amount_cents);
       await client.query(
         `UPDATE positions SET status = 'settled', settled_at = to_timestamp($1 / 1000.0) WHERE id = $2`,
-        [now, p.id]
+        [settledAt, p.id]
       );
       const receipt = {
         version: 1,
@@ -510,7 +668,7 @@ async function settle(u, now = Date.now()) {
         lockedSettlementBps: p.settlement_bps,
         resultCents: expected,
         returnedCents: amountCents + expected,
-        processedAt: now
+        processedAt: settledAt
       };
       const payloadStr = JSON.stringify(receipt);
       const receiptHash = hash(payloadStr);
@@ -564,15 +722,27 @@ async function settle(u, now = Date.now()) {
           [jid, u.id, p.account_id, -amountCents, amountCents + expected, -expected]
         );
       }
-      if (!p.is_bonus) {
-        const accTypeRes = await client.query("SELECT type FROM accounts WHERE id = $1", [p.account_id]);
-        if (accTypeRes.rows[0]?.type === "real") {
-          const balanceAfter = await readBalanceCents(client, p.account_id);
-          const { state: wState } = await loadContractWallet(client, p.account_id, u.id, balanceAfter - (amountCents + expected), true);
-          wState.wallet.perpetualCents = wState.wallet.perpetualCents + Math.max(0, amountCents + expected);
-          wState.wallet.futuresCents = Math.max(0, balanceAfter - wState.wallet.perpetualCents);
-          await saveContractWallet(client, p.account_id, u.id, wState);
+      if (walletBefore) {
+        const balanceAfter = await readBalanceCents(client, p.account_id);
+        walletBefore.wallet.perpetualCents += Math.max(0, amountCents + expected);
+        walletBefore.wallet.futuresCents = balanceAfter - walletBefore.wallet.perpetualCents;
+        if (policy) {
+          if (!Number.isSafeInteger(policyPrincipalCents) || policyPrincipalCents < 0 || policyPrincipalCents > amountCents || policy.policyReservedCents < policyPrincipalCents) throw new ApiError("Trade cohort requires reconciliation", 409);
+          const policyProfitCents = proportionalCents(expected, policyPrincipalCents, amountCents);
+          policy.policyReservedCents -= policyPrincipalCents;
+          policy.policyTradingCents += policyPrincipalCents + policyProfitCents;
+          const counted = policy.firstEligibleDepositAt !== null && settledAt >= policy.firstEligibleDepositAt;
+          recordSignalResult(policy, expected, settledAt);
+          await savePolicyEvidence(client, "financial_policy_settlements", p.id, u.id, {
+            accountId: p.account_id,
+            profitCents: expected,
+            policyProfitCents,
+            counted,
+            settledAt,
+            permanentlyExemptAt: policy.permanentlyExemptAt
+          });
         }
+        await saveContractWallet(client, p.account_id, u.id, walletBefore);
       }
       await notifyTradeSettled(client, {
         userId: u.id,
@@ -843,7 +1013,7 @@ async function revokeContract(u, contractId, reason, effectiveNow = Date.now()) 
 }
 async function action(u, input, now = Date.now()) {
   const act = input?.action;
-  const effectiveNow = input?.now || now;
+  const effectiveNow = now;
   let result = { ok: true };
   if (act === "publish") {
     result = await publish(u, input.contract || input, effectiveNow);
