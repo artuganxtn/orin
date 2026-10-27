@@ -1,5 +1,6 @@
 import {diagnostic} from './diagnostics';
 import {hasNativeFeed} from './live-market';
+import {getApiUrl} from './client-api';
 
 /** A ticker is independent of chart history and chart interval. Never mix exchanges in one snapshot. */
 export interface MarketQuote {
@@ -27,7 +28,7 @@ export function decodeQuote(pair:string,raw:Record<string,unknown>,provider:'coi
 }
 const cache=new Map<string,{expires:number;promise:Promise<MarketQuote>}>();
 async function request(pair:string,provider:'coinbase'|'bitstamp'|'internal',controller:AbortController){
- const url=provider==='internal'?`/api/market/quote?pair=${encodeURIComponent(pair)}`:provider==='coinbase'?`https://api.exchange.coinbase.com/products/${pair}/stats`:`https://www.bitstamp.net/api/v2/ticker/${pair.replace('-','').toLowerCase()}/`;
+ const url=provider==='internal'?getApiUrl(`/api/market/quote?pair=${encodeURIComponent(pair)}`):provider==='coinbase'?`https://api.exchange.coinbase.com/products/${pair}/stats`:`https://www.bitstamp.net/api/v2/ticker/${pair.replace('-','').toLowerCase()}/`;
  const timer=setTimeout(()=>controller.abort(),5000);let status=0;
  try{
   const response=await fetch(url,{signal:controller.signal,credentials:'omit',headers:{Accept:'application/json'}});status=response.status;

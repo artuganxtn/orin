@@ -1,5 +1,6 @@
 import {hasNativeFeed} from './live-market';
 import {diagnostic} from './diagnostics';
+import {getApiUrl} from './client-api';
 import type {QuotePoint} from './quote-stream';
 export const MINI_INTERVAL=15*60*1000;
 export const MINI_WINDOW=24*60*60*1000;
@@ -80,7 +81,7 @@ export class MiniHistoryLoader{
     const controller=new AbortController();let timer:ReturnType<typeof setTimeout>;
     const timeout=new Promise<never>((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(new Error('History request timed out'))},MINI_TIMEOUT)});
     try{
-     const response=await Promise.race([this.request(`/api/market/candles?pair=${encodeURIComponent(pair)}`,{signal:controller.signal,credentials:'omit',headers:{Accept:'application/json'}}),timeout]);
+     const response=await Promise.race([this.request(getApiUrl(`/api/market/candles?pair=${encodeURIComponent(pair)}`),{signal:controller.signal,credentials:'omit',headers:{Accept:'application/json'}}),timeout]);
      if(!response.ok)throw new Error('HTTP '+response.status);
      const json=await Promise.race([response.json(),timeout]) as any;
      if(!json||!Array.isArray(json.points)||json.points.length<72)throw new Error('Insufficient internal history');

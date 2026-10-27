@@ -1,4 +1,5 @@
 import {diagnostic} from './diagnostics';
+import {getApiUrl} from './client-api';
 import type {Candle,MarketData} from './contracts';
 export const NATIVE_PAIRS=['BTC-USD','ETH-USD','XRP-USD','SOL-USD','DOGE-USD','ADA-USD'] as const;
 export function hasNativeFeed(pair:string){return (NATIVE_PAIRS as readonly string[]).includes(pair)}
@@ -25,7 +26,7 @@ export function loadMarket(pair:string,frame:string):Promise<MarketData>{
     res=await fetch('https://api.exchange.coinbase.com/products/'+pair+path,{signal:controller.signal,credentials:'omit',headers:{Accept:'application/json'}});
     if(!res.ok)throw new Error('HTTP '+res.status);
    }catch{
-    res=await fetch('/api/market/proxy?pair='+encodeURIComponent(pair)+'&endpoint='+encodeURIComponent(path),{signal:controller.signal,credentials:'omit',headers:{Accept:'application/json'}});
+    res=await fetch(getApiUrl('/api/market/proxy?pair='+encodeURIComponent(pair))+'&endpoint='+encodeURIComponent(path),{signal:controller.signal,credentials:'omit',headers:{Accept:'application/json'}});
    }
    status=res.status;
    if(!res.ok)throw new Error('HTTP '+res.status);

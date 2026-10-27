@@ -6,6 +6,12 @@ export const firebaseMode=()=>runtime!==null;
 export const sparkMode=()=>!!runtime?.request;
 export const signInUrl=(path='/')=>runtime?`/login?next=${encodeURIComponent(path)}`:`/signin-with-chatgpt?return_to=${encodeURIComponent(path)}`;
 export const signOutUrl=()=>runtime?'/logout':'/signout-with-chatgpt?return_to=%2F';
+export function getApiUrl(path: string): string {
+ const defaultApiBase = (typeof navigator !== 'undefined' && /ORINAndroid\//.test(navigator.userAgent)) || (typeof window !== 'undefined' && (window.location.hostname === 'orin-trader.top' || window.location.hostname.endsWith('.orin-trader.top') || window.location.hostname === 'orin-99951.web.app' || window.location.hostname === 'orin-99951.firebaseapp.com'))
+  ? 'https://firebase-functions-pc5h.onrender.com'
+  : '';
+ return (runtime?.base || (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_ORIN_API_URL) || defaultApiBase || 'https://firebase-functions-pc5h.onrender.com').replace(/\/+$/, '') + path;
+}
 export async function apiFetch(path:string,init:RequestInit={}){
  if(!path.startsWith('/api/')||path.includes('://')||path.includes('\\'))throw new Error('Invalid API destination');
  const headers=new Headers(init.headers),session=await ensureFreshSecurityAccess();
@@ -21,10 +27,7 @@ export async function apiFetch(path:string,init:RequestInit={}){
   const token=await runtime.token();
   if(token)headers.set('Authorization',`Bearer ${token}`);
  }
- const defaultApiBase = (typeof navigator !== 'undefined' && /ORINAndroid\//.test(navigator.userAgent)) || (typeof window !== 'undefined' && (window.location.hostname === 'orin-trader.top' || window.location.hostname.endsWith('.orin-trader.top') || window.location.hostname === 'orin-99951.web.app' || window.location.hostname === 'orin-99951.firebaseapp.com'))
-  ? 'https://firebase-functions-pc5h.onrender.com'
-  : '';
- const targetUrl = (runtime?.base || (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_ORIN_API_URL) || defaultApiBase || '').replace(/\/+$/, '') + path;
+ const targetUrl = getApiUrl(path);
  let result=await fetch(targetUrl,{...init,headers});
  if(result.status===401&&runtime&&!path.startsWith('/api/control/')){
   const refreshedToken=await runtime.token(true).catch(()=>null);
