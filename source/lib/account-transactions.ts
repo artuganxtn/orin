@@ -83,8 +83,8 @@ export async function statementSnapshot(state:LabState):Promise<StatementSnapsho
      const {apiFetch}=await import('./client-api');
      const wRes=await apiFetch('/api/withdrawals');
      if(wRes.ok){
-       const wData=await wRes.json();
-       withdrawals=(wData.items||[]).map((w:any)=>({
+       const wData = (await wRes.json()) as any;
+       withdrawals=(wData?.items||[]).map((w:any)=>({
          id:w.id,
          accountId:w.account_id||w.accountId,
          amountCents:Number(w.amount_cents||w.amountCents||0),
