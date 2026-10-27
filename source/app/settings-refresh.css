@@ -46,7 +46,7 @@
 .orin-settings-screen :is(.settings-footnote,.security-summary p,.capability-message p){font-size:calc(12px * var(--ui-font-scale,1));line-height:1.95;color:var(--settings-muted)}
 .orin-settings-screen :is(.security-summary,.capability-message,.about-settings){background:var(--settings-card);border:1px solid var(--settings-border);border-radius:23px;padding:24px 20px;box-shadow:0 7px 24px #36658b06}
 .orin-settings-screen .security-summary>svg,.orin-settings-screen .capability-message>svg{color:#188beb;width:32px;height:32px;stroke-width:1.5;margin-bottom:12px}.orin-settings-screen .security-summary strong{color:var(--settings-ink);font-size:calc(15px * var(--ui-font-scale,1))}.orin-settings-screen .security-summary p{margin-top:10px}
-.orin-settings-screen .settings-switch[data-slot=switch]{flex-shrink:0;width:44px;height:26px;direction:ltr;border:1px solid #c6d9ed;background:#d8e4f2;box-shadow:none}.orin-settings-screen .settings-switch.on[data-slot=switch]{background:#1388f6;border-color:#1388f6}.orin-settings-screen .settings-switch:disabled{opacity:.42}
+
 .orin-settings-screen .settings-row>.num{font-size:calc(13px * var(--ui-font-scale,1));white-space:nowrap}
 .orin-settings-screen .settings-error{font-size:calc(12px * var(--ui-font-scale,1));line-height:1.8;border-radius:13px;padding:12px;background:#fff3f3;color:#af5261}
 .orin-settings-screen .language-options{gap:10px}.orin-settings-screen .language-options button{border-radius:18px;min-height:68px}

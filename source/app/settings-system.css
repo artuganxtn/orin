@@ -70,7 +70,7 @@ body{background:var(--orin-page);color:var(--orin-ink)}
 
 html[dir=ltr] .settings-profile,html[dir=ltr] .settings-row,html[dir=ltr] .settings-account-facts,html[dir=ltr] .popup,html[dir=ltr] .drawer-body{text-align:left}html[dir=ltr] .market-open-select,html[dir=ltr] .markets-note,html[dir=ltr] .trade-options,html[dir=ltr] .execution-note,html[dir=ltr] .active-ticket,html[dir=ltr] .trade-disclosure,html[dir=ltr] .locked-inline{direction:ltr}.reference-shell .footer,.reference-shell .signin-compact{color:var(--orin-muted)}
 
-html[data-theme=dark] .reference-topbar .brand strong{color:var(--orin-ink)}html[data-theme=dark] .reference-shell .reference-nav{background:#132139f5!important;border-color:var(--orin-line);box-shadow:0 0 24px #030d2026}html[data-theme=dark] .reference-nav button[data-state=active]{background:transparent!important;color:#4cbcff!important}html[data-theme=dark] .balance-hero{background:linear-gradient(110deg,#142846 7%,#1a456e 56%,#0a79b4 85%,#008ef1)}html[data-theme=dark] .balance-total{color:#f0f6ff}html[data-theme=dark] .balance-top{color:#bed3ef!important}html[data-theme=dark] .balance-bottom button{background:#d4eaff13!important;color:#a9ccef!important}html[data-theme=dark] .quick-actions>button>span{background:linear-gradient(135deg,#163451,#16436c);border-color:#244968}html[data-theme=dark] .home-market-card,html[data-theme=dark] .detail-chart,html[data-theme=dark] .panel,html[data-theme=dark] .popup,html[data-theme=dark] .account-type-card,html[data-theme=dark] .contract-card{background:var(--orin-surface);border-color:var(--orin-line);color:var(--orin-ink)}html[data-theme=dark] .home-market-header b,html[data-theme=dark] .performance-heading h2,html[data-theme=dark] .trade-titlebar,html[data-theme=dark] .trade-amount input,html[data-theme=dark] .trade-totals b,html[data-theme=dark] .performance-grid strong{color:var(--orin-ink)}html[data-theme=dark] .performance-grid section{background:linear-gradient(125deg,#12253f,#13223a);border-color:var(--orin-line)}html[data-theme=dark] .market-search,html[data-theme=dark] .order-modes,html[data-theme=dark] .trade-amount,html[data-theme=dark] .amount-percent button,html[data-theme=dark] .market-open-select select,html[data-theme=dark] .invite-inline input,html[data-theme=dark] .reference-shell .btn-outline,html[data-theme=dark] .account-form input{background:var(--orin-surface-soft);border-color:var(--orin-line);color:var(--orin-ink)}html[data-theme=dark] .order-modes button.active{background:linear-gradient(#1b3757,#18314e);color:#62c7ff}html[data-theme=dark] .trade-timeframes button.active{background:#14395b;color:#64c6ff}html[data-theme=dark] .chart-tool-row svg{color:#88a7ce}html[data-theme=dark] .settings-profile,html[data-theme=dark] .account-kind-card{background:linear-gradient(120deg,#193956,var(--orin-surface));color:var(--orin-ink)}html[data-theme=dark] .settings-avatar{background:linear-gradient(130deg,#1c4865,#183258);border-color:#27506a}html[data-theme=dark] .profile-badges b,html[data-theme=dark] .profile-badges i{background:#204a64;color:#8dc9ec}html[data-theme=dark] .settings-switch{background:#324761;border-color:#42617e}html[data-theme=dark] .settings-switch.on{background:#0e92f3}html[data-theme=dark] .execution-note,html[data-theme=dark] .active-ticket,html[data-theme=dark] .test-banner,html[data-theme=dark] .hash-box{background:#17304d;border-color:var(--orin-line);color:#aac3e5}html[data-theme=dark] .wallet-card{background:linear-gradient(135deg,#133960,#105384)}html[data-theme=dark] .wallet-card .metric-value{color:#dff3ff}html[data-theme=dark] .round-btn{background:none;color:#c3d6f4}html[data-theme=dark] .settings-account-facts b,html[data-theme=dark] .favorite-manager b{color:var(--orin-ink)}html[data-theme=dark] .settings-account-facts span,html[data-theme=dark] .about-data p{color:var(--orin-muted)}
+html[data-theme=dark] .reference-topbar .brand strong{color:var(--orin-ink)}html[data-theme=dark] .reference-shell .reference-nav{background:#132139f5!important;border-color:var(--orin-line);box-shadow:0 0 24px #030d2026}html[data-theme=dark] .reference-nav button[data-state=active]{background:transparent!important;color:#4cbcff!important}html[data-theme=dark] .balance-hero{background:linear-gradient(110deg,#142846 7%,#1a456e 56%,#0a79b4 85%,#008ef1)}html[data-theme=dark] .balance-total{color:#f0f6ff}html[data-theme=dark] .balance-top{color:#bed3ef!important}html[data-theme=dark] .balance-bottom button{background:#d4eaff13!important;color:#a9ccef!important}html[data-theme=dark] .quick-actions>button>span{background:linear-gradient(135deg,#163451,#16436c);border-color:#244968}html[data-theme=dark] .home-market-card,html[data-theme=dark] .detail-chart,html[data-theme=dark] .panel,html[data-theme=dark] .popup,html[data-theme=dark] .account-type-card,html[data-theme=dark] .contract-card{background:var(--orin-surface);border-color:var(--orin-line);color:var(--orin-ink)}html[data-theme=dark] .home-market-header b,html[data-theme=dark] .performance-heading h2,html[data-theme=dark] .trade-titlebar,html[data-theme=dark] .trade-amount input,html[data-theme=dark] .trade-totals b,html[data-theme=dark] .performance-grid strong{color:var(--orin-ink)}html[data-theme=dark] .performance-grid section{background:linear-gradient(125deg,#12253f,#13223a);border-color:var(--orin-line)}html[data-theme=dark] .market-search,html[data-theme=dark] .order-modes,html[data-theme=dark] .trade-amount,html[data-theme=dark] .amount-percent button,html[data-theme=dark] .market-open-select select,html[data-theme=dark] .invite-inline input,html[data-theme=dark] .reference-shell .btn-outline,html[data-theme=dark] .account-form input{background:var(--orin-surface-soft);border-color:var(--orin-line);color:var(--orin-ink)}html[data-theme=dark] .order-modes button.active{background:linear-gradient(#1b3757,#18314e);color:#62c7ff}html[data-theme=dark] .trade-timeframes button.active{background:#14395b;color:#64c6ff}html[data-theme=dark] .chart-tool-row svg{color:#88a7ce}html[data-theme=dark] .settings-profile,html[data-theme=dark] .account-kind-card{background:linear-gradient(120deg,#193956,var(--orin-surface));color:var(--orin-ink)}html[data-theme=dark] .settings-avatar{background:linear-gradient(130deg,#1c4865,#183258);border-color:#27506a}html[data-theme=dark] .profile-badges b,html[data-theme=dark] .profile-badges i{background:#204a64;color:#8dc9ec}html[data-theme=dark] .execution-note,html[data-theme=dark] .active-ticket,html[data-theme=dark] .test-banner,html[data-theme=dark] .hash-box{background:#17304d;border-color:var(--orin-line);color:#aac3e5}html[data-theme=dark] .wallet-card{background:linear-gradient(135deg,#133960,#105384)}html[data-theme=dark] .wallet-card .metric-value{color:#dff3ff}html[data-theme=dark] .round-btn{background:none;color:#c3d6f4}html[data-theme=dark] .settings-account-facts b,html[data-theme=dark] .favorite-manager b{color:var(--orin-ink)}html[data-theme=dark] .settings-account-facts span,html[data-theme=dark] .about-data p{color:var(--orin-muted)}
 
 html[data-theme=dark] .candle-chart,html[data-theme=dark] .orin-native-candles,html[data-theme=dark] .orin-market-panel{background:var(--orin-surface,#0b192a)!important;contain:paint;transform:translateZ(0);border-radius:12px}
 
@@ -94,57 +94,70 @@ html[data-theme=dark] .trade-titlebar>button,html[data-theme=dark] .trade-pair-p
 
 .orin-symbol-trigger{display:flex;align-items:center;gap:8px;border:0;background:none;flex:1;justify-content:center;color:var(--orin-ink)}.trade-titlebar>button.orin-symbol-trigger{width:auto!important;min-width:0}.symbol-dialog{background:var(--orin-surface);color:var(--orin-ink)}.symbol-dialog [data-slot=command]{background:var(--orin-surface)}.symbol-dialog [data-slot=command-list]{max-height:52dvh}.symbol-dialog [data-slot=command-item]{padding:11px 10px}.symbol-item{display:grid;gap:4px;flex:1;direction:ltr;text-align:start}.symbol-item b{font:600 14px Arial,sans-serif}.symbol-item small{color:var(--orin-muted);font-size:11px}.symbol-favorite{border:0;background:none;color:#23a0ef;display:flex;padding:5px}
 
-.settings-switch,
-.settings-switch[data-slot='switch'] {
+/* Universal ORIN Settings Toggle Switch */
+.settings-switch {
   width: 44px !important;
   height: 24px !important;
   border-radius: 9999px !important;
+  padding: 2px !important;
   display: inline-flex !important;
   align-items: center !important;
-  padding: 2px !important;
   direction: ltr !important;
   box-sizing: border-box !important;
   cursor: pointer !important;
   flex-shrink: 0 !important;
-  background: #cbd5e1 !important;
+  background-color: #cbd5e1 !important;
   border: 1px solid #94a3b8 !important;
   transition: background-color 0.2s ease, border-color 0.2s ease !important;
   position: relative !important;
 }
 
-.settings-switch.on,
-.settings-switch[data-state='checked'] {
-  background: #0075ff !important;
+.settings-switch[data-state='checked'],
+.settings-switch.on {
+  background-color: #0075ff !important;
   border-color: #0075ff !important;
 }
 
 .settings-switch [data-slot='switch-thumb'],
+.settings-switch .settings-switch-thumb,
 .settings-switch span {
   width: 18px !important;
   height: 18px !important;
   border-radius: 50% !important;
-  background: #ffffff !important;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25) !important;
-  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), translate 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  background-color: #ffffff !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  translate: none !important;
+  transform: translateX(1px) !important;
   display: block !important;
   flex-shrink: 0 !important;
 }
 
-html[data-theme='dark'] .settings-switch,
-html[data-theme='dark'] .settings-switch[data-slot='switch'] {
-  background: #24354f !important;
-  border-color: #3b5275 !important;
+.settings-switch[data-state='checked'] [data-slot='switch-thumb'],
+.settings-switch.on [data-slot='switch-thumb'],
+.settings-switch[data-state='checked'] .settings-switch-thumb,
+.settings-switch.on .settings-switch-thumb,
+.settings-switch[data-state='checked'] span,
+.settings-switch.on span {
+  translate: none !important;
+  transform: translateX(19px) !important;
 }
 
-html[data-theme='dark'] .settings-switch.on,
-html[data-theme='dark'] .settings-switch[data-state='checked'] {
-  background: #0075ff !important;
+html[data-theme='dark'] .settings-switch {
+  background-color: #22354c !important;
+  border-color: #334b6b !important;
+}
+
+html[data-theme='dark'] .settings-switch[data-state='checked'],
+html[data-theme='dark'] .settings-switch.on {
+  background-color: #0075ff !important;
   border-color: #38bdf8 !important;
 }
 
 html[data-theme='dark'] .settings-switch [data-slot='switch-thumb'],
+html[data-theme='dark'] .settings-switch .settings-switch-thumb,
 html[data-theme='dark'] .settings-switch span {
-  background: #ffffff !important;
+  background-color: #ffffff !important;
 }
 
 .settings-switch:disabled {
