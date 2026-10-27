@@ -4,7 +4,7 @@ import {LANGUAGES} from '@/lib/locales';
 import {SecurityCenter} from './security-center';
 import { signOutUrl } from '@/lib/client-api';
 import { type ReactNode } from 'react';
-import { Bell, Check, ChevronLeft, ChartCandlestick, Download, EyeOff, Globe2, Info, LockKeyhole, ShieldCheck, SlidersHorizontal, UserRound, Wallet, ClipboardList, Palette, Sun, Moon, Monitor, ChevronRight, LogOut, RefreshCw, Headphones, Gift, BadgeCheck, Smartphone, Apple, ShieldAlert, ExternalLink, Sparkles } from 'lucide-react';
+import { Bell, Check, ChevronLeft, ChartCandlestick, Download, EyeOff, FileText, Globe2, Info, LockKeyhole, ShieldCheck, SlidersHorizontal, UserRound, Wallet, ClipboardList, Palette, Sun, Moon, Monitor, ChevronRight, LogOut, RefreshCw, Headphones, Gift, BadgeCheck, Smartphone, Apple, ShieldAlert, ExternalLink, Sparkles } from 'lucide-react';
 import { FullPage as Dialog, FullPageContent as DialogContent } from './full-page';
 import { useRoutePanel, useNavigation } from './orin-navigation';
 import { SoundPreferences } from './sound-preferences';
