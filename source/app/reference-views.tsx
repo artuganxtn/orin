@@ -46,20 +46,28 @@ function MarketPanel({pair,compact=false,headerExternal=false}:{pair:string;comp
 function HomeKycBanner() {
   const { t } = useOrin();
   const { navigate } = useNavigation();
-  const [kycStatus, setKycStatus] = useState<string | null>(null);
+  const [kycStatus, setKycStatus] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      try { return localStorage.getItem('orin_kyc_status') || 'loading'; } catch {}
+    }
+    return 'loading';
+  });
 
   useEffect(() => {
     let active = true;
     void apiFetch('/api/kyc')
       .then(res => res.ok ? res.json() : null)
       .then((data: any) => {
-        if (active && data) setKycStatus(data.status);
+        if (active && data?.status) {
+          setKycStatus(data.status);
+          try { localStorage.setItem('orin_kyc_status', data.status); } catch {}
+        }
       })
       .catch(() => {});
     return () => { active = false; };
   }, []);
 
-  if (kycStatus === 'verified') return null;
+  if (!kycStatus || kycStatus === 'loading' || kycStatus === 'verified') return null;
 
   const isReview = kycStatus === 'review' || kycStatus === 'pending';
   const isRejected = kycStatus === 'rejected';

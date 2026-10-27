@@ -47,10 +47,46 @@ function TransactionFilters({value,onChange}:{value:string;onChange:(value:strin
  const {t}=useOrin();
  return <div className="activity-filters" role="group" aria-label={t('تصفية المعاملات','Filter transactions')}>{[['all',t('الكل','All')],['deposit',t('إيداع','Deposits')],['withdrawal',t('سحب','Withdrawals')]].map(([key,label])=><button type="button" key={key} aria-pressed={value===key} onClick={()=>onChange(key)}>{label}</button>)}</div>;
 }
+export function extractWithdrawalReceiptData(row: AccountTransaction): WithdrawalReceiptData {
+ const w = row.withdrawal;
+ const rawCents = Math.abs(w?.amountCents ?? row.amountCents ?? 0);
+ const rawAmount = rawCents / 100;
+ const fee = w?.feeCents !== undefined && Number.isFinite(w.feeCents) ? w.feeCents / 100 : Math.round(rawAmount * 5) / 100;
+ const net = w?.netAmountCents !== undefined && Number.isFinite(w.netAmountCents) ? w.netAmountCents / 100 : Math.max(0, Math.round((rawAmount - fee) * 100) / 100);
+ const cleanId = w?.id || row.id.replace(/^(jnl-)/, '');
+
+ return {
+  id: cleanId,
+  accountId: w?.accountId || row.accountId,
+  amount: rawAmount,
+  fee: fee,
+  netAmount: net,
+  address: w?.address || '',
+  coin: w?.coin || 'USDT',
+  currency: w?.currency || row.currency || 'USD',
+  network: 'BNB Smart Chain · BEP20',
+  createdAt: w?.createdAt || row.createdAt,
+  status: w?.status || (row.status === 'recorded' ? 'review' : row.status),
+  txHash: w?.txHash || null,
+ };
+}
+
+const isWithdrawalTx = (row: AccountTransaction) =>
+ row.kind === 'withdrawal' || Boolean(row.withdrawal) || row.id.startsWith('wd-') || row.id.startsWith('jnl-wd-');
+
 function TransactionAmounts({row}:{row:AccountTransaction}){
  const {t,prefs,number}=useOrin();
  const cash=(value:number|null|undefined)=>value==null||!Number.isFinite(value)?t('غير متاح','Not provided'):prefs.hideBalance?'••••':`${number(value/100)} ${row.currency}`;
- return <dl className="transaction-figures"><div><dt>{t('المبلغ','Amount')}</dt><dd dir="auto">{cash(row.withdrawal?.amountCents??row.amountCents)}</dd></div>{row.kind==='withdrawal'&&<><div><dt>{t('الرسوم','Fee')}</dt><dd dir="auto">{cash(row.withdrawal?.feeCents)}</dd></div><div><dt>{t('الصافي','Net amount')}</dt><dd dir="auto">{cash(row.withdrawal?.netAmountCents)}</dd></div></>}</dl>;
+ const rawCents = Math.abs(row.withdrawal?.amountCents ?? row.amountCents ?? 0);
+ const feeCents = row.withdrawal?.feeCents ?? Math.round(rawCents * 0.05);
+ const netCents = row.withdrawal?.netAmountCents ?? Math.max(0, rawCents - feeCents);
+ return <dl className="transaction-figures">
+  <div><dt>{t('المبلغ','Amount')}</dt><dd dir="auto">{cash(rawCents)}</dd></div>
+  {row.kind==='withdrawal'&&<>
+    <div><dt>{t('الرسوم','Fee')}</dt><dd dir="auto">{cash(feeCents)}</dd></div>
+    <div><dt>{t('الصافي','Net amount')}</dt><dd dir="auto">{cash(netCents)}</dd></div>
+  </>}
+ </dl>;
 }
 function TransactionDetails({row,onWithdrawal}:{row:AccountTransaction;onWithdrawal?:()=>void}){
  const {t,prefs,number}=useOrin();
@@ -83,14 +119,19 @@ function ActivityCoverage({snapshot}:{snapshot:StatementSnapshot|null}){
 
 export function RecentTransactions({state,onViewAll}:{state:LabState|null;onViewAll:()=>void}){
  const {t}=useOrin(),navigation=useNavigation(),{account,snapshot,error,retry}=useAccountStatement(state,navigation.path==='/positions');
- const [filter,setFilter]=useState('all'),[selected,setSelected]=useState<string|null>(null);
- useEffect(()=>setSelected(null),[account?.id,state?.user.id]);
+ const [filter,setFilter]=useState('all'),[selected,setSelected]=useState<string|null>(null),[selectedWd,setSelectedWd]=useState<{userId:string;accountId:string;data:WithdrawalReceiptData}|null>(null);
+ useEffect(()=>{setSelected(null);setSelectedWd(null)},[account?.id,state?.user.id]);
  const rows=(snapshot?.transactions.filter(row=>filter==='all'||row.kind===filter)??[]).slice(0,5);
+ const openWithdrawal=(row:AccountTransaction)=>{
+  if(!state||!account)return;
+  setSelectedWd({userId:state.user.id,accountId:account.id,data:extractWithdrawalReceiptData(row)});
+ };
  return <section className="positions-recent" aria-labelledby="positions-recent-title">
   <header><div><h2 id="positions-recent-title">{t('المعاملات الأخيرة','Recent transactions')}</h2><p>{t('آخر الحركات المسجّلة في الحساب المحدد','Latest recorded activity in the selected account')}</p></div><button type="button" onClick={onViewAll}>{t('عرض الكل','View all')}</button></header>
   <TransactionFilters value={filter} onChange={value=>{setFilter(value);setSelected(null)}}/>
   {error&&<ActivityError message={error} retry={retry}/>}<ActivityCoverage snapshot={snapshot}/>
-  {!snapshot&&!error?<p className="recent-transactions-empty" role="status">{!state?t('جار تحميل الحساب…','Loading account…'):!account?t('لا يوجد حساب محدد.','No account selected.'):t('جار قراءة السجل…','Reading account activity…')}</p>:snapshot&&<div className="activity-list">{rows.length?rows.map(row=><Fragment key={row.id}><TransactionRow row={row} selected={selected===row.id} onSelect={()=>setSelected(selected===row.id?null:row.id)}/>{selected===row.id&&<TransactionDetails row={row}/>}</Fragment>):<p className="recent-transactions-empty">{t('لا توجد معاملات متاحة لهذا الفلتر. ستظهر الحركات هنا عند تسجيلها.','No available transactions for this filter. Activity will appear here when recorded.')}</p>}</div>}
+  {!snapshot&&!error?<p className="recent-transactions-empty" role="status">{!state?t('جار تحميل الحساب…','Loading account…'):!account?t('لا يوجد حساب محدد.','No account selected.'):t('جار قراءة السجل…','Reading account activity…')}</p>:snapshot&&<div className="activity-list">{rows.length?rows.map(row=><Fragment key={row.id}><TransactionRow row={row} selected={selected===row.id} onSelect={()=>{if(isWithdrawalTx(row)){openWithdrawal(row)}else{setSelected(selected===row.id?null:row.id)}}}/>{selected===row.id&&<TransactionDetails row={row} onWithdrawal={isWithdrawalTx(row)?()=>openWithdrawal(row):undefined}/>}</Fragment>):<p className="recent-transactions-empty">{t('لا توجد معاملات متاحة لهذا الفلتر. ستظهر الحركات هنا عند تسجيلها.','No available transactions for this filter. Activity will appear here when recorded.')}</p>}</div>}
+  {selectedWd&&selectedWd.userId===state?.user.id&&selectedWd.accountId===account?.id&&<WithdrawalReceiptView withdrawal={selectedWd.data} onClose={()=>setSelectedWd(null)}/>}
  </section>;
 }
 
@@ -103,9 +144,8 @@ export function AccountTransactions({state}:{state:LabState|null}){
  const rows=visible?.transactions.filter(row=>filter==='all'||row.kind===filter)??[];
  const exportPdf=async()=>{if(!visible||exporting.current)return;exporting.current=true;setBusy(true);setExportError('');try{await saveStatement(visible,prefs.chartLocale==='ar')}catch{setExportError(t('تعذر إنشاء كشف PDF. تحقق من المساحة المتاحة وحاول مجددًا.','Could not create the PDF. Check available storage and try again.'))}finally{exporting.current=false;setBusy(false)}};
  const openWithdrawal=(row:AccountTransaction)=>{
-  const withdrawal=row.withdrawal;
-  if(!withdrawal||!state||!account||row.accountId!==account.id)return;
-  setSelectedWd({userId:state.user.id,accountId:account.id,data:{id:withdrawal.id,accountId:withdrawal.accountId,currency:withdrawal.currency,amount:withdrawal.amountCents/100,fee:withdrawal.feeCents==null?undefined:withdrawal.feeCents/100,netAmount:withdrawal.netAmountCents==null?undefined:withdrawal.netAmountCents/100,address:withdrawal.address,coin:withdrawal.coin,createdAt:withdrawal.createdAt,status:withdrawal.status,txHash:withdrawal.txHash}});
+  if(!state||!account)return;
+  setSelectedWd({userId:state.user.id,accountId:account.id,data:extractWithdrawalReceiptData(row)});
  };
  return <FullPage open={open} onOpenChange={value=>{if(!value){setSelectedWd(null);nav.back('/positions')}}}><FullPageContent pageClassName="orin-activity-screen" navTitle={<strong>{t('المعاملات','Transactions')}</strong>}>
   <header className="activity-heading"><span className="activity-mark"><ArrowLeftRight/></span><div><h1>{t('المعاملات الأخيرة','Recent transactions')}</h1><p>{account?t(account.type==='real'?'حساب حقيقي':'حساب تجريبي',account.type==='real'?'Real account':'Demo account'):t('الحساب','Account')} <bdi>{account?.accountNumber} · USD</bdi></p></div></header>
@@ -114,7 +154,7 @@ export function AccountTransactions({state}:{state:LabState|null}){
   {error&&<ActivityError message={error} retry={retry}/>} {exportError&&<p className="activity-notice" role="alert">{exportError}</p>}
   <ActivityCoverage snapshot={visible}/>
   {!visible&&!error?<div className="activity-skeleton" role="status">{state&&!account?t('لا يوجد حساب محدد.','No account selected.'):t('جار قراءة السجل…','Reading account activity…')}</div>:visible&&<>
-   <div className="activity-list">{rows.length?rows.map(row=><Fragment key={row.id}><TransactionRow row={row} selected={row.id===selected} onSelect={()=>{if(row.withdrawal){openWithdrawal(row)}else{setSelected(selected===row.id?null:row.id)}}}/>{row.id===selected&&<TransactionDetails row={row} onWithdrawal={row.withdrawal?()=>openWithdrawal(row):undefined}/>}</Fragment>):<div className="activity-empty"><ArrowLeftRight/><h2>{t('لا توجد معاملات متاحة','No available transactions')}</h2><p>{t('ستظهر هنا تفاصيل الإيداع والسحب والحركات المسجّلة في هذا الحساب.','Deposits, withdrawals and recorded activity for this account will appear here.')}</p></div>}</div>
+   <div className="activity-list">{rows.length?rows.map(row=><Fragment key={row.id}><TransactionRow row={row} selected={row.id===selected} onSelect={()=>{if(isWithdrawalTx(row)){openWithdrawal(row)}else{setSelected(selected===row.id?null:row.id)}}}/>{row.id===selected&&<TransactionDetails row={row} onWithdrawal={isWithdrawalTx(row)?()=>openWithdrawal(row):undefined}/>}</Fragment>):<div className="activity-empty"><ArrowLeftRight/><h2>{t('لا توجد معاملات متاحة','No available transactions')}</h2><p>{t('ستظهر هنا تفاصيل الإيداع والسحب والحركات المسجّلة في هذا الحساب.','Deposits, withdrawals and recorded activity for this account will appear here.')}</p></div>}</div>
    <p className="activity-coverage">{t('يعرض هذا القسم السجل المتاح حاليًا. التوقيت المعروض هو التوقيت المحلي لجهازك.','This view contains currently available records. Displayed times match your local device timezone.')}</p>
   </>}
   {selectedWd&&selectedWd.userId===state?.user.id&&selectedWd.accountId===account?.id&&<WithdrawalReceiptView withdrawal={selectedWd.data} onClose={()=>setSelectedWd(null)}/>}

@@ -1,34 +1,343 @@
-.orin-withdrawal-receipt{position:fixed;inset:0;z-index:9999;background:#fff;overflow-y:auto;overscroll-behavior:contain;color:#0a2459;box-sizing:border-box;font-family:inherit}
-.orin-withdrawal-receipt *{box-sizing:border-box}
-.orin-withdrawal-receipt .wr-sheet{width:100%;max-width:480px;min-height:100%;margin:0 auto;padding:20px 22px max(22px,env(safe-area-inset-bottom));display:flex;flex-direction:column;background:#fff}
-.orin-withdrawal-receipt .wr-header{display:flex;align-items:center;justify-content:space-between;direction:ltr;min-height:42px;margin-bottom:28px}
-.orin-withdrawal-receipt .wr-brand{display:flex;align-items:center;gap:10px}
-.orin-withdrawal-receipt .wr-brand img{object-fit:contain}
-.orin-withdrawal-receipt .wr-brand strong{font-family:Arial,sans-serif;font-size:26px;letter-spacing:3px;font-weight:700;color:#0a2459}
-.orin-withdrawal-receipt button{font-family:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
-.orin-withdrawal-receipt button:focus-visible{outline:3px solid #80c4ff;outline-offset:3px}
-.orin-withdrawal-receipt .wr-back,.orin-withdrawal-receipt .wr-copy{border:0;background:transparent;color:#0788ff;display:inline-flex;align-items:center;justify-content:center;flex:none}
-.orin-withdrawal-receipt .wr-back{width:38px;height:38px}
-.orin-withdrawal-receipt .wr-copy{width:30px;height:32px;padding:3px}
-.orin-withdrawal-receipt .wr-hero{display:flex;flex-direction:column;align-items:center;text-align:center;margin-bottom:20px;gap:12px}
-.orin-withdrawal-receipt .wr-wallet{position:relative;display:grid;place-items:center;width:92px;height:92px;border-radius:50%;background:#eaf4ff;color:#0084ff;margin:0 0 2px}
-.orin-withdrawal-receipt .wr-wallet svg:last-child{position:absolute;top:15px;right:21px;background:#eaf4ff;stroke-width:2.6}
-.orin-withdrawal-receipt .wr-hero h1{font-size:18px;line-height:1.4;margin:0;font-weight:600}
-.orin-withdrawal-receipt .wr-amount{font-family:Arial,sans-serif;font-size:clamp(27px,8.3vw,38px);font-weight:800;line-height:1.2;max-width:100%;overflow-wrap:anywhere;letter-spacing:-1px}
-.orin-withdrawal-receipt .wr-status{display:inline-flex;gap:7px;align-items:center;justify-content:center;max-width:100%;border-radius:40px;padding:7px 16px;font-size:15px;font-weight:600;line-height:1.4}
-.orin-withdrawal-receipt .wr-status.paid{background:#e1f9e9;color:#0a9d36}
-.orin-withdrawal-receipt .wr-status.pending{background:#fff0d8;color:#bb7800}
-.orin-withdrawal-receipt .wr-status.rejected{background:#fff0ef;color:#ba3636}
-.orin-withdrawal-receipt .wr-hero p{color:#8591b1;font-size:14px;line-height:1.6;margin:0}
-.orin-withdrawal-receipt .wr-details{margin:0;display:flex;flex-direction:column}
-.orin-withdrawal-receipt .wr-details>div{display:flex;align-items:center;justify-content:space-between;gap:14px;min-height:54px;padding:12px 0;border-top:1px solid #edf0f7;font-size:14px;line-height:1.5}
-.orin-withdrawal-receipt .wr-details dt{margin:0;color:#8591b1;font-weight:500;flex:0 0 auto;max-width:44%}
-.orin-withdrawal-receipt .wr-details dd{margin:0;display:flex;align-items:center;gap:6px;min-width:0;max-width:68%;text-align:end;overflow-wrap:anywhere;font-weight:500;font-variant-numeric:tabular-nums}
-.orin-withdrawal-receipt .wr-net dd{color:#087fff;font-size:19px;font-weight:800}
-.orin-withdrawal-receipt .wr-expand{align-self:center;display:flex;align-items:center;gap:9px;border:0;background:none;color:#0788ff;font-size:14px;padding:17px 8px}
-.orin-withdrawal-receipt .wr-more dd{font-size:12px}
-.orin-withdrawal-receipt .wr-notice{color:#7e89a5;font-size:12px;line-height:1.6;text-align:center}
-.orin-withdrawal-receipt .wr-actions{margin-top:auto;padding-top:35px;display:flex;flex-direction:column;gap:13px}
-.orin-withdrawal-receipt .wr-primary{border:0;border-radius:14px;min-height:53px;padding:12px 16px;background:#0788ff;color:#fff;display:flex;align-items:center;justify-content:center;gap:12px;font-size:16px;font-weight:600}
-.orin-withdrawal-receipt .wr-help{display:flex;align-items:center;justify-content:center;gap:8px;min-height:38px;border:0;background:transparent;color:#0788ff;font-size:14px}
-@media(max-width:350px){.orin-withdrawal-receipt .wr-sheet{padding-inline:15px}.orin-withdrawal-receipt .wr-details>div{font-size:12px;gap:8px}.orin-withdrawal-receipt .wr-amount{font-size:29px}}
+.orin-withdrawal-receipt {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: var(--orin-bg, #ffffff);
+  color: var(--orin-text, #0f1c3f);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  box-sizing: border-box;
+  font-family: inherit;
+  display: flex;
+  justify-content: center;
+}
+
+.orin-withdrawal-receipt * {
+  box-sizing: border-box;
+}
+
+.orin-withdrawal-receipt .wr-sheet {
+  width: 100%;
+  max-width: 440px;
+  min-height: 100%;
+  padding: 16px 20px max(24px, env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  background: var(--orin-bg, #ffffff);
+}
+
+.orin-withdrawal-receipt .wr-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-height: 40px;
+  margin-bottom: 8px;
+}
+
+.orin-withdrawal-receipt .wr-back {
+  border: 0;
+  background: transparent;
+  color: var(--orin-text-muted, #5f7396);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.orin-withdrawal-receipt .wr-back:hover {
+  background: rgba(0, 117, 255, 0.08);
+  color: #0075ff;
+}
+
+.orin-withdrawal-receipt .wr-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.orin-withdrawal-receipt .wr-icon-bubble {
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  background: #eaf4ff;
+  color: #007aff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 14px;
+}
+
+.orin-withdrawal-receipt .wr-hero h1 {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--orin-text-muted, #4b5d78);
+  margin: 0 0 10px;
+}
+
+.orin-withdrawal-receipt .wr-amount-large {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.orin-withdrawal-receipt .wr-currency-symbol {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--orin-text, #0f1c3f);
+  letter-spacing: -0.5px;
+}
+
+.orin-withdrawal-receipt .wr-amount-val {
+  font-size: 38px;
+  font-weight: 800;
+  color: var(--orin-text, #0f1c3f);
+  letter-spacing: -1px;
+  line-height: 1;
+}
+
+.orin-withdrawal-receipt .wr-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 22px;
+  border-radius: 9999px;
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.orin-withdrawal-receipt .wr-status-pill.pending {
+  background: #fdf5e8;
+  color: #b87400;
+  border: 1px solid #fae3be;
+}
+
+.orin-withdrawal-receipt .wr-status-pill.paid {
+  background: #ebfaf0;
+  color: #0c9b42;
+  border: 1px solid #c7f2d5;
+}
+
+.orin-withdrawal-receipt .wr-status-pill.rejected {
+  background: #fdf1f1;
+  color: #d32f2f;
+  border: 1px solid #facaca;
+}
+
+.orin-withdrawal-receipt .wr-subtitle {
+  font-size: 14px;
+  color: var(--orin-text-muted, #71829e);
+  margin: 0;
+}
+
+.orin-withdrawal-receipt .wr-dashed-line {
+  width: 100%;
+  border-top: 1px dashed #d5dee9;
+  margin: 16px 0 20px;
+}
+
+.orin-withdrawal-receipt .wr-details-heading {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--orin-text, #0f1c3f);
+  margin: 0 0 16px;
+  text-align: start;
+}
+
+.orin-withdrawal-receipt .wr-info-table {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.orin-withdrawal-receipt .wr-info-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.orin-withdrawal-receipt .wr-info-label {
+  color: var(--orin-text-muted, #667894);
+  font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.orin-withdrawal-receipt .wr-info-val {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--orin-text, #0f1c3f);
+  text-align: end;
+  word-break: break-all;
+}
+
+.orin-withdrawal-receipt .wr-mono-text {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.orin-withdrawal-receipt .wr-muted-text {
+  color: var(--orin-text-muted, #8ea0bc);
+  font-weight: 500;
+}
+
+.orin-withdrawal-receipt .wr-num-bold {
+  font-weight: 700;
+}
+
+.orin-withdrawal-receipt .wr-copy-btn {
+  border: 0;
+  background: transparent;
+  color: var(--orin-text-muted, #71829e);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.orin-withdrawal-receipt .wr-copy-btn:hover {
+  color: #0075ff;
+  background: rgba(0, 117, 255, 0.08);
+}
+
+.orin-withdrawal-receipt .wr-bnb-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.orin-withdrawal-receipt .wr-net-box {
+  background: #eaf3fe;
+  border-radius: 14px;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+  margin-bottom: 24px;
+}
+
+.orin-withdrawal-receipt .wr-net-label {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f4c81;
+}
+
+.orin-withdrawal-receipt .wr-net-val {
+  font-size: 18px;
+  font-weight: 800;
+  color: #0066ee;
+}
+
+.orin-withdrawal-receipt .wr-action-footer {
+  margin-top: auto;
+  padding-top: 12px;
+}
+
+.orin-withdrawal-receipt .wr-return-btn {
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid #d5dee9;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--orin-text, #0f1c3f);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.orin-withdrawal-receipt .wr-return-btn:hover {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+/* Dark mode overrides */
+html[data-theme='dark'] .orin-withdrawal-receipt {
+  background: #0b1526;
+  color: #f0f4fc;
+}
+
+html[data-theme='dark'] .orin-withdrawal-receipt .wr-sheet {
+  background: #0b1526;
+}
+
+html[data-theme='dark'] .orin-withdrawal-receipt .wr-icon-bubble {
+  background: rgba(0, 122, 255, 0.18);
+  color: #3898ff;
+}
+
+html[data-theme='dark'] .orin-withdrawal-receipt .wr-amount-val,
+html[data-theme='dark'] .orin-withdrawal-receipt .wr-currency-symbol,
+html[data-theme='dark'] .orin-withdrawal-receipt .wr-details-heading,
+html[data-theme='dark'] .orin-withdrawal-receipt .wr-info-val {
+  color: #f0f4fc;
+}
+
+html[data-theme='dark'] .orin-withdrawal-receipt .wr-hero h1,
+html[data-theme='dark'] .orin-withdrawal-receipt .wr-info-label,
+html[data-theme='dark'] .orin-withdrawal-receipt .wr-subtitle {
+  color: #8fa2c2;
+}
+
+html[data-theme='dark'] .orin-withdrawal-receipt .wr-dashed-line {
+  border-top-color: #1e2c45;
+}
+
+html[data-theme='dark'] .orin-withdrawal-receipt .wr-status-pill.pending {
+  background: rgba(245, 166, 35, 0.15);
+  color: #f9b846;
+  border-color: rgba(245, 166, 35, 0.3);
+}
+
+html[data-theme='dark'] .orin-withdrawal-receipt .wr-status-pill.paid {
+  background: rgba(46, 213, 115, 0.15);
+  color: #2ed573;
+  border-color: rgba(46, 213, 115, 0.3);
+}
+
+html[data-theme='dark'] .orin-withdrawal-receipt .wr-status-pill.rejected {
+  background: rgba(255, 71, 87, 0.15);
+  color: #ff4757;
+  border-color: rgba(255, 71, 87, 0.3);
+}
+
+html[data-theme='dark'] .orin-withdrawal-receipt .wr-net-box {
+  background: #14233c;
+}
+
+html[data-theme='dark'] .orin-withdrawal-receipt .wr-net-label {
+  color: #79b5ec;
+}
+
+html[data-theme='dark'] .orin-withdrawal-receipt .wr-net-val {
+  color: #3ba4ff;
+}
+
+html[data-theme='dark'] .orin-withdrawal-receipt .wr-return-btn {
+  border-color: #233452;
+  color: #f0f4fc;
+}
+
+html[data-theme='dark'] .orin-withdrawal-receipt .wr-return-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+}

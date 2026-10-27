@@ -69,12 +69,20 @@ export async function inbox(u: Identity, now = Date.now(), offset = 0, key?: str
       [u.id, isAdmin]
     );
 
-    // 2. Fetch user read states
-    const readRows = await client.query(
-      `SELECT id, data FROM docs
-       WHERE collection = 'orinNoticeReads' AND owner_id = $1`,
-      [u.id]
-    );
+    // 2. Fetch user read states and seen_at
+    const [readRows, seenRow] = await Promise.all([
+      client.query(
+        `SELECT id, data FROM docs
+         WHERE collection = 'orinNoticeReads' AND owner_id = $1`,
+        [u.id]
+      ),
+      client.query(
+        `SELECT data FROM docs WHERE collection = 'orinUserSeen' AND id = $1`,
+        [u.id]
+      )
+    ]);
+
+    const seenAt = Number(seenRow.rows[0]?.data?.seen_at || 0);
 
     const readsMap = new Map<string, number>();
     for (const r of readRows.rows) {
@@ -91,7 +99,7 @@ export async function inbox(u: Identity, now = Date.now(), offset = 0, key?: str
       .map(n => ({
         ...n,
         id: n.id,
-        read_at: readsMap.get(n.id) ?? null,
+        read_at: readsMap.get(n.id) ?? ((n.created_at || 0) <= seenAt ? seenAt : null),
         category: noticeCategory(n as any),
         deep_link: noticeDestination(n as any)
       }));
@@ -255,7 +263,7 @@ export async function createNotice(client: any, opts: {
   if (targetRole) {
     noticeData.target_role = targetRole;
   }
-  const ownerId = (opts.userId === '*' || opts.userId === 'admin') ? null : opts.userId;
+  const ownerId = opts.userId === '*' ? null : opts.userId;
   await client.query(
     `INSERT INTO docs (collection, id, owner_id, data, updated_at)
      VALUES ('orinNotices', $1, $2, $3::jsonb, NOW())

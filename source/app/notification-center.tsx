@@ -105,11 +105,23 @@ export function HomeNotificationPreview(){
   <strong>{notice?.title??(error?t('تعذر تحديث الإشعارات','Notifications unavailable'):loading||archived?t('مركز الإشعارات','Notification center'):t('أنت مطّلع على آخر التحديثات','You’re all caught up'))}</strong><span>{notice?.message??t('افتح مركز الإشعارات لمتابعة تحديثات حسابك.','Open your notification center for account updates.')}</span></span><span className="notice-chevron" aria-hidden="true">›</span>
  </button>;
 }
-export function NotificationBadgeBridge() { const { data } = useInbox(); const count = data?.unreadCount ?? 0; const { t } = useOrin(); useEffect(() => { type Badger = Navigator & {
-    setAppBadge?: (v: number) => Promise<void>;
-    clearAppBadge?: () => Promise<void>;
-}; const n = navigator as Badger; if (data)
-    void (count ? n.setAppBadge?.(count) : n.clearAppBadge?.())?.catch(() => { }); }, [count, data]); return count > 0 ? <span className="notification-count" aria-label={t(`${count} إشعار غير مقروء`, `${count} unread notifications`)}>{count > 99 ? '99+' : count}</span> : null; }
+export function NotificationBadgeBridge() {
+    const { data } = useInbox();
+    const count = Number(data?.unreadCount || 0);
+    const { t } = useOrin();
+    useEffect(() => {
+        type Badger = Navigator & {
+            setAppBadge?: (v: number) => Promise<void>;
+            clearAppBadge?: () => Promise<void>;
+        };
+        const n = navigator as Badger;
+        if (data) {
+            void (count > 0 ? n.setAppBadge?.(count) : n.clearAppBadge?.())?.catch(() => {});
+        }
+    }, [count, data]);
+    if (!count || count <= 0) return null;
+    return <span className="notification-count" aria-label={t(`${count} إشعار غير مقروء`, `${count} unread notifications`)}>{count > 99 ? '99+' : count}</span>;
+}
 export function NotificationCenter() {
     const { path, navigate, back } = useNavigation(), { t, prefs } = useOrin(), { data, error, loading, guest, reload, read, more,archived,setArchived } = useInbox();
     const [filter, setFilter] = useState<NoticeFilter>('all'),[loadingMore,setLoadingMore]=useState(false);
@@ -139,7 +151,10 @@ export function NotificationCenter() {
         if (active)
             setDetailLoading(false);
     } })(); return () => { active = false; }; }, [detailId, guest, reload, detailRetry]);
-    useEffect(()=>{if(opened&&archived)setArchived(false)},[opened,archived,setArchived]);
+    useEffect(()=>{
+        if(opened&&archived)setArchived(false);
+        if(opened&&data&&Number(data.unreadCount||0)>0){void read();}
+    },[opened,archived,setArchived,data?.unreadCount,read]);
     const openNotice=(n:InboxNotice)=>{navigate(n.deep_link==='/notifications'?'/notifications/'+encodeURIComponent(n.id):n.deep_link);if(!n.read_at)void read(n.id)};
     const loadMore=async()=>{if(loadingMore)return;setLoadingMore(true);try{await more()}finally{setLoadingMore(false)}};
     const format = (at: number) => new Intl.DateTimeFormat(prefs.chartLocale+'-u-nu-latn', { dateStyle: 'medium', timeStyle: 'short', timeZone: prefs.timezone }).format(at);

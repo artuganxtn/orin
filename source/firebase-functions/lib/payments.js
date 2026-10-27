@@ -132,7 +132,7 @@ async function createNotice(client, opts) {
   if (targetRole) {
     noticeData.target_role = targetRole;
   }
-  const ownerId = opts.userId === "*" || opts.userId === "admin" ? null : opts.userId;
+  const ownerId = opts.userId === "*" ? null : opts.userId;
   await client.query(
     `INSERT INTO docs (collection, id, owner_id, data, updated_at)
      VALUES ('orinNotices', $1, $2, $3::jsonb, NOW())

@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
-import { ArrowUpRight, Wallet, CheckCircle2, CircleAlert, Clock3, Copy, Check, ArrowLeft, ArrowRight, ChevronDown, MessageCircleMore } from 'lucide-react';
+import { ArrowUpRight, CheckCircle2, CircleAlert, Clock3, Copy, Check, ArrowRight, ArrowLeft } from 'lucide-react';
 import { PAYMENT_COINS } from '@/lib/payments';
 import { useOrin } from './orin-settings';
 import { useNavigation } from './orin-navigation';
@@ -32,18 +32,11 @@ export function WithdrawalReceiptView({ withdrawal, onClose }: { withdrawal: Wit
   const navigation = useNavigation();
   const [data, setData] = useState(withdrawal);
   const [copied, setCopied] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState(false);
-  const [notice, setNotice] = useState('');
   const root = useRef<HTMLDivElement>(null);
   const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => { setData(withdrawal); setExpanded(false); setNotice(''); }, [withdrawal]);
+  useEffect(() => { setData(withdrawal); }, [withdrawal]);
   useEffect(() => () => { if (copyTimer.current) clearTimeout(copyTimer.current); }, []);
-  useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
-    root.current?.querySelector<HTMLButtonElement>('button')?.focus();
-    return () => previous?.focus();
-  }, []);
 
   useEffect(() => {
     let active = true, inFlight = false;
@@ -53,40 +46,40 @@ export function WithdrawalReceiptView({ withdrawal, onClose }: { withdrawal: Wit
       try {
         const { apiFetch } = await import('@/lib/client-api');
         const response = await apiFetch('/api/withdrawals');
-        if (!response.ok) throw new Error('unavailable');
+        if (!response.ok) return;
         const json = await response.json();
-        // Never match by amount, partial ID or another account's withdrawal.
         const match = (Array.isArray(json.items) ? json.items : []).find((item: any) =>
-          item.id === withdrawal.id && (!withdrawal.accountId || (item.account_id ?? item.accountId) === withdrawal.accountId));
+          item.id === withdrawal.id ||
+          item.id === withdrawal.id.replace(/^(jnl-wd-|jnl-|j-wd-)/, '') ||
+          withdrawal.id === item.id.replace(/^(jnl-wd-|jnl-|j-wd-)/, '')
+        );
         if (active && match) {
           const cents = (snake: string, camel: string) => {
-            const value = optionalMoney(match[snake] ?? match[camel]);
-            return value !== undefined && Number.isSafeInteger(value) ? value / 100 : undefined;
+            const val = optionalMoney(match[snake] ?? match[camel]);
+            return val !== undefined && Number.isSafeInteger(val) ? val / 100 : undefined;
           };
-          setData(previous => ({
-            ...previous,
-            id: match.id,
-            accountId: match.account_id ?? match.accountId ?? previous.accountId,
-            amount: cents('amount_cents', 'amountCents') ?? previous.amount,
-            fee: cents('fee_cents', 'feeCents'),
-            netAmount: cents('net_amount_cents', 'netAmountCents'),
-            address: typeof match.address === 'string' ? match.address : previous.address,
-            coin: typeof match.coin === 'string' ? match.coin : previous.coin,
-            currency: typeof match.currency === 'string' ? match.currency : previous.currency,
-            status: typeof match.status === 'string' ? match.status : previous.status,
-            txHash: match.tx_hash ?? match.txHash ?? null,
-            createdAt: match.created_at ?? match.createdAt ?? previous.createdAt,
+          setData(prev => ({
+            ...prev,
+            id: match.id || prev.id,
+            accountId: match.account_id ?? match.accountId ?? prev.accountId,
+            amount: cents('amount_cents', 'amountCents') ?? prev.amount,
+            fee: cents('fee_cents', 'feeCents') ?? prev.fee,
+            netAmount: cents('net_amount_cents', 'netAmountCents') ?? prev.netAmount,
+            address: typeof match.address === 'string' && match.address ? match.address : prev.address,
+            coin: typeof match.coin === 'string' ? match.coin : prev.coin,
+            status: typeof match.status === 'string' ? match.status : prev.status,
+            txHash: match.tx_hash ?? match.txHash ?? prev.txHash,
+            createdAt: match.created_at ?? match.createdAt ?? prev.createdAt,
           }));
-          setNotice('');
         }
       } catch {
-        if (active) setNotice(t('تعذر تحديث الحالة؛ تُعرض آخر بيانات متاحة.', 'Status could not be refreshed; showing the last available data.'));
+        /* Keep existing view */
       } finally { inFlight = false; }
     };
     void refresh();
-    const interval = setInterval(() => void refresh(), 30000);
+    const interval = setInterval(() => void refresh(), 25000);
     return () => { active = false; clearInterval(interval); };
-  }, [withdrawal.id, withdrawal.accountId, t]);
+  }, [withdrawal.id]);
 
   const copy = async (value: string | undefined | null, key: string) => {
     if (!value) return;
@@ -95,73 +88,221 @@ export function WithdrawalReceiptView({ withdrawal, onClose }: { withdrawal: Wit
       setCopied(key);
       if (copyTimer.current) clearTimeout(copyTimer.current);
       copyTimer.current = setTimeout(() => setCopied(null), 1800);
-    } catch { setNotice(t('تعذر النسخ؛ يمكنك تحديد النص ونسخه يدويًا.', 'Could not copy; select the text and copy it manually.')); }
+    } catch {
+      /* ignore */
+    }
   };
 
   const status = String(data.status ?? '').toLowerCase();
-  const paid = status === 'paid'; // Approval and a TxID alone never prove payment.
-  const rejected = status === 'rejected' || status === 'failed';
-  const pending = ['requested', 'approved', 'sending'].includes(status);
-  const statusLabel = paid ? t('تم السحب', 'Withdrawal paid') : status === 'approved' ? t('معتمد · بانتظار الدفع', 'Approved · awaiting payment') : status === 'requested' ? t('قيد المراجعة', 'Under review') : status === 'sending' ? t('قيد الإرسال', 'Sending') : rejected ? t('مرفوض أو متعذر', 'Rejected or failed') : t('الحالة غير متاحة', 'Status unavailable');
-  const explanation = paid ? t('تم تسجيل الدفع من الخدمة.', 'Payment is recorded by the service.') : pending ? t('لم تُسجل عملية دفع مكتملة بعد.', 'No completed payment has been recorded yet.') : rejected ? t('راجع سجل الحساب لمعرفة حالة إعادة الرصيد.', 'Check account activity for the refund status.') : t('راجع التفاصيل المتاحة أو تواصل مع الدعم.', 'Review the available details or contact support.');
-  const coin = PAYMENT_COINS.find(item => item.id.toLowerCase() === (data.coin ?? '').toLowerCase());
-  const currency = data.currency || 'USD'; // Receipt amounts are USD ledger amounts, not a guessed crypto conversion.
-  const amount = optionalMoney(data.amount), fee = optionalMoney(data.fee), net = optionalMoney(data.netAmount);
-  const money = (value: number | undefined) => value === undefined ? t('غير متاح', 'Not available') : `${value.toFixed(2)} ${currency}`;
-  const short = (value?: string | null) => value ? value.length > 22 ? value.slice(0, 9) + '…' + value.slice(-7) : value : '—';
-  let date = t('غير متاح', 'Not available');
-  if (data.createdAt !== undefined) {
+  const isPaid = status === 'paid' || status === 'completed' || status === 'credited';
+  const isRejected = status === 'rejected' || status === 'failed';
+  const isPending = !isPaid && !isRejected;
+
+  const statusLabel = isPaid
+    ? t('مكتمل', 'Completed')
+    : isRejected
+    ? t('مرفوض', 'Rejected')
+    : status === 'approved'
+    ? t('معتمد · بانتظار التحويل', 'Approved · Awaiting transfer')
+    : t('قيد المراجعة', 'Under Review');
+
+  const subtitle = isPaid
+    ? t('تم تنفيذ التحويل بنجاح', 'Transfer completed successfully')
+    : isRejected
+    ? t('تم إلغاء أو رفض طلب السحب', 'Withdrawal request was rejected')
+    : t('بانتظار تنفيذ التحويل', 'Awaiting transfer execution');
+
+  const rawAmount = optionalMoney(data.amount) ?? 0;
+  const fee = optionalMoney(data.fee) ?? Math.round(rawAmount * 5) / 100;
+  const net = optionalMoney(data.netAmount) ?? Math.max(0, Math.round((rawAmount - fee) * 100) / 100);
+
+  const coinCode = (data.coin || 'USDT').toUpperCase();
+  const networkName = data.network || 'BNB Smart Chain · BEP20';
+
+  // Format date and time
+  let dateStr = '—', timeStr = '—';
+  if (data.createdAt) {
     const instant = new Date(data.createdAt);
     if (Number.isFinite(instant.getTime())) {
-      try { date = new Intl.DateTimeFormat(prefs.chartLocale === 'ar' ? 'ar-u-nu-latn' : 'en-GB', { timeZone: prefs.timezone, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(instant); } catch { date = instant.toISOString(); }
+      try {
+        dateStr = new Intl.DateTimeFormat(prefs.chartLocale === 'ar' ? 'ar-u-nu-latn' : 'en-GB', {
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric',
+          timeZone: prefs.timezone
+        }).format(instant);
+        timeStr = new Intl.DateTimeFormat(prefs.chartLocale === 'ar' ? 'ar-u-nu-latn' : 'en-GB', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true,
+          timeZone: prefs.timezone
+        }).format(instant);
+      } catch {
+        dateStr = instant.toLocaleDateString();
+        timeStr = instant.toLocaleTimeString();
+      }
     }
   }
-  const Back = prefs.chartLocale === 'ar' ? ArrowRight : ArrowLeft;
-  const copyButton = (value: string | undefined | null, key: string, label: string) => value ? <button type="button" className="wr-copy" aria-label={label} onClick={() => void copy(value, key)}>{copied === key ? <Check size={18}/> : <Copy size={18}/>}</button> : null;
 
-  return <div ref={root} className="orin-withdrawal-receipt" dir={prefs.chartLocale === 'ar' ? 'rtl' : 'ltr'} role="dialog" aria-modal="true" aria-labelledby="wr-title" onKeyDown={event => {
-    if (event.key === 'Escape') { event.stopPropagation(); onClose(); }
-    if (event.key === 'Tab') {
-      const buttons = root.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)');
-      if (!buttons?.length) return;
-      const first = buttons[0], last = buttons[buttons.length - 1];
-      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-      if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-    }
-  }}>
-    <section className="wr-sheet">
-      <header className="wr-header">
-        <span className="wr-brand" dir="ltr"><img src="/brand/orin-mark.png" alt="" width={38} height={38}/><strong>ORIN</strong></span>
-        <button type="button" className="wr-back" onClick={onClose} aria-label={t('رجوع', 'Back')}><Back size={25}/></button>
-      </header>
-      <div className="wr-hero">
-        <div className="wr-wallet" aria-hidden="true"><Wallet size={44}/><ArrowUpRight size={28}/></div>
-        <h1 id="wr-title">{t('سحب', 'Withdrawal')}{coin ? ` ${coin.label}` : ''}</h1>
-        <strong className="wr-amount" dir="ltr">{money(amount)}</strong>
-        <span className={'wr-status ' + (paid ? 'paid' : rejected ? 'rejected' : 'pending')}>
-          {paid ? <CheckCircle2 size={20}/> : rejected ? <CircleAlert size={20}/> : <Clock3 size={20}/>} {statusLabel}
-        </span>
-        <p>{explanation}</p>
+  const shortAddr = (val?: string) => {
+    if (!val) return '—';
+    if (val.length <= 16) return val;
+    return val.slice(0, 4) + '••••••••••••' + val.slice(-3);
+  };
+
+  const Back = prefs.chartLocale === 'ar' ? ArrowRight : ArrowLeft;
+
+  return (
+    <div
+      ref={root}
+      className="orin-withdrawal-receipt"
+      dir={prefs.chartLocale === 'ar' ? 'rtl' : 'ltr'}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="wr-title"
+      onKeyDown={e => { if (e.key === 'Escape') onClose(); }}
+    >
+      <div className="wr-sheet">
+        {/* Top bar with back button */}
+        <header className="wr-header">
+          <button type="button" className="wr-back" onClick={onClose} aria-label={t('رجوع', 'Back')}>
+            <Back size={24} />
+          </button>
+        </header>
+
+        {/* Hero with arrow badge, title, amount, and status pill */}
+        <div className="wr-hero">
+          <div className="wr-icon-bubble" aria-hidden="true">
+            <ArrowUpRight size={32} />
+          </div>
+          <h1 id="wr-title">{t(`سحب ${coinCode}`, `Withdraw ${coinCode}`)}</h1>
+          <div className="wr-amount-large" dir="ltr">
+            <span className="wr-currency-symbol">{coinCode}</span>
+            <span className="wr-amount-val">{rawAmount.toFixed(2)}</span>
+          </div>
+
+          <div className={`wr-status-pill ${isPaid ? 'paid' : isRejected ? 'rejected' : 'pending'}`}>
+            {isPaid ? <CheckCircle2 size={18} /> : isRejected ? <CircleAlert size={18} /> : <Clock3 size={18} />}
+            <span>{statusLabel}</span>
+          </div>
+
+          <p className="wr-subtitle">{subtitle}</p>
+        </div>
+
+        {/* Dashed divider */}
+        <div className="wr-dashed-line" />
+
+        {/* Section title */}
+        <h2 className="wr-details-heading">{t('تفاصيل التحويل', 'Transfer Details')}</h2>
+
+        {/* Details list */}
+        <div className="wr-info-table">
+          {/* Order ID */}
+          <div className="wr-info-row">
+            <span className="wr-info-label">{t('رقم الطلب', 'Order ID')}</span>
+            <div className="wr-info-val" dir="ltr">
+              <span className="wr-mono-text" title={data.id}>{data.id}</span>
+              <button
+                type="button"
+                className="wr-copy-btn"
+                onClick={() => void copy(data.id, 'id')}
+                aria-label={t('نسخ رقم الطلب', 'Copy order ID')}
+              >
+                {copied === 'id' ? <Check size={16} /> : <Copy size={16} />}
+              </button>
+            </div>
+          </div>
+
+          {/* Network */}
+          <div className="wr-info-row">
+            <span className="wr-info-label">{t('الشبكة', 'Network')}</span>
+            <div className="wr-info-val">
+              <span className="wr-bnb-badge">
+                <svg width="18" height="18" viewBox="0 0 32 32" aria-hidden="true">
+                  <circle cx="16" cy="16" r="16" fill="#F3BA2F" />
+                  <path d="M16 6.5l3.2 3.2-4.5 4.5-4.5-4.5L16 6.5zm-5.7 5.7l1.3 1.3-3.2 3.2 3.2 3.2-1.3 1.3-4.5-4.5 4.5-4.5zm11.4 0l4.5 4.5-4.5 4.5-1.3-1.3 3.2-3.2-3.2-3.2 1.3-1.3zM16 16.5l4.5 4.5-3.2 3.2L16 21.5l-1.3 1.3-1.9-1.9 3.2-3.2v-1.2zm0-2.3l2.2-2.2 2.2 2.2-2.2 2.2L16 14.2z" fill="#fff" />
+                </svg>
+                <b>{networkName}</b>
+              </span>
+            </div>
+          </div>
+
+          {/* Date */}
+          <div className="wr-info-row">
+            <span className="wr-info-label">{t('التاريخ', 'Date')}</span>
+            <span className="wr-info-val">{dateStr}</span>
+          </div>
+
+          {/* Time */}
+          <div className="wr-info-row">
+            <span className="wr-info-label">{t('الوقت', 'Time')}</span>
+            <span className="wr-info-val">{timeStr}</span>
+          </div>
+
+          {/* Recipient Address */}
+          <div className="wr-info-row">
+            <span className="wr-info-label">{t('عنوان الاستلام', 'Recipient Address')}</span>
+            <div className="wr-info-val" dir="ltr">
+              <span className="wr-mono-text" title={data.address}>{shortAddr(data.address)}</span>
+              {data.address && (
+                <button
+                  type="button"
+                  className="wr-copy-btn"
+                  onClick={() => void copy(data.address, 'addr')}
+                  aria-label={t('نسخ عنوان الاستلام', 'Copy address')}
+                >
+                  {copied === 'addr' ? <Check size={16} /> : <Copy size={16} />}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* TxHash */}
+          <div className="wr-info-row">
+            <span className="wr-info-label">{t('معرّف التحويل', 'Transaction ID (TxID)')}</span>
+            <div className="wr-info-val" dir="ltr">
+              <span className={data.txHash ? 'wr-mono-text' : 'wr-muted-text'}>
+                {data.txHash || t('لم يصدر بعد', 'Not yet issued')}
+              </span>
+              {data.txHash && (
+                <button
+                  type="button"
+                  className="wr-copy-btn"
+                  onClick={() => void copy(data.txHash, 'tx')}
+                  aria-label={t('نسخ معرّف التحويل', 'Copy TxID')}
+                >
+                  {copied === 'tx' ? <Check size={16} /> : <Copy size={16} />}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Withdrawal Amount */}
+          <div className="wr-info-row">
+            <span className="wr-info-label">{t('مبلغ السحب', 'Withdrawal Amount')}</span>
+            <span className="wr-info-val wr-num-bold" dir="ltr">{rawAmount.toFixed(2)} {coinCode}</span>
+          </div>
+
+          {/* Fee */}
+          <div className="wr-info-row">
+            <span className="wr-info-label">{t('الرسوم', 'Fee')}</span>
+            <span className="wr-info-val wr-num-bold" dir="ltr">{fee.toFixed(2)} {coinCode}</span>
+          </div>
+        </div>
+
+        {/* Highlighted Net Received Box */}
+        <div className="wr-net-box">
+          <span className="wr-net-label">{t('صافي الاستلام', 'Net Payout')}</span>
+          <strong className="wr-net-val" dir="ltr">{net.toFixed(2)} {coinCode}</strong>
+        </div>
+
+        {/* Action Button */}
+        <div className="wr-action-footer">
+          <button type="button" className="wr-return-btn" onClick={onClose}>
+            {t('العودة إلى المعاملات', 'Return to Transactions')}
+          </button>
+        </div>
       </div>
-      <dl className="wr-details">
-        <div><dt>{t('رقم الطلب', 'Request ID')}</dt><dd dir="ltr"><span title={data.id}>{short(data.id)}</span>{copyButton(data.id, 'id', t('نسخ رقم الطلب', 'Copy request ID'))}</dd></div>
-        <div><dt>{t('تاريخ الطلب', 'Request date')}</dt><dd>{date}</dd></div>
-        <div><dt>{t('الشبكة', 'Network')}</dt><dd dir="ltr">{coin?.network ?? data.network ?? t('غير متاحة', 'Not available')}</dd></div>
-        <div><dt>{t('عنوان المحفظة', 'Wallet address')}</dt><dd dir="ltr"><span title={data.address}>{short(data.address)}</span>{copyButton(data.address, 'address', t('نسخ عنوان المحفظة', 'Copy wallet address'))}</dd></div>
-        <div><dt>{t('الرسوم', 'Fee')}</dt><dd dir="ltr">{money(fee)}</dd></div>
-        <div className="wr-net"><dt>{t('صافي الاستلام', 'Net payout')}</dt><dd dir="ltr">{money(net)}</dd></div>
-      </dl>
-      <button type="button" className="wr-expand" aria-expanded={expanded} aria-controls="wr-more" onClick={() => setExpanded(value => !value)}>{t('عرض المزيد من التفاصيل', 'Show more details')}<ChevronDown size={19} style={{ transform: expanded ? 'rotate(180deg)' : undefined }}/></button>
-      {expanded && <dl id="wr-more" className="wr-details wr-more">
-        <div><dt>{t('رقم الطلب الكامل', 'Full request ID')}</dt><dd dir="ltr">{data.id || '—'}</dd></div>
-        <div><dt>{t('معرّف التحويل', 'Transaction ID')}</dt><dd dir="ltr"><span>{data.txHash || t('لم توفره الخدمة', 'Not provided by the service')}</span>{copyButton(data.txHash, 'tx', t('نسخ معرّف التحويل', 'Copy transaction ID'))}</dd></div>
-        <div><dt>{t('الحالة المسجلة', 'Recorded status')}</dt><dd>{status || '—'}</dd></div>
-      </dl>}
-      {notice && <p className="wr-notice" role="status">{notice}</p>}
-      <footer className="wr-actions">
-        <button type="button" className="wr-primary" onClick={onClose}>{t('العودة إلى المعاملات', 'Return to transactions')}<Back size={22}/></button>
-        <button type="button" className="wr-help" onClick={() => { onClose(); navigation.navigate('/support'); }}><MessageCircleMore size={23}/>{t('تحتاج مساعدة؟', 'Need help?')}</button>
-      </footer>
-    </section>
-  </div>;
+    </div>
+  );
 }

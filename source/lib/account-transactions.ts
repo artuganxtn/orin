@@ -53,12 +53,15 @@ export function buildTransactions(state:LabState,account:TradingAccount,deposits
  for(const [id,entries] of journals){
   const payment=items.find(t=>t.deposit&&(t.deposit.creditJournalId===id||(t.deposit.paymentId&&id==='deposit-nowpayments-'+t.deposit.paymentId)));
   if(payment){payment.entries=entries;continue}
+  const cleanJnlId=id.replace(/^(jnl-wd-|jnl-|j-wd-|j-)/,'').replace(/^(wd-)/,'');
   const withdrawal=items.find(t=>t.withdrawal&&(
+    t.withdrawal.id.replace(/^(wd-)/,'')===cleanJnlId||
     id==='jnl-wd-'+t.withdrawal.id||
     id==='jnl-'+t.withdrawal.id||
     id==='j-wd-'+t.withdrawal.id||
     id===t.withdrawal.id||
-    (entries[0] as any)?.reference===t.withdrawal.id
+    (entries[0] as any)?.reference===t.withdrawal.id||
+    (entries[0] as any)?.reference?.replace(/^(wd-)/,'')===cleanJnlId
   ));
   if(withdrawal){withdrawal.entries.push(...entries);continue}
   // Use the customer leg, never the sum of a balanced journal or its clearing leg.

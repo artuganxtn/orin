@@ -3078,11 +3078,18 @@ async function inbox(u, now = Date.now(), offset = 0, key4) {
        ORDER BY updated_at DESC LIMIT 100`,
       [u.id, isAdmin]
     );
-    const readRows = await client.query(
-      `SELECT id, data FROM docs
-       WHERE collection = 'orinNoticeReads' AND owner_id = $1`,
-      [u.id]
-    );
+    const [readRows, seenRow] = await Promise.all([
+      client.query(
+        `SELECT id, data FROM docs
+         WHERE collection = 'orinNoticeReads' AND owner_id = $1`,
+        [u.id]
+      ),
+      client.query(
+        `SELECT data FROM docs WHERE collection = 'orinUserSeen' AND id = $1`,
+        [u.id]
+      )
+    ]);
+    const seenAt = Number(seenRow.rows[0]?.data?.seen_at || 0);
     const readsMap = /* @__PURE__ */ new Map();
     for (const r of readRows.rows) {
       const noticeId = r.data?.notice_id || r.id.split(":")[1];
@@ -3093,7 +3100,7 @@ async function inbox(u, now = Date.now(), offset = 0, key4) {
     const items = noticeRows.rows.map((r) => ({ id: r.id, ...r.data || {} })).filter((n) => visible(n, u.id, u.role, now)).sort((a, b) => (b.created_at || 0) - (a.created_at || 0)).map((n) => ({
       ...n,
       id: n.id,
-      read_at: readsMap.get(n.id) ?? null,
+      read_at: readsMap.get(n.id) ?? ((n.created_at || 0) <= seenAt ? seenAt : null),
       category: noticeCategory(n),
       deep_link: noticeDestination(n)
     }));
@@ -3232,7 +3239,7 @@ async function createNotice(client, opts) {
   if (targetRole) {
     noticeData.target_role = targetRole;
   }
-  const ownerId = opts.userId === "*" || opts.userId === "admin" ? null : opts.userId;
+  const ownerId = opts.userId === "*" ? null : opts.userId;
   await client.query(
     `INSERT INTO docs (collection, id, owner_id, data, updated_at)
      VALUES ('orinNotices', $1, $2, $3::jsonb, NOW())
@@ -6368,14 +6375,36 @@ async function state2(u, now = Date.now()) {
     });
     let notifications = [];
     try {
+      const isAdmin2 = u.role === "admin";
       const noticeRows = await client.query(
         `SELECT id, data, updated_at FROM docs
          WHERE collection = 'orinNotices'
-           AND (owner_id = $1 OR owner_id IS NULL OR data->>'user_id' = $1 OR data->>'user_id' = '*')
+           AND (
+             owner_id = $1 
+             OR data->>'user_id' = $1
+             OR (
+               data->>'user_id' = '*'
+               AND ($2::boolean = true OR (data->>'category' = 'announcement' AND COALESCE(data->>'target_role', '') <> 'admin' AND COALESCE(data->>'deep_link', '') NOT LIKE '/admin%'))
+             )
+             OR (
+               $2::boolean = true
+               AND (data->>'user_id' = 'admin' OR data->>'target_role' = 'admin' OR data->>'category' = 'admin' OR data->>'deep_link' LIKE '/admin%')
+             )
+           )
          ORDER BY updated_at DESC LIMIT 50`,
-        [u.id]
+        [u.id, isAdmin2]
       );
-      notifications = noticeRows.rows.map((r) => ({
+      notifications = noticeRows.rows.filter((r) => {
+        const d = r.data || {};
+        if (!isAdmin2) {
+          if (d.target_role === "admin" || d.category === "admin" || d.user_id === "admin") return false;
+          if (d.deep_link && d.deep_link.startsWith("/admin")) return false;
+          const title = String(d.title || "");
+          if (title.includes("\u0637\u0644\u0628 \u0633\u062D\u0628 \u062C\u062F\u064A\u062F") || title.includes("\u0628\u0627\u0646\u062A\u0638\u0627\u0631 \u0627\u0644\u0627\u0639\u062A\u0645\u0627\u062F") || title.includes("\u0628\u0627\u0646\u062A\u0638\u0627\u0631 \u0627\u0644\u0645\u0648\u0627\u0641\u0642\u0629")) return false;
+        }
+        if (d.user_id && d.user_id !== "*" && d.user_id !== "admin" && d.user_id !== u.id) return false;
+        return true;
+      }).map((r) => ({
         id: r.id,
         title: r.data?.title || "",
         message: r.data?.message || r.data?.body || "",

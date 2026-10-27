@@ -611,20 +611,44 @@ export async function state(u: Identity, now = Date.now()) {
 
     let notifications: any[] = [];
     try {
+      const isAdmin = u.role === 'admin';
       const noticeRows = await client.query(
         `SELECT id, data, updated_at FROM docs
          WHERE collection = 'orinNotices'
-           AND (owner_id = $1 OR owner_id IS NULL OR data->>'user_id' = $1 OR data->>'user_id' = '*')
+           AND (
+             owner_id = $1 
+             OR data->>'user_id' = $1
+             OR (
+               data->>'user_id' = '*'
+               AND ($2::boolean = true OR (data->>'category' = 'announcement' AND COALESCE(data->>'target_role', '') <> 'admin' AND COALESCE(data->>'deep_link', '') NOT LIKE '/admin%'))
+             )
+             OR (
+               $2::boolean = true
+               AND (data->>'user_id' = 'admin' OR data->>'target_role' = 'admin' OR data->>'category' = 'admin' OR data->>'deep_link' LIKE '/admin%')
+             )
+           )
          ORDER BY updated_at DESC LIMIT 50`,
-        [u.id]
+        [u.id, isAdmin]
       );
-      notifications = noticeRows.rows.map(r => ({
-        id: r.id,
-        title: r.data?.title || '',
-        message: r.data?.message || r.data?.body || '',
-        contract_id: r.data?.contract_id || null,
-        created_at: r.data?.created_at || (r.updated_at ? new Date(r.updated_at).getTime() : now)
-      }));
+      notifications = noticeRows.rows
+        .filter(r => {
+          const d = r.data || {};
+          if (!isAdmin) {
+            if (d.target_role === 'admin' || d.category === 'admin' || d.user_id === 'admin') return false;
+            if (d.deep_link && d.deep_link.startsWith('/admin')) return false;
+            const title = String(d.title || '');
+            if (title.includes('طلب سحب جديد') || title.includes('بانتظار الاعتماد') || title.includes('بانتظار الموافقة')) return false;
+          }
+          if (d.user_id && d.user_id !== '*' && d.user_id !== 'admin' && d.user_id !== u.id) return false;
+          return true;
+        })
+        .map(r => ({
+          id: r.id,
+          title: r.data?.title || '',
+          message: r.data?.message || r.data?.body || '',
+          contract_id: r.data?.contract_id || null,
+          created_at: r.data?.created_at || (r.updated_at ? new Date(r.updated_at).getTime() : now)
+        }));
     } catch {
       notifications = [];
     }
