@@ -13,8 +13,8 @@ if(typeof window!=='undefined'&&!/ORINAndroid\//.test(navigator.userAgent)&&(win
  r.lang=locale||'en';r.dir=r.lang==='ar'?'rtl':'ltr';
  try{r.dataset.theme=p.theme==='dark'||(p.theme==='system'&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';r.dataset.reduceMotion=String(p.reduceMotion===true)}catch(e){}
 })();
-</script>  <script type="module" crossorigin src="/assets/index-gUSxcQ4p.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-BFSgj93d.css">
+</script>  <script type="module" crossorigin src="/assets/index-Djw7Pqmi.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-gkXEbsDx.css">
 </head><body><div id="root"><main id="orin-static-launch" class="orin-launch" role="status" aria-label="ORIN"><div class="orin-launch-content"><div class="orin-launch-mark"><img src="/brand/orin-mark.png" alt="" width="112" height="112" fetchpriority="high"/></div><strong class="orin-launch-wordmark" dir="ltr">ORIN</strong><section id="orin-static-message" class="orin-launch-message" hidden><h1></h1><p></p><button type="button" onclick="location.reload()"></button></section></div></main></div>
 <script>
 (function(){var timer;function showFailure(){var panel=document.getElementById('orin-static-message'),launch=document.getElementById('orin-static-launch');if(!panel||!launch)return;var ar=document.documentElement.lang==='ar',off=navigator.onLine===false;panel.hidden=false;launch.classList.add('orin-launch-failed');launch.setAttribute('role','alert');panel.querySelector('h1').textContent=off?(ar?'أنت غير متصل':'You’re offline'):(ar?'تعذر الاتصال':'Unable to connect');panel.querySelector('p').textContent=ar?'تحقق من اتصال الإنترنت ثم أعد المحاولة.':'Check your internet connection, then try again.';panel.querySelector('button').textContent=ar?'إعادة المحاولة':'Try again'}timer=setTimeout(showFailure,12000);addEventListener('offline',showFailure);addEventListener('orin-mounted',function(){clearTimeout(timer);removeEventListener('offline',showFailure)},{once:true});if(navigator.onLine===false)showFailure()})();

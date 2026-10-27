@@ -36,9 +36,12 @@ export function SettingsRow({ icon, title, detail, children, onClick }: {
     const Chevron = prefs.chartLocale === 'ar' ? ChevronLeft : ChevronRight;
     const content = <>
         <span className="setting-icon">{icon}</span>
-        <span className="setting-copy"><b>{title}</b></span>
+        <span className="setting-copy">
+            <b>{title}</b>
+            {detail && Boolean(children) && <small>{detail}</small>}
+        </span>
         <div className="setting-end">
-            {detail && <span className="setting-val">{detail}</span>}
+            {detail && !children && <span className="setting-val">{detail}</span>}
             {children ?? <Chevron size={18} className="setting-chevron"/>}
         </div>
     </>; 

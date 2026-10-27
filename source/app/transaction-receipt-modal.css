@@ -350,12 +350,14 @@
   justify-content: space-between;
   gap: 10px;
   font-size: 13.5px;
+  min-width: 0;
 }
 
 .tx-detail-label {
   color: var(--orin-text-muted, #64748b);
   font-weight: 500;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .tx-detail-val {
@@ -365,6 +367,8 @@
   font-weight: 600;
   color: var(--orin-text, #0f1c3f);
   text-align: end;
+  min-width: 0;
+  max-width: 68%;
 }
 
 .tx-detail-val.gain {
@@ -374,6 +378,9 @@
 .tx-detail-val .mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tx-copy-btn {
@@ -387,6 +394,7 @@
   border-radius: 4px;
   cursor: pointer;
   transition: color 0.15s ease, background 0.15s ease;
+  flex-shrink: 0;
 }
 
 .tx-copy-btn:hover {
@@ -402,6 +410,7 @@
   font-weight: 600;
   cursor: pointer;
   padding: 0 4px;
+  flex-shrink: 0;
 }
 
 .tx-linked-btn {
@@ -415,6 +424,10 @@
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tx-confirm-pill {

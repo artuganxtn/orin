@@ -107,17 +107,28 @@ html[data-theme=dark] .trade-titlebar>button,html[data-theme=dark] .trade-pair-p
   flex: 1 !important;
   min-width: 0 !important;
   margin-inline-start: 12px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 3px !important;
 }
 .settings-modern-row .setting-copy b {
-  font-size: 16px !important;
+  font-size: 15px !important;
   font-weight: 600 !important;
   color: var(--orin-text, #0c2340) !important;
+  line-height: 1.4 !important;
+}
+.settings-modern-row .setting-copy small {
+  font-size: 12px !important;
+  color: #889bb8 !important;
+  line-height: 1.4 !important;
+  font-weight: normal !important;
 }
 .settings-modern-row .setting-end {
   display: inline-flex !important;
   align-items: center !important;
   gap: 8px !important;
   flex-shrink: 0 !important;
+  margin-inline-start: 12px !important;
 }
 .settings-modern-row .setting-val {
   font-size: 14px !important;
@@ -133,6 +144,9 @@ html[data-theme='dark'] .settings-modern-row,
 html[data-theme='dark'] .settings-modern-row .setting-icon,
 html[data-theme='dark'] .settings-modern-row .setting-copy b {
   color: #f1f5f9 !important;
+}
+html[data-theme='dark'] .settings-modern-row .setting-copy small {
+  color: #94a3b8 !important;
 }
 html[data-theme='dark'] .settings-modern-row {
   border-bottom-color: #1e2c45 !important;

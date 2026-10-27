@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { useOrin } from './orin-settings';
 import { useNavigation } from './orin-navigation';
-import type { AccountTransaction } from '@/lib/account-transactions';
+import { transactionLabel, transactionStatus, type AccountTransaction } from '@/lib/account-transactions';
 import './transaction-receipt-modal.css';
 
 export interface UnifiedTransactionData {
@@ -101,6 +101,14 @@ export function TransactionReceiptModal({
     return val.slice(0, 14) + '...' + val.slice(-8);
   };
 
+  const formatDisplayId = (id?: string, prefix = 'OR-TR-') => {
+    if (!id) return '—';
+    if (id.startsWith('OR-')) return id;
+    const clean = id.replace(/^(settle:|allocate:|jnl-settlement-|jnl-wd-|jnl-|wd-|fee:|deposit-nowpayments-|deposit-)/, '');
+    const short = clean.length > 8 ? clean.slice(0, 4) : clean;
+    return `${prefix}${short.toUpperCase()}`;
+  };
+
   const displayAcc = transaction.accountNumber 
     ? (transaction.accountNumber.startsWith('••••') ? transaction.accountNumber : `•••• ${transaction.accountNumber.slice(-4)}`) 
     : '•••• 4129';
@@ -109,7 +117,7 @@ export function TransactionReceiptModal({
   const status = transaction.status.toLowerCase();
 
   // Status mappings
-  const isComplete = ['paid', 'completed', 'credited', 'finished'].includes(status);
+  const isComplete = ['paid', 'completed', 'credited', 'finished', 'recorded'].includes(status);
   const isPending = ['requested', 'review', 'waiting', 'confirming', 'sending', 'creating'].includes(status);
   const isFailed = ['failed', 'rejected', 'expired'].includes(status);
 
@@ -139,6 +147,12 @@ export function TransactionReceiptModal({
                 ? t('تفاصيل الإيداع', 'Deposit Details') 
                 : kind === 'withdrawal'
                 ? t('تفاصيل السحب', 'Withdrawal Details')
+                : kind === 'allocation'
+                ? t('تفاصيل حجز التداول', 'Trading Allocation Details')
+                : kind === 'early_exit_fee'
+                ? t('تفاصيل رسوم الخروج المبكر', 'Early Exit Fee Details')
+                : kind.includes('fee')
+                ? t('تفاصيل الرسوم', 'Fee Details')
                 : t('تفاصيل المعاملة', 'Transaction Details')}
             </span>
             <BackChevron size={18} />
@@ -199,7 +213,7 @@ export function TransactionReceiptModal({
                     <button type="button" className="tx-copy-btn" onClick={() => void copy(transaction.id, 'st_id')} aria-label={t('نسخ', 'Copy')}>
                       {copied === 'st_id' ? <Check size={14} /> : <Copy size={14} />}
                     </button>
-                    <span className="mono">{transaction.orderId || transaction.id.replace(/^(jnl-settlement-|jnl-)/, 'OR-ST-')}</span>
+                    <span className="mono">{transaction.orderId || formatDisplayId(transaction.id, 'OR-ST-')}</span>
                   </div>
                 </div>
 
@@ -216,7 +230,7 @@ export function TransactionReceiptModal({
                     }}
                   >
                     <ForwardChevron size={14} />
-                    <span>{transaction.relatedTradeId || transaction.id.replace(/^(jnl-settlement-|jnl-)/, 'OR-TR-')}</span>
+                    <span>{formatDisplayId(transaction.relatedTradeId || transaction.id, 'OR-TR-')}</span>
                   </button>
                 </div>
 
@@ -348,7 +362,7 @@ export function TransactionReceiptModal({
                     <button type="button" className="tx-copy-btn" onClick={() => void copy(transaction.id, 'dp_id')} aria-label={t('نسخ', 'Copy')}>
                       {copied === 'dp_id' ? <Check size={14} /> : <Copy size={14} />}
                     </button>
-                    <span className="mono">{transaction.orderId || transaction.id.replace(/^(deposit-nowpayments-|deposit-)/, 'OR-DP-')}</span>
+                    <span className="mono">{transaction.orderId || formatDisplayId(transaction.id, 'OR-DP-')}</span>
                   </div>
                 </div>
 
@@ -498,7 +512,7 @@ export function TransactionReceiptModal({
                     <button type="button" className="tx-copy-btn" onClick={() => void copy(transaction.id, 'wd_id')} aria-label={t('نسخ', 'Copy')}>
                       {copied === 'wd_id' ? <Check size={14} /> : <Copy size={14} />}
                     </button>
-                    <span className="mono">{transaction.orderId || transaction.id.replace(/^(jnl-wd-|jnl-|wd-)/, 'OR-WD-')}</span>
+                    <span className="mono">{transaction.orderId || formatDisplayId(transaction.id, kind === 'allocation' ? 'OR-AL-' : 'OR-WD-')}</span>
                   </div>
                 </div>
 
@@ -539,6 +553,89 @@ export function TransactionReceiptModal({
                 <Info size={16} />
                 <span>{t('سيتم تحديث الحالة بعد معالجة الطلب', 'Status updates once processing completes')}</span>
               </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="tx-actions-row">
+              <button 
+                type="button" 
+                className="btn-outline full tx-btn"
+                onClick={() => {
+                  onClose();
+                  navigation.navigate('/support');
+                }}
+              >
+                <Headphones size={18} />
+                <span>{t('تواصل مع الدعم', 'Contact Support')}</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ----------------- 4. FEE & OTHER TRANSACTION DETAILS VIEW ----------------- */}
+        {!['settlement', 'deposit', 'withdrawal', 'allocation'].includes(kind) && (
+          <div className="tx-content-view">
+            {/* Hero Card */}
+            <div className="tx-card tx-hero-card">
+              <div className="tx-hero-icon-bubble fee">
+                <Wallet size={28} />
+              </div>
+              <span className="tx-hero-label">{transactionLabel(kind, isAr)}</span>
+              <div className="tx-hero-amount" dir="ltr">
+                <strong>-{number(transaction.amount)}</strong>
+                <span>{transaction.currency}</span>
+              </div>
+              <div className="tx-status-pill recorded">
+                <span>{transactionStatus(transaction.status, isAr)}</span>
+              </div>
+              <p className="tx-hero-subtitle">
+                {kind === 'early_exit_fee' 
+                  ? t('تم تطبيق رسوم الخروج المبكر (20%) وفقاً لسياسة السحب', 'Early exit fee (20%) applied per withdrawal policy')
+                  : t('تم قيد هذه الحركة بنجاح في سجل حسابك', 'Transaction successfully recorded in your account ledger')}
+              </p>
+            </div>
+
+            {/* Details Card */}
+            <div className="tx-card">
+              <h3 className="tx-card-title">{t('تفاصيل المعاملة', 'Transaction Details')}</h3>
+              <div className="tx-details-table">
+                <div className="tx-detail-row">
+                  <span className="tx-detail-label">{t('رقم المعاملة', 'Transaction ID')}</span>
+                  <div className="tx-detail-val" dir="ltr">
+                    <button type="button" className="tx-copy-btn" onClick={() => void copy(transaction.id, 'fee_id')} aria-label={t('نسخ', 'Copy')}>
+                      {copied === 'fee_id' ? <Check size={14} /> : <Copy size={14} />}
+                    </button>
+                    <span className="mono">{transaction.orderId || formatDisplayId(transaction.id, 'OR-FE-')}</span>
+                  </div>
+                </div>
+
+                <div className="tx-detail-row">
+                  <span className="tx-detail-label">{t('الحساب', 'Account')}</span>
+                  <span className="tx-detail-val" dir="ltr">{displayAcc}</span>
+                </div>
+
+                <div className="tx-detail-row">
+                  <span className="tx-detail-label">{t('نوع المعاملة', 'Transaction Type')}</span>
+                  <span className="tx-detail-val">{transactionLabel(kind, isAr)}</span>
+                </div>
+
+                <div className="tx-detail-row">
+                  <span className="tx-detail-label">{t('المبلغ المحتسب', 'Fee Amount')}</span>
+                  <strong className="tx-detail-val" dir="ltr">-{number(transaction.amount)} {transaction.currency}</strong>
+                </div>
+
+                <div className="tx-detail-row">
+                  <span className="tx-detail-label">{t('التاريخ والوقت', 'Date & Time')}</span>
+                  <span className="tx-detail-val">{formatDate(transaction.createdAt)}</span>
+                </div>
+              </div>
+
+              {kind === 'early_exit_fee' && (
+                <div className="tx-info-box">
+                  <Info size={16} />
+                  <span>{t('تُطبق رسوم الخروج المبكر بنسبة 20% عند طلب السحب قبل إتمام مدة التداول المقررة (29 يوماً).', 'Early exit fee of 20% applies when withdrawing before the 29-day holding period is met.')}</span>
+                </div>
+              )}
             </div>
 
             {/* Action Buttons */}

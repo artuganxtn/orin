@@ -334,3 +334,22 @@ html[data-theme='dark'] .tx-footer-tip {
   border-color: #1e2c45;
   color: #38bdf8;
 }
+
+/* Mobile viewport width alignment matching settings & wallet */
+.orin-full-page.orin-activity-page .orin-page-inner,
+.orin-activity-screen .orin-page-inner {
+  max-width: 480px !important;
+  margin: 0 auto !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  padding-left: 16px !important;
+  padding-right: 16px !important;
+}
+
+.modern-activity-container {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
+}
+

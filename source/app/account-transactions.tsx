@@ -260,7 +260,7 @@ function ModernTransactionCard({
 
   const rawCents = Math.abs(row.withdrawal?.amountCents ?? row.deposit?.amountCents ?? row.amountCents ?? 0);
   const isSettlement = kind === 'settlement';
-  const isNegative = kind === 'withdrawal' || kind === 'allocation';
+  const isNegative = kind === 'withdrawal' || kind === 'allocation' || kind.includes('fee');
   const prefix = isSettlement ? '+' : isNegative ? '-' : '';
 
   return (
