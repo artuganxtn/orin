@@ -1,56 +1,336 @@
-/* Transaction views only; does not alter the balance card or application identity. */
-.positions-recent{margin-top:24px;padding:17px 16px;border:1px solid var(--orin-line,#e1e9f4);border-radius:18px;background:var(--orin-surface,#fff);color:var(--orin-ink,#112347)}
-.positions-recent>header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
-.positions-recent>header>div{min-width:0}
-.positions-recent h2{font-size:calc(16px * var(--ui-font-scale,1));font-weight:650;line-height:1.6;margin:0}
-.positions-recent>header p{font-size:calc(11px * var(--ui-font-scale,1));line-height:1.7;color:var(--orin-muted,#7d8ca4);margin:3px 0 0}
-.positions-recent>header>button{flex:none;min-height:36px;padding:6px 10px;border:1px solid var(--orin-line,#e1e9f4);border-radius:10px;background:transparent;color:#0788ff;font:inherit;font-size:12px;cursor:pointer}
-:is(.positions-recent,.orin-activity-screen) .activity-filters{display:flex;gap:7px;flex-wrap:wrap;margin:14px 0}
-:is(.positions-recent,.orin-activity-screen) .activity-filters button{min-height:36px;min-width:58px;padding:7px 14px;border:1px solid var(--orin-line,#e1e9f4);border-radius:10px;background:var(--orin-surface,#fff);color:var(--orin-muted,#7d8ca4);font:inherit;font-size:12px;cursor:pointer}
-:is(.positions-recent,.orin-activity-screen) .activity-filters button[aria-pressed=true]{border-color:#0788ff66;background:#0788ff0b;color:#0788ff}
-:is(.positions-recent,.orin-activity-screen) .activity-list{display:flex;flex-direction:column;gap:0;border:1px solid var(--orin-line,#e1e9f4);border-radius:14px;overflow:hidden;background:var(--orin-surface,#fff)}
-:is(.positions-recent,.orin-activity-screen) .transaction-row{display:flex;align-items:center;gap:11px;width:100%;min-width:0;min-height:86px;padding:13px 14px;border:0;border-bottom:1px solid var(--orin-line,#e1e9f4);border-radius:0;background:transparent;color:var(--orin-ink,#112347);font:inherit;text-align:start;cursor:pointer;box-sizing:border-box}
-:is(.positions-recent,.orin-activity-screen) .transaction-row:last-child{border-bottom:0}
-:is(.positions-recent,.orin-activity-screen) .transaction-row[aria-expanded=true]{background:var(--orin-surface-soft,#f5f8fc)}
-:is(.positions-recent,.orin-activity-screen) .transaction-icon{position:relative;display:grid;place-items:center;flex:none;width:38px;height:38px;border:0;border-radius:12px;background:var(--orin-surface-soft,#f5f8fc);color:var(--orin-ink,#112347)}
-:is(.positions-recent,.orin-activity-screen) .transaction-icon>svg{width:21px;height:21px;stroke-width:1.65}
-:is(.positions-recent,.orin-activity-screen) .transaction-icon.withdrawal{background:#0788ff0c;color:#0788ff}
-:is(.positions-recent,.orin-activity-screen) .transaction-icon .withdrawal-direction{position:absolute;top:4px;inset-inline-end:3px;width:13px;height:13px;padding:1px;border-radius:3px;background:var(--orin-surface,#fff);stroke-width:2}
-:is(.positions-recent,.orin-activity-screen) .transaction-copy{display:flex;flex:1;min-width:0;flex-direction:column;align-items:flex-start;gap:3px}
-:is(.positions-recent,.orin-activity-screen) .transaction-copy>b{font-size:calc(13px * var(--ui-font-scale,1));font-weight:600;line-height:1.6;overflow-wrap:anywhere}
-:is(.positions-recent,.orin-activity-screen) .transaction-copy>small{font-size:calc(10px * var(--ui-font-scale,1));line-height:1.5;color:var(--orin-muted,#7d8ca4)}
-:is(.positions-recent,.orin-activity-screen) .transaction-state{font-size:calc(10px * var(--ui-font-scale,1));font-style:normal;line-height:1.5;border-radius:7px;padding:2px 6px;background:var(--orin-surface-soft,#f5f8fc);color:var(--orin-muted,#7d8ca4)}
-:is(.positions-recent,.orin-activity-screen) .transaction-state.complete{background:#16a34a12;color:#15803d}
-:is(.positions-recent,.orin-activity-screen) .transaction-state.pending{background:#d9770612;color:#a8610c}
-:is(.positions-recent,.orin-activity-screen) .transaction-state.failed{background:#dc262610;color:#bc3535}
-:is(.positions-recent,.orin-activity-screen) .transaction-amount{display:flex;flex-direction:column;align-items:flex-end;gap:3px;max-width:40%;min-width:0;text-align:end;overflow-wrap:anywhere}
-:is(.positions-recent,.orin-activity-screen) .transaction-amount>b{font-size:calc(15px * var(--ui-font-scale,1));font-weight:650;line-height:1.4;color:var(--orin-ink,#112347)}
-:is(.positions-recent,.orin-activity-screen) .transaction-amount>small{font-size:10px;color:var(--orin-muted,#7d8ca4)}
-:is(.positions-recent,.orin-activity-screen) .transaction-chevron{flex:none;color:var(--orin-muted,#7d8ca4);transition:transform .15s}
-:is(.positions-recent,.orin-activity-screen) .transaction-row[aria-expanded=true] .transaction-chevron{transform:rotate(180deg)}
-:is(.positions-recent,.orin-activity-screen) .transaction-detail{margin:0;padding:15px;border:0;border-bottom:1px solid var(--orin-line,#e1e9f4);border-radius:0;background:var(--orin-surface-soft,#f5f8fc);color:var(--orin-ink,#112347)}
-:is(.positions-recent,.orin-activity-screen) .transaction-detail h3{margin:0 0 12px;font-size:14px;font-weight:600}
-:is(.positions-recent,.orin-activity-screen) .transaction-detail dl{display:grid;gap:0;margin:0}
-:is(.positions-recent,.orin-activity-screen) .transaction-detail dl>div{display:flex;align-items:flex-start;justify-content:space-between;gap:15px;padding:9px 0;border-bottom:1px solid var(--orin-line,#e1e9f4);font-size:11px;line-height:1.7}
-:is(.positions-recent,.orin-activity-screen) .transaction-detail dt{flex:1;min-width:0;color:var(--orin-muted,#7d8ca4)}
-:is(.positions-recent,.orin-activity-screen) .transaction-detail dd{max-width:64%;min-width:0;text-align:end;overflow-wrap:anywhere;margin:0;color:var(--orin-ink,#112347)}
-:is(.positions-recent,.orin-activity-screen) .transaction-detail .transaction-figures{margin:0 0 12px}
-:is(.positions-recent,.orin-activity-screen) .transaction-detail .transaction-figures dd{font-weight:650}
-:is(.positions-recent,.orin-activity-screen) .transaction-detail summary{margin:0;padding:12px 0;font-size:12px;cursor:pointer;color:#0788ff}
-:is(.positions-recent,.orin-activity-screen) .transaction-entry{display:flex;justify-content:space-between;gap:12px;font-size:11px;line-height:1.8;padding:5px 0;overflow-wrap:anywhere}
-:is(.positions-recent,.orin-activity-screen) .transaction-receipt-link{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:42px;margin-top:14px;padding:9px 12px;border:1px solid #0788ff44;border-radius:11px;background:var(--orin-surface,#fff);color:#0788ff;font:inherit;font-size:12px;cursor:pointer}
-:is(.positions-recent,.orin-activity-screen) .activity-notice{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin:10px 0;padding:10px 12px;border:1px solid var(--orin-line,#e1e9f4);border-radius:10px;background:var(--orin-surface-soft,#f5f8fc);font-size:11px;line-height:1.7;color:var(--orin-muted,#7d8ca4)}
-:is(.positions-recent,.orin-activity-screen) .activity-notice button{display:inline-flex;align-items:center;gap:5px;min-height:34px;border:0;background:transparent;color:#0788ff;font:inherit;cursor:pointer}
-.positions-recent .recent-transactions-empty{margin:0;padding:22px 16px;text-align:center;font-size:12px;line-height:1.8;color:var(--orin-muted,#7d8ca4)}
-.positions-hub .positions-activity{display:flex;align-items:center;gap:12px;width:100%;max-width:none;margin:14px 0 24px;padding:14px 15px;border:1px solid var(--orin-line,#e1e9f4);border-radius:16px;background:var(--orin-surface,#fff);color:var(--orin-ink,#112347);font:inherit;text-align:start;box-shadow:none}
-.positions-hub .positions-activity>.positions-activity-icon{display:grid;place-items:center;flex:none;width:41px;height:41px;border-radius:12px;background:#0788ff0c;color:#0788ff}
-.positions-hub .positions-activity>span:nth-child(2){display:grid;flex:1;min-width:0;gap:4px}
-.positions-hub .positions-activity strong{font-size:13px;font-weight:600;line-height:1.6}
-.positions-hub .positions-activity small{font-size:10px;line-height:1.6;color:var(--orin-muted,#7d8ca4)}
-.positions-hub .positions-activity>svg{flex:none;color:var(--orin-muted,#7d8ca4)}
-:is(.positions-recent,.orin-activity-screen) button:focus-visible,.positions-hub .positions-activity:focus-visible{outline:2px solid #0788ff;outline-offset:3px}
-html[data-theme=dark] :is(.positions-recent,.orin-activity-screen) .transaction-state.complete{color:#70d8a1}
-html[data-theme=dark] :is(.positions-recent,.orin-activity-screen) .transaction-state.pending{color:#f4c074}
-html[data-theme=dark] :is(.positions-recent,.orin-activity-screen) .transaction-state.failed{color:#ff9a9a}
-@media(max-width:370px){.positions-recent{padding:14px 10px}:is(.positions-recent,.orin-activity-screen) .transaction-row{gap:8px;padding:12px 10px}:is(.positions-recent,.orin-activity-screen) .transaction-icon{width:32px;height:34px}:is(.positions-recent,.orin-activity-screen) .transaction-amount>b{font-size:calc(13px * var(--ui-font-scale,1))}:is(.positions-recent,.orin-activity-screen) .transaction-detail{padding:12px}}
-@media(prefers-reduced-motion:reduce){:is(.positions-recent,.orin-activity-screen) .transaction-chevron{transition:none}}
+/* Modern Fintech Transaction History matching Screenshots 2, 3, 4, 5 */
+.positions-recent, .orin-activity-screen {
+  margin-top: 16px;
+  color: var(--orin-text, #0f1c3f);
+  font-family: inherit;
+}
+
+.positions-recent > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.positions-recent h2 {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0;
+  color: var(--orin-text, #0f1c3f);
+}
+
+.positions-recent > header p {
+  font-size: 13px;
+  color: var(--orin-text-muted, #7e91ad);
+  margin: 3px 0 0;
+}
+
+.positions-recent > header > button {
+  padding: 6px 14px;
+  border: 1px solid var(--orin-line, #e2eaf5);
+  border-radius: 10px;
+  background: transparent;
+  color: #0075ff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.positions-recent > header > button:hover {
+  background: rgba(0, 117, 255, 0.05);
+}
+
+/* Filter pills */
+:is(.positions-recent, .orin-activity-screen) .activity-filters {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0 16px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+:is(.positions-recent, .orin-activity-screen) .activity-filters button {
+  min-height: 38px;
+  padding: 8px 18px;
+  border: 1px solid var(--orin-line, #e2eaf5);
+  border-radius: 12px;
+  background: var(--orin-surface, #ffffff);
+  color: var(--orin-text-muted, #64748b);
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+:is(.positions-recent, .orin-activity-screen) .activity-filters button[aria-pressed='true'] {
+  background: #edf5ff;
+  border-color: #cce4ff;
+  color: #0075ff;
+  font-weight: 600;
+}
+
+/* Date Grouping */
+.tx-day-group {
+  margin-bottom: 16px;
+}
+
+.tx-day-heading {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--orin-text, #0f1c3f);
+  margin: 16px 4px 10px;
+  text-align: start;
+}
+
+.tx-day-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Modern Transaction Card (Screenshot 5) */
+.modern-tx-card {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  background: var(--orin-surface, #ffffff);
+  border: 1px solid var(--orin-line, #edf2f9);
+  border-radius: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+  cursor: pointer;
+  text-align: start;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+  box-sizing: border-box;
+}
+
+.modern-tx-card:hover {
+  background: var(--orin-surface-hover, #fbfdff);
+  border-color: #dbe7f5;
+}
+
+.modern-tx-card:active {
+  transform: scale(0.995);
+}
+
+/* Right Section (Icon + Title & Time) */
+.modern-tx-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+}
+
+.modern-tx-icon-box {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  border: 1px solid var(--orin-line, #edf2f9);
+  background: var(--orin-surface-soft, #f8fafc);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #0075ff;
+  position: relative;
+}
+
+.modern-tx-icon-box.deposit {
+  color: #0075ff;
+}
+
+.modern-tx-icon-box.withdrawal {
+  color: #0075ff;
+}
+
+.modern-tx-icon-box.settlement {
+  color: #0075ff;
+}
+
+.modern-tx-icon-box.settlement .settle-inner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.modern-tx-icon-box.settlement .settle-check {
+  position: absolute;
+  bottom: -4px;
+  right: -4px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #10b981;
+  color: white;
+  font-size: 9px;
+  font-weight: 800;
+  display: grid;
+  place-items: center;
+}
+
+.modern-tx-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.modern-tx-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--orin-text, #0f1c3f);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.modern-tx-time {
+  font-size: 12px;
+  color: var(--orin-text-muted, #8b9eb7);
+  white-space: nowrap;
+}
+
+/* Left Section (Amount + Pill + Chevron) */
+.modern-tx-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.modern-tx-amount-col {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.modern-tx-amount {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--orin-text, #0f1c3f);
+  letter-spacing: -0.3px;
+  white-space: nowrap;
+}
+
+.modern-tx-amount.gain {
+  color: #10b981;
+}
+
+.modern-tx-pill {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 10px;
+  border-radius: 9999px;
+  white-space: nowrap;
+}
+
+.modern-tx-pill.complete {
+  background: #eefbf3;
+  color: #10b981;
+  border: 1px solid #c7f3d9;
+}
+
+.modern-tx-pill.pending {
+  background: #fef7ec;
+  color: #d97706;
+  border: 1px solid #fde2b4;
+}
+
+.modern-tx-pill.review {
+  background: #edf5ff;
+  color: #0075ff;
+  border: 1px solid #cce4ff;
+}
+
+.modern-tx-pill.recorded {
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+}
+
+.modern-tx-pill.failed {
+  background: #fef2f2;
+  color: #ef4444;
+  border: 1px solid #fecaca;
+}
+
+.modern-tx-chevron {
+  color: var(--orin-text-muted, #b0c0d8);
+  flex-shrink: 0;
+}
+
+/* Tip Pill at Bottom */
+.tx-footer-tip {
+  margin-top: 16px;
+  background: #edf5ff;
+  border: 1px solid #d8eaff;
+  border-radius: 12px;
+  padding: 12px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #0075ff;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.tx-footer-tip span {
+  font-size: 13.5px;
+}
+
+/* Dark mode */
+html[data-theme='dark'] .positions-recent,
+html[data-theme='dark'] .orin-activity-screen {
+  color: #f1f5f9;
+}
+
+html[data-theme='dark'] .modern-tx-card {
+  background: #0f1c32;
+  border-color: #1e2c45;
+}
+
+html[data-theme='dark'] .modern-tx-card:hover {
+  background: #142440;
+  border-color: #273957;
+}
+
+html[data-theme='dark'] .modern-tx-icon-box {
+  background: #15243d;
+  border-color: #1e2c45;
+}
+
+html[data-theme='dark'] .modern-tx-title,
+html[data-theme='dark'] .modern-tx-amount,
+html[data-theme='dark'] .tx-day-heading {
+  color: #f1f5f9;
+}
+
+html[data-theme='dark'] .modern-tx-time {
+  color: #8b9eb7;
+}
+
+html[data-theme='dark'] :is(.positions-recent, .orin-activity-screen) .activity-filters button {
+  background: #0f1c32;
+  border-color: #1e2c45;
+  color: #94a3b8;
+}
+
+html[data-theme='dark'] :is(.positions-recent, .orin-activity-screen) .activity-filters button[aria-pressed='true'] {
+  background: rgba(0, 117, 255, 0.15);
+  border-color: rgba(0, 117, 255, 0.3);
+  color: #38bdf8;
+}
+
+html[data-theme='dark'] .tx-footer-tip {
+  background: #142440;
+  border-color: #1e2c45;
+  color: #38bdf8;
+}

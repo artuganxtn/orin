@@ -31,7 +31,19 @@ export function SettingsRow({ icon, title, detail, children, onClick }: {
     detail?: string;
     children?: ReactNode;
     onClick?: () => void;
-}) { const { prefs } = useOrin(); const content = <><span className="setting-icon">{icon}</span><span className="setting-copy"><b>{title}</b>{detail && <small>{detail}</small>}</span>{children ?? (prefs.chartLocale === 'ar' ? <ChevronLeft className="setting-chevron"/> : <ChevronRight className="setting-chevron"/>)}</>; return onClick ? <button type="button" className="settings-row" onClick={onClick}>{content}</button> : <div className="settings-row">{content}</div>; }
+}) { 
+    const { prefs } = useOrin(); 
+    const Chevron = prefs.chartLocale === 'ar' ? ChevronLeft : ChevronRight;
+    const content = <>
+        <span className="setting-icon">{icon}</span>
+        <span className="setting-copy"><b>{title}</b></span>
+        <div className="setting-end">
+            {detail && <span className="setting-val">{detail}</span>}
+            {children ?? <Chevron size={18} className="setting-chevron"/>}
+        </div>
+    </>; 
+    return onClick ? <button type="button" className="settings-row settings-modern-row" onClick={onClick}>{content}</button> : <div className="settings-row settings-modern-row">{content}</div>; 
+}
 export function SettingsSelect({ value, label, items, onChange, disabled = false }: {
     value: string;
     label: string;
@@ -96,38 +108,42 @@ export function AccountSettings({ state, onTerms, onAdmin, onLedger, onNotificat
     const busy = status === 'saving' || status === 'loading';
     const titles = { account: t('الملف الشخصي', 'Your profile'), appearance: t('المظهر', 'Appearance'), security: t('مركز الأمان', 'Security center'), notifications: t('تفضيلات الإشعارات', 'Notification preferences'), chart: t('إعدادات الشارت', 'Chart settings'), about: t('حول ORIN', 'About ORIN'), admin: t('إدارة إعدادات الشارت', 'Admin chart settings'), language: t('اللغة', 'Language'), devices: t('الأجهزة', 'Devices'), privacy: t('الخصوصية', 'Privacy'), documents: t('المستندات', 'Documents'), support: t('الدعم', 'Support'), referral: t('مركز الإحالات', 'Referral center'), agent: t('مركز الوكلاء', 'Agent center'), 'two-factor': t('المصادقة الثنائية', 'Two-factor authentication'), data:t('البيانات والخصوصية','Data & privacy'), authenticator: t('تطبيق المصادقة', 'Authenticator setup'), kyc: t('توثيق الهوية (KYC)', 'Identity verification (KYC)'), app: t('تطبيق الجوال', 'Mobile app'), accounts:t('الحسابات والمعاملات','Accounts & transactions'), preferences:t('إعدادات التطبيق','App settings'), reports:t('البيانات والتقارير','Data & reports'), programs:t('برامج ORIN','ORIN programs') };
     const syncText = status === 'saving' ? t('جار الحفظ…', 'Saving…') : status === 'loading' ? t('جار المزامنة…', 'Syncing…') : status === 'synced' ? t('متزامن مع حسابك', 'Synced to your account') : status === 'guest' ? t('تفضيلات هذا الجهاز · سجّل الدخول للمزامنة', 'This device only · Sign in to sync') : t('تعذرت المزامنة', 'Sync unavailable');
-    return <div className="settings-page settings-refresh settings-compact" dir={prefs.chartLocale === 'ar' ? 'rtl' : 'ltr'}>
+
+    const themeLabel = prefs.theme === 'dark' ? t('داكن', 'Dark') : prefs.theme === 'light' ? t('فاتح', 'Light') : t('تلقائي', 'Auto');
+    const langLabel = LANGUAGES.find(l => l.code === prefs.chartLocale)?.native || (prefs.chartLocale === 'ar' ? 'العربية' : 'English');
+
+    return <div className="settings-page settings-refresh settings-modern-view" dir={prefs.chartLocale === 'ar' ? 'rtl' : 'ltr'}>
   <header className="settings-heading"><h1>{t('الإعدادات','Settings')}</h1></header>
+  
+  {/* Group 1: الحساب والأمان */}
   <h2 className="settings-section-label">{t('الحساب والأمان','Account & security')}</h2>
   <section className="settings-group">
-   <SettingsRow icon={<UserRound/>} title={t('بيانات الحساب','Account details')} onClick={()=>setPanel('account')}/>
-   <SettingsRow icon={<ShieldCheck/>} title={t('الأمان','Security')} onClick={()=>setPanel('security')}/>
-   <SettingsRow icon={<LockKeyhole/>} title={t('الخصوصية والبيانات','Privacy & data')} onClick={()=>setPanel('data')}/>
-   <SettingsRow icon={<Bell/>} title={t('الإشعارات','Notifications')} onClick={()=>setPanel('notifications')}/>
+   <SettingsRow icon={<UserRound size={22} strokeWidth={1.75} />} title={t('بيانات الحساب','Account details')} onClick={()=>setPanel('account')}/>
+   <SettingsRow icon={<ShieldCheck size={22} strokeWidth={1.75} />} title={t('الأمان','Security')} onClick={()=>setPanel('security')}/>
+   <SettingsRow icon={<LockKeyhole size={22} strokeWidth={1.75} />} title={t('الخصوصية والبيانات','Privacy & data')} onClick={()=>setPanel('data')}/>
+   <SettingsRow icon={<Bell size={22} strokeWidth={1.75} />} title={t('الإشعارات','Notifications')} onClick={()=>setPanel('notifications')}/>
   </section>
+
+  {/* Group 2: التطبيق والمظهر */}
   <h2 className="settings-section-label">{t('التطبيق والمظهر','App & appearance')}</h2>
   <section className="settings-group">
-   <SettingsRow icon={<Moon/>} title={t('المظهر','Appearance')} onClick={()=>setPanel('appearance')}/>
-   <SettingsRow icon={<Globe2/>} title={t('اللغة','Language')} onClick={()=>setPanel('language')}/>
-   <SettingsRow icon={<Smartphone/>} title={t('إعدادات التطبيق','App settings')} onClick={()=>setPanel('preferences')}/>
+   <SettingsRow icon={<Moon size={22} strokeWidth={1.75} />} title={t('المظهر','Appearance')} detail={themeLabel} onClick={()=>setPanel('appearance')}/>
+   <SettingsRow icon={<Globe2 size={22} strokeWidth={1.75} />} title={t('اللغة','Language')} detail={langLabel} onClick={()=>setPanel('language')}/>
+   <SettingsRow icon={<Smartphone size={22} strokeWidth={1.75} />} title={t('إعدادات التطبيق','App settings')} onClick={()=>setPanel('preferences')}/>
   </section>
+
+  {/* Group 3: المعاملات والخدمات */}
   <h2 className="settings-section-label">{t('المعاملات والخدمات','Transactions & services')}</h2>
   <section className="settings-group">
-   <SettingsRow icon={<Wallet/>} title={t('الحسابات والمعاملات','Accounts & transactions')} onClick={()=>setPanel('accounts')}/>
-   <SettingsRow icon={<ChartCandlestick/>} title={t('الأسواق','Markets')} onClick={()=>setPanel('chart')}/>
-   <SettingsRow icon={<ClipboardList/>} title={t('البيانات والتقارير','Data & reports')} onClick={()=>setPanel('reports')}/>
+   <SettingsRow icon={<FileText size={22} strokeWidth={1.75} />} title={t('المعاملات الأخيرة','Recent transactions')} onClick={()=>navigation.navigate('/activity')}/>
+   <SettingsRow icon={<Headphones size={22} strokeWidth={1.75} />} title={t('الدعم والمساعدة','Help & support')} onClick={()=>navigation.navigate('/support')}/>
   </section>
-  <h2 className="settings-section-label">{t('الدعم والمزيد','Support & more')}</h2>
-  <section className="settings-group">
-   <SettingsRow icon={<Headphones/>} title={t('المساعدة والدعم','Help & support')} onClick={()=>navigation.navigate('/support')}/>
-   <SettingsRow icon={<ClipboardList/>} title={t('الشروط والسياسات','Terms & policies')} onClick={()=>{onTerms();navigation.navigate('/terms')}}/>
-   <SettingsRow icon={<Info/>} title={t('حول ORIN','About ORIN')} onClick={()=>setPanel('about')}/>
-  </section>
-  {Boolean(state?.isAdmin || settings?.controlAvailable)&&<section className="settings-group"><SettingsRow icon={<ShieldCheck/>} title={t('مركز إدارة ORIN','ORIN Control Center')} detail={t('إدارة العملاء والصلاحيات والعمليات','Customers, permissions and operations')} onClick={()=>navigation.navigate('/admin')}/></section>}
-  {state?.isAdmin&&<><h2 className="settings-section-label">{t('مساحة الإدارة','Administration')}</h2><section className="settings-group"><SettingsRow icon={<UserRound/>} title={t('إدارة المستخدمين','User management')} onClick={()=>navigation.navigate('/admin/users')}/><SettingsRow icon={<Wallet/>} title={t('المكافآت والبونص والوكالة','Rewards, bonus & agency')} onClick={()=>navigation.navigate('/admin/programs')}/><SettingsRow icon={<ClipboardList/>} title={t('العقود والدعوات','Contracts & invitations')} onClick={onAdmin}/><SettingsRow icon={<SlidersHorizontal/>} title={t('إعدادات الأسواق','Market settings')} onClick={()=>setPanel('admin')}/><SettingsRow icon={<Bell/>} title={t('إدارة الإشعارات','Notification administration')} onClick={()=>navigation.navigate('/admin/notifications')}/></section></>}
+
+  {Boolean(state?.isAdmin || settings?.controlAvailable)&&<section className="settings-group" style={{marginTop: 16}}><SettingsRow icon={<ShieldCheck size={22} strokeWidth={1.75} />} title={t('مركز إدارة ORIN','ORIN Control Center')} detail={t('إدارة العملاء والصلاحيات والعمليات','Customers, permissions and operations')} onClick={()=>navigation.navigate('/admin')}/></section>}
+  {state?.isAdmin&&<><h2 className="settings-section-label">{t('مساحة الإدارة','Administration')}</h2><section className="settings-group"><SettingsRow icon={<UserRound size={22} strokeWidth={1.75} />} title={t('إدارة المستخدمين','User management')} onClick={()=>navigation.navigate('/admin/users')}/><SettingsRow icon={<Wallet size={22} strokeWidth={1.75} />} title={t('المكافآت والبونص والوكالة','Rewards, bonus & agency')} onClick={()=>navigation.navigate('/admin/programs')}/><SettingsRow icon={<ClipboardList size={22} strokeWidth={1.75} />} title={t('العقود والدعوات','Contracts & invitations')} onClick={onAdmin}/><SettingsRow icon={<SlidersHorizontal size={22} strokeWidth={1.75} />} title={t('إعدادات الأسواق','Market settings')} onClick={()=>setPanel('admin')}/><SettingsRow icon={<Bell size={22} strokeWidth={1.75} />} title={t('إدارة الإشعارات','Notification administration')} onClick={()=>navigation.navigate('/admin/notifications')}/></section></>}
   <div className={`settings-sync ${status}`} role="status"><span/>{syncText}{status==='error'&&<button type="button" onClick={()=>void reload()} aria-label={t('إعادة المزامنة','Retry sync')}><RefreshCw size={15}/></button>}</div>
   {error&&<p className="settings-error" role="alert">{error}</p>}
-  {settings&&<a className="settings-row settings-signout" href={signOutUrl()}><LogOut/><strong>{t('تسجيل الخروج','Sign out')}</strong></a>}
+  {settings&&<a className="settings-row settings-signout" href={signOutUrl()} style={{marginTop: 12}}><LogOut size={20} /><strong>{t('تسجيل الخروج','Sign out')}</strong></a>}
   <Dialog open={panel !== null} onOpenChange={open=>{if(!open)setPanel(null)}}><DialogContent pageClassName={'orin-settings-screen settings-compact'+(panel==='account'?' orin-profile-screen':'')} navTitle={<strong>{panel&&titles[panel]}</strong>} className={`popup settings-dialog ${panel==='admin'?'admin-settings-dialog':''}`} dir={prefs.chartLocale==='ar'?'rtl':'ltr'}>
   {panel==='preferences'&&<><AppPreferences/><section className="settings-group"><SettingsRow icon={<Globe2/>} title={t('لغة التطبيق','App language')} detail={LANGUAGES.find(language=>language.code===prefs.chartLocale)?.native} onClick={()=>setPanel('language')}/><SettingsRow icon={<Smartphone/>} title={t('تطبيق الجوال','Mobile app')} detail={t('أندرويد APK و iOS','Android APK & iOS')} onClick={()=>setPanel('app')}/></section></>}
   {panel==='accounts'&&<section className="settings-group">
