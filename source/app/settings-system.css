@@ -95,74 +95,113 @@ html[data-theme=dark] .trade-titlebar>button,html[data-theme=dark] .trade-pair-p
 .orin-symbol-trigger{display:flex;align-items:center;gap:8px;border:0;background:none;flex:1;justify-content:center;color:var(--orin-ink)}.trade-titlebar>button.orin-symbol-trigger{width:auto!important;min-width:0}.symbol-dialog{background:var(--orin-surface);color:var(--orin-ink)}.symbol-dialog [data-slot=command]{background:var(--orin-surface)}.symbol-dialog [data-slot=command-list]{max-height:52dvh}.symbol-dialog [data-slot=command-item]{padding:11px 10px}.symbol-item{display:grid;gap:4px;flex:1;direction:ltr;text-align:start}.symbol-item b{font:600 14px Arial,sans-serif}.symbol-item small{color:var(--orin-muted);font-size:11px}.symbol-favorite{border:0;background:none;color:#23a0ef;display:flex;padding:5px}
 
 /* Universal ORIN Settings Toggle Switch */
+.orin-toggle-switch,
 .settings-switch {
-  width: 44px !important;
-  height: 24px !important;
-  border-radius: 9999px !important;
-  padding: 2px !important;
+  position: relative !important;
   display: inline-flex !important;
   align-items: center !important;
-  direction: ltr !important;
+  width: 46px !important;
+  height: 26px !important;
+  min-width: 46px !important;
+  min-height: 26px !important;
+  max-width: 46px !important;
+  max-height: 26px !important;
+  border-radius: 9999px !important;
   box-sizing: border-box !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 1.5px solid #cbd5e1 !important;
+  background-color: #e2e8f0 !important;
   cursor: pointer !important;
   flex-shrink: 0 !important;
-  background-color: #cbd5e1 !important;
-  border: 1px solid #94a3b8 !important;
-  transition: background-color 0.2s ease, border-color 0.2s ease !important;
-  position: relative !important;
+  overflow: hidden !important;
+  direction: ltr !important;
+  outline: none !important;
+  transition: background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+              border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 0.25s ease !important;
+  -webkit-tap-highlight-color: transparent !important;
 }
 
+.orin-toggle-switch[data-state='checked'],
+.orin-toggle-switch.on,
 .settings-switch[data-state='checked'],
 .settings-switch.on {
   background-color: #0075ff !important;
   border-color: #0075ff !important;
 }
 
-.settings-switch [data-slot='switch-thumb'],
-.settings-switch .settings-switch-thumb,
-.settings-switch span {
-  width: 18px !important;
-  height: 18px !important;
-  border-radius: 50% !important;
-  background-color: #ffffff !important;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
-  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
-  translate: none !important;
-  transform: translateX(1px) !important;
-  display: block !important;
-  flex-shrink: 0 !important;
-}
-
-.settings-switch[data-state='checked'] [data-slot='switch-thumb'],
-.settings-switch.on [data-slot='switch-thumb'],
-.settings-switch[data-state='checked'] .settings-switch-thumb,
-.settings-switch.on .settings-switch-thumb,
-.settings-switch[data-state='checked'] span,
-.settings-switch.on span {
-  translate: none !important;
-  transform: translateX(19px) !important;
-}
-
+html[data-theme='dark'] .orin-toggle-switch,
 html[data-theme='dark'] .settings-switch {
-  background-color: #22354c !important;
+  background-color: #1e2d42 !important;
   border-color: #334b6b !important;
 }
 
+html[data-theme='dark'] .orin-toggle-switch[data-state='checked'],
+html[data-theme='dark'] .orin-toggle-switch.on,
 html[data-theme='dark'] .settings-switch[data-state='checked'],
 html[data-theme='dark'] .settings-switch.on {
   background-color: #0075ff !important;
   border-color: #38bdf8 !important;
+  box-shadow: 0 0 10px rgba(0, 117, 255, 0.35) !important;
 }
 
-html[data-theme='dark'] .settings-switch [data-slot='switch-thumb'],
-html[data-theme='dark'] .settings-switch .settings-switch-thumb,
-html[data-theme='dark'] .settings-switch span {
-  background-color: #ffffff !important;
+.orin-toggle-switch:focus-visible,
+.settings-switch:focus-visible {
+  box-shadow: 0 0 0 3px rgba(0, 117, 255, 0.3) !important;
 }
 
+.orin-toggle-switch:disabled,
 .settings-switch:disabled {
   opacity: 0.45 !important;
   cursor: not-allowed !important;
+  filter: grayscale(20%) !important;
+}
+
+.orin-toggle-switch .orin-toggle-thumb,
+.orin-toggle-switch [data-slot='switch-thumb'],
+.orin-toggle-switch span,
+.settings-switch .settings-switch-thumb,
+.settings-switch [data-slot='switch-thumb'],
+.settings-switch span {
+  position: absolute !important;
+  top: 1.5px !important;
+  left: 1.5px !important;
+  width: 20px !important;
+  height: 20px !important;
+  border-radius: 50% !important;
+  background-color: #ffffff !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25), 0 0 1px rgba(0, 0, 0, 0.15) !important;
+  pointer-events: none !important;
+  display: block !important;
+  flex-shrink: 0 !important;
+  translate: 0 0 !important;
+  transform: translateX(0px) !important;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+              width 0.2s ease,
+              background-color 0.2s ease !important;
+  will-change: transform !important;
+}
+
+.orin-toggle-switch[data-state='checked'] .orin-toggle-thumb,
+.orin-toggle-switch[data-state='checked'] [data-slot='switch-thumb'],
+.orin-toggle-switch[data-state='checked'] span,
+.orin-toggle-switch.on .orin-toggle-thumb,
+.orin-toggle-switch.on [data-slot='switch-thumb'],
+.orin-toggle-switch.on span,
+.settings-switch[data-state='checked'] .settings-switch-thumb,
+.settings-switch[data-state='checked'] [data-slot='switch-thumb'],
+.settings-switch[data-state='checked'] span,
+.settings-switch.on .settings-switch-thumb,
+.settings-switch.on [data-slot='switch-thumb'],
+.settings-switch.on span {
+  translate: 0 0 !important;
+  transform: translateX(20px) !important;
+}
+
+.orin-toggle-switch:active:not(:disabled) .orin-toggle-thumb,
+.settings-switch:active:not(:disabled) .settings-switch-thumb {
+  width: 23px !important;
 }button.settings-native-select{width:auto;min-width:0;gap:6px;flex:none}button.settings-native-select>[data-slot=select-value]{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 
 [data-slot=select-content],[data-slot=popover-content],[data-slot=dropdown-menu-content]{z-index:120!important}

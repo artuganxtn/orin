@@ -24,7 +24,7 @@ export function SettingsToggle({ value, onChange, label, disabled = false }: {
     onChange: (value: boolean) => void;
     label: string;
     disabled?: boolean;
-}) { return <Switch checked={value} onCheckedChange={onChange} aria-label={label} className={`settings-switch ${value ? 'on' : ''}`} disabled={disabled}/>; }
+}) { return <Switch checked={value} onCheckedChange={onChange} aria-label={label} className={`orin-toggle-switch settings-switch ${value ? 'on' : ''}`} disabled={disabled}/>; }
 export function SettingsRow({ icon, title, detail, children, onClick }: {
     icon: ReactNode;
     title: string;
